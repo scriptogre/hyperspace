@@ -5,15 +5,129 @@ mod module_bindings;
 
 use module_bindings::*;
 use rocket::fs::FileServer;
+use rocket::futures::{SinkExt, StreamExt};
 use rocket::State;
 use rocket_dyn_templates::{context, Template};
-use spacetimedb_sdk::{DbContext, Table};
+use rocket_ws::Message;
+use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
+const GRID_SIZE: i32 = 8;
+
 struct App {
-    db: DbConnection,
-    _tx: broadcast::Sender<String>,
+    db: Arc<DbConnection>,
+    tx: broadcast::Sender<String>,
 }
+
+// --- Broadcast helpers ---
+
+fn render_body(db: &RemoteTables) -> String {
+    let objects: Vec<_> = db.scene_object().iter()
+        .map(|o| serde_json::json!({
+            "id": o.id,
+            "grid_x": o.grid_x,
+            "grid_y": o.grid_y,
+            "color": o.color,
+        }))
+        .collect();
+    let users: Vec<_> = db.user_info().iter()
+        .map(|u| serde_json::json!({
+            "name": u.name,
+            "color": u.color,
+            "online": u.online,
+        }))
+        .collect();
+
+    let template_src = std::fs::read_to_string("templates/index.html.j2")
+        .expect("Failed to read template file");
+    let mut env = minijinja::Environment::new();
+    env.add_template("index", &template_src).expect("Failed to add template");
+    let tmpl = env.get_template("index").unwrap();
+    tmpl.render(minijinja::context! {
+        objects => objects,
+        users => users,
+        grid_size => GRID_SIZE,
+    }).unwrap()
+}
+
+fn broadcast_morph(tx: &broadcast::Sender<String>, db: &RemoteTables) {
+    let body = render_body(db);
+    let _ = tx.send(format!("<htmx target=\"body\" swap=\"morph\">{body}</htmx>"));
+}
+
+fn broadcast_console(tx: &broadcast::Sender<String>, msg: &str, color: &str) {
+    let escaped = msg.replace('"', "\\\"");
+    let _ = tx.send(format!(
+        "<htmx trigger='{{\"console-log\": {{\"msg\": \"{escaped}\", \"color\": \"{color}\"}}}}'></htmx>"
+    ));
+}
+
+fn broadcast_cursors(tx: &broadcast::Sender<String>, db: &RemoteTables) {
+    let data: Vec<_> = db.user_cursor().iter().map(|c| {
+        let u = db.user_info().identity().find(&c.identity);
+        serde_json::json!({
+            "grid_x": c.grid_x,
+            "grid_y": c.grid_y,
+            "color": u.as_ref().map(|u| u.color.as_str()).unwrap_or("#888"),
+            "name": u.as_ref().map(|u| u.name.as_str()).unwrap_or("?"),
+        })
+    }).collect();
+    let json = serde_json::to_string(&data).unwrap();
+    let _ = tx.send(format!(
+        "<htmx trigger='{{\"cursor-update\": {{\"cursors\": {json}}}}}'></htmx>"
+    ));
+}
+
+/// Dispatch a browser message to SpacetimeDB reducers.
+fn handle_ws_message(text: &str, db: &DbConnection) {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(text) else {
+        eprintln!("WS: invalid JSON: {text}");
+        return;
+    };
+
+    // {"set_name": "Alice"}
+    if let Some(name) = val.get("set_name").and_then(|v| v.as_str()) {
+        let _ = db.reducers.set_name(name.to_string());
+        return;
+    }
+
+    // {"action": "..."}  or  {"action": "...", "x": "3", "y": "2"}
+    if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
+        if action == "create" {
+            let center = GRID_SIZE / 2;
+            let _ = db.reducers.create_object(center, center, random_color());
+        } else if action == "create_at" {
+            let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let _ = db.reducers.create_object(x, y, random_color());
+        } else if let Some(id_str) = action.strip_prefix("delete:") {
+            if let Ok(id) = id_str.parse::<u64>() {
+                let _ = db.reducers.delete_object(id);
+            }
+        } else if action == "cursor" {
+            let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let _ = db.reducers.update_cursor(x, y);
+        }
+    }
+}
+
+fn random_color() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let s = RandomState::new();
+    let mut h = s.build_hasher();
+    h.write_u8(0);
+    let hash = h.finish();
+    let colors = [
+        "#ef4444", "#f97316", "#eab308", "#22c55e",
+        "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
+    ];
+    colors[(hash as usize) % colors.len()].to_string()
+}
+
+// --- Routes ---
 
 #[get("/")]
 fn index(app: &State<App>) -> Template {
@@ -27,8 +141,41 @@ fn index(app: &State<App>) -> Template {
     Template::render("index", context! {
         objects: objects,
         users: users,
-        grid_size: 8,
+        grid_size: GRID_SIZE,
     })
+}
+
+#[get("/ws")]
+fn websocket(ws: rocket_ws::WebSocket, app: &State<App>) -> rocket_ws::Channel<'static> {
+    let mut rx = app.tx.subscribe();
+    let db = Arc::clone(&app.db);
+
+    ws.channel(move |mut stream| Box::pin(async move {
+        loop {
+            tokio::select! {
+                result = rx.recv() => {
+                    match result {
+                        Ok(msg) => {
+                            if stream.send(Message::Text(msg)).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                msg = stream.next() => {
+                    match msg {
+                        Some(Ok(Message::Text(text))) => {
+                            handle_ws_message(&text, &db);
+                        }
+                        Some(Ok(_)) => {} // ignore binary/ping/pong
+                        _ => break,
+                    }
+                }
+            }
+        }
+        Ok(())
+    }))
 }
 
 #[launch]
@@ -48,6 +195,93 @@ fn rocket() -> _ {
         .build()
         .expect("Failed to connect to SpacetimeDB");
 
+    // Register table change callbacks
+    {
+        // scene_object: on_insert
+        let tx_clone = tx.clone();
+        db.db.scene_object().on_insert(move |ctx, obj| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("block created at ({},{})", obj.grid_x, obj.grid_y),
+                "text-cyan-400",
+            );
+        });
+
+        // scene_object: on_delete
+        let tx_clone = tx.clone();
+        db.db.scene_object().on_delete(move |ctx, obj| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("block deleted at ({},{})", obj.grid_x, obj.grid_y),
+                "text-red-400",
+            );
+        });
+
+        // scene_object: on_update
+        let tx_clone = tx.clone();
+        db.db.scene_object().on_update(move |ctx, _old, obj| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("block moved to ({},{})", obj.grid_x, obj.grid_y),
+                "text-yellow-400",
+            );
+        });
+
+        // user_info: on_insert
+        let tx_clone = tx.clone();
+        db.db.user_info().on_insert(move |ctx, user| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("{} joined", user.name),
+                "text-green-400",
+            );
+        });
+
+        // user_info: on_delete
+        let tx_clone = tx.clone();
+        db.db.user_info().on_delete(move |ctx, user| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("{} left", user.name),
+                "text-gray-400",
+            );
+        });
+
+        // user_info: on_update
+        let tx_clone = tx.clone();
+        db.db.user_info().on_update(move |ctx, _old, user| {
+            broadcast_morph(&tx_clone, &ctx.db);
+            broadcast_console(
+                &tx_clone,
+                &format!("{} updated", user.name),
+                "text-blue-400",
+            );
+        });
+
+        // user_cursor: on_insert
+        let tx_clone = tx.clone();
+        db.db.user_cursor().on_insert(move |ctx, _cursor| {
+            broadcast_cursors(&tx_clone, &ctx.db);
+        });
+
+        // user_cursor: on_update
+        let tx_clone = tx.clone();
+        db.db.user_cursor().on_update(move |ctx, _old, _cursor| {
+            broadcast_cursors(&tx_clone, &ctx.db);
+        });
+
+        // user_cursor: on_delete
+        let tx_clone = tx.clone();
+        db.db.user_cursor().on_delete(move |ctx, _cursor| {
+            broadcast_cursors(&tx_clone, &ctx.db);
+        });
+    }
+
     db.subscription_builder()
         .on_applied(|ctx| {
             println!(
@@ -61,11 +295,11 @@ fn rocket() -> _ {
     // Run SDK event loop in background
     let _db_handle = db.run_threaded();
 
-    let app = App { db, _tx: tx };
+    let app = App { db: Arc::new(db), tx };
 
     rocket::build()
         .manage(app)
         .attach(Template::fairing())
-        .mount("/", routes![index])
+        .mount("/", routes![index, websocket])
         .mount("/static", FileServer::from("static"))
 }
