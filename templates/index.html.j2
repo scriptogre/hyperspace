@@ -21,82 +21,87 @@
   <script src="/static/js/vendor/server-commands.js"></script>
 </head>
 <body class="bg-surface text-gray-200 font-mono h-screen flex overflow-hidden"
-      hx-ext="ws,server-commands,morph">
-{% block body %}
-  {# === Sidebar === #}
-  <aside class="w-56 bg-surface-light flex flex-col border-r border-white/10 shrink-0">
-    <div class="p-4 border-b border-white/10">
-      <h1 class="text-lg font-bold text-white tracking-tight">Hyperspace</h1>
-      <p class="text-[10px] text-gray-500 mt-0.5">real-time shared space</p>
-    </div>
+      hx-ext="ws,server-commands,morph"
+      ws-connect="/ws">
 
-    <div class="p-3 flex-1 overflow-y-auto">
-      <div class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 px-1">Online</div>
-      {% for user in users %}{% if user.online %}
-      <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5">
-        <span class="w-2 h-2 rounded-full shrink-0" style="background:{{ user.color }}"></span>
-        <span class="text-sm truncate">{{ user.name }}</span>
+  <div id="app" class="flex w-full h-full">
+  {% block body %}
+    {# === Sidebar === #}
+    <aside class="w-56 bg-surface-light flex flex-col border-r border-white/10 shrink-0">
+      <div class="p-4 border-b border-white/10">
+        <h1 class="text-lg font-bold text-white tracking-tight">Hyperspace</h1>
+        <p class="text-[10px] text-gray-500 mt-0.5">real-time shared space</p>
       </div>
-      {% endif %}{% endfor %}
 
-      <div class="text-[10px] uppercase tracking-widest text-gray-500 mt-4 mb-2 px-1">
-        Blocks &middot; {{ objects | length }}
-      </div>
-      {% for obj in objects %}
-      <div class="flex items-center justify-between px-2 py-1 rounded hover:bg-white/5 text-xs group">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-sm shrink-0" style="background:{{ obj.color }}"></span>
-          <span class="text-gray-400">({{ obj.grid_x }},{{ obj.grid_y }})</span>
+      <div class="p-3 flex-1 overflow-y-auto">
+        <div class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 px-1">Online</div>
+        {% for user in users %}{% if user.online %}
+        <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background:{{ user.color }}"></span>
+          <span class="text-sm truncate">{{ user.name }}</span>
         </div>
-        <button ws-send name="action" value="delete:{{ obj.id }}"
-                class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">&times;</button>
-      </div>
-      {% endfor %}
-    </div>
-  </aside>
+        {% endif %}{% endfor %}
 
-  {# === Main === #}
-  <main class="flex-1 flex flex-col min-w-0" ws-connect="/ws">
-
-    {# Isometric viewport #}
-    <div class="flex-1 relative overflow-hidden bg-surface" id="grid-viewport">
-      <div class="iso-scene" id="iso-scene">
-        <div class="iso-grid">
-          {% for row in range(grid_size) %}{% for col in range(grid_size) %}
-          <div class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
-               style="--col:{{ col }};--row:{{ row }}"></div>
-          {% endfor %}{% endfor %}
+        <div class="text-[10px] uppercase tracking-widest text-gray-500 mt-4 mb-2 px-1">
+          Blocks &middot; {{ objects | length }}
         </div>
         {% for obj in objects %}
-        <div class="iso-block" style="--col:{{ obj.grid_x }};--row:{{ obj.grid_y }};--color:{{ obj.color }}"></div>
+        <div class="flex items-center justify-between px-2 py-1 rounded hover:bg-white/5 text-xs group">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-sm shrink-0" style="background:{{ obj.color }}"></span>
+            <span class="text-gray-400">({{ obj.grid_x }},{{ obj.grid_y }})</span>
+          </div>
+          <button ws-send name="action" value="delete:{{ obj.id }}"
+                  class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">&times;</button>
+        </div>
         {% endfor %}
       </div>
-    </div>
+    </aside>
 
-    {# Debug console #}
-    <div class="h-40 bg-surface-light border-t border-white/10 flex flex-col shrink-0">
-      <div class="flex items-center justify-between px-3 py-1 border-b border-white/10">
-        <span class="text-[10px] uppercase tracking-widest text-gray-500">Console</span>
-        <div class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-          <span class="text-[10px] text-gray-500">live</span>
+    {# === Main === #}
+    <main class="flex-1 flex flex-col min-w-0">
+
+      {# Isometric viewport #}
+      <div class="flex-1 relative overflow-hidden bg-surface" id="grid-viewport">
+        <div class="iso-scene" id="iso-scene">
+          <div class="iso-grid">
+            {% for row in range(grid_size) %}{% for col in range(grid_size) %}
+            <div class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
+                 style="--col:{{ col }};--row:{{ row }}"></div>
+            {% endfor %}{% endfor %}
+          </div>
+          {% for obj in objects %}
+          <div class="iso-block" style="--col:{{ obj.grid_x }};--row:{{ obj.grid_y }};--color:{{ obj.color }}"></div>
+          {% endfor %}
         </div>
       </div>
-      <div id="console-log" class="flex-1 overflow-y-auto p-2 text-[11px] leading-relaxed space-y-px"></div>
-    </div>
 
-    {# Toolbar #}
-    <div class="flex items-center gap-2 px-3 py-2 border-t border-white/10 bg-surface shrink-0">
-      <button ws-send name="action" value="create"
-              class="px-3 py-1 text-xs rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition">
-        + Block
-      </button>
-      <input ws-send name="set_name" placeholder="Set name..."
-             class="bg-surface-lighter border border-white/10 rounded px-2 py-1 text-xs
-                    placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-36">
-    </div>
-  </main>
-{% endblock %}
-</body>
+      {# Debug console #}
+      <div class="h-40 bg-surface-light border-t border-white/10 flex flex-col shrink-0">
+        <div class="flex items-center justify-between px-3 py-1 border-b border-white/10">
+          <span class="text-[10px] uppercase tracking-widest text-gray-500">Console</span>
+          <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+            <span class="text-[10px] text-gray-500">live</span>
+          </div>
+        </div>
+        <div id="console-log" class="flex-1 overflow-y-auto p-2 text-[11px] leading-relaxed space-y-px"></div>
+      </div>
+
+      {# Toolbar #}
+      <div class="flex items-center gap-2 px-3 py-2 border-t border-white/10 bg-surface shrink-0">
+        <button ws-send name="action" value="create"
+                class="px-3 py-1 text-xs rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition">
+          + Block
+        </button>
+        <input ws-send name="set_name" placeholder="Set name..."
+               class="bg-surface-lighter border border-white/10 rounded px-2 py-1 text-xs
+                      placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-36">
+      </div>
+    </main>
+  {% endblock %}
+  </div>
+
 <script src="/static/js/scene.js" type="module"></script>
+</body>
 </html>

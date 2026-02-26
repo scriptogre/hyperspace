@@ -51,7 +51,7 @@ fn render_body(db: &RemoteTables) -> String {
 
 fn broadcast_morph(tx: &broadcast::Sender<String>, db: &RemoteTables) {
     let body = render_body(db);
-    let _ = tx.send(format!("<htmx target=\"body\" swap=\"morph\">{body}</htmx>"));
+    let _ = tx.send(format!("<htmx target=\"#app\" swap=\"morph:innerHTML\">{body}</htmx>"));
 }
 
 fn broadcast_console(tx: &broadcast::Sender<String>, msg: &str, color: &str) {
