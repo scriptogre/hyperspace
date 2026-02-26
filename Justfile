@@ -1,12 +1,17 @@
 spacetime := env('HOME') / ".local/bin/spacetime"
 module_name := "hyperspace"
+wasm_path := "target/wasm32-unknown-unknown/release/hyperspace.wasm"
 
 # Start SpacetimeDB + publish module + run Rocket server
 default: spacetimedb generate
     cargo run
 
+# Build the Wasm module (lib target only)
+build-wasm:
+    cargo build --lib --target wasm32-unknown-unknown --release
+
 # Ensure SpacetimeDB is installed, running, and module is deployed
-spacetimedb:
+spacetimedb: build-wasm
     #!/usr/bin/env bash
     set -euo pipefail
     command -v "{{spacetime}}" &>/dev/null || \
@@ -25,15 +30,15 @@ spacetimedb:
             exit 1
         fi
     fi
-    "{{spacetime}}" publish {{module_name}} --project-path . --yes --delete-data
+    "{{spacetime}}" publish {{module_name}} --bin-path {{wasm_path}} --yes --delete-data
 
 # Regenerate client bindings after module changes
-generate:
-    "{{spacetime}}" generate --lang rust --project-path . --out-dir src/module_bindings --yes
+generate: build-wasm
+    "{{spacetime}}" generate --lang rust --bin-path {{wasm_path}} --out-dir src/module_bindings --yes
 
 # Wipe database and redeploy
-reset:
-    "{{spacetime}}" publish {{module_name}} --project-path . --yes --delete-data
+reset: build-wasm
+    "{{spacetime}}" publish {{module_name}} --bin-path {{wasm_path}} --yes --delete-data
 
 # Run Playwright tests (server must be running)
 test:
