@@ -62,7 +62,7 @@
     <div class="flex-1 relative overflow-hidden bg-surface" id="grid-viewport">
       <div class="iso-scene" id="iso-scene">
         <div class="iso-grid">
-          {% for row in range(end=grid_size) %}{% for col in range(end=grid_size) %}
+          {% for row in range(grid_size) %}{% for col in range(grid_size) %}
           <div class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
                style="--col:{{ col }};--row:{{ row }}"></div>
           {% endfor %}{% endfor %}

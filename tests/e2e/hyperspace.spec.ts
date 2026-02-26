@@ -16,7 +16,7 @@ test('add block button works', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('#console-log:has-text("connected")');
   await page.click('button:has-text("+ Block")');
-  await expect(page.locator('.iso-block')).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('.iso-block').first()).toBeVisible({ timeout: 3000 });
 });
 
 test('multi-user sync', async ({ browser }) => {
@@ -28,11 +28,14 @@ test('multi-user sync', async ({ browser }) => {
     p2.waitForSelector('#console-log:has-text("connected")'),
   ]);
 
-  // Place block in page 1
-  await p1.click('.iso-cell[data-x="2"][data-y="2"]');
+  // Count blocks in page 2 before
+  const before = await p2.locator('.iso-block').count();
 
-  // Verify in page 2
-  await expect(p2.locator('text=(2,2)')).toBeVisible({ timeout: 5000 });
+  // Add block in page 1 via button
+  await p1.click('button:has-text("+ Block")');
+
+  // Verify block count increased in page 2
+  await expect(p2.locator('.iso-block')).toHaveCount(before + 1, { timeout: 5000 });
 
   await Promise.all([c1.close(), c2.close()]);
 });

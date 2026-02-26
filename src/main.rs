@@ -15,6 +15,12 @@ use tokio::sync::broadcast;
 
 const GRID_SIZE: i32 = 8;
 
+#[derive(serde::Serialize)]
+struct ObjCtx { id: u64, grid_x: i32, grid_y: i32, color: String }
+
+#[derive(serde::Serialize)]
+struct UserCtx { name: String, color: String, online: bool }
+
 struct App {
     db: Arc<DbConnection>,
     tx: broadcast::Sender<String>,
@@ -23,20 +29,11 @@ struct App {
 // --- Broadcast helpers ---
 
 fn render_body(db: &RemoteTables) -> String {
-    let objects: Vec<_> = db.scene_object().iter()
-        .map(|o| serde_json::json!({
-            "id": o.id,
-            "grid_x": o.grid_x,
-            "grid_y": o.grid_y,
-            "color": o.color,
-        }))
+    let objects: Vec<ObjCtx> = db.scene_object().iter()
+        .map(|o| ObjCtx { id: o.id, grid_x: o.grid_x, grid_y: o.grid_y, color: o.color.clone() })
         .collect();
-    let users: Vec<_> = db.user_info().iter()
-        .map(|u| serde_json::json!({
-            "name": u.name,
-            "color": u.color,
-            "online": u.online,
-        }))
+    let users: Vec<UserCtx> = db.user_info().iter()
+        .map(|u| UserCtx { name: u.name.clone(), color: u.color.clone(), online: u.online })
         .collect();
 
     let template_src = std::fs::read_to_string("templates/index.html.j2")
@@ -64,14 +61,17 @@ fn broadcast_console(tx: &broadcast::Sender<String>, msg: &str, color: &str) {
 }
 
 fn broadcast_cursors(tx: &broadcast::Sender<String>, db: &RemoteTables) {
-    let data: Vec<_> = db.user_cursor().iter().map(|c| {
+    #[derive(serde::Serialize)]
+    struct Cursor { grid_x: i32, grid_y: i32, color: String, name: String }
+
+    let data: Vec<Cursor> = db.user_cursor().iter().map(|c| {
         let u = db.user_info().identity().find(&c.identity);
-        serde_json::json!({
-            "grid_x": c.grid_x,
-            "grid_y": c.grid_y,
-            "color": u.as_ref().map(|u| u.color.as_str()).unwrap_or("#888"),
-            "name": u.as_ref().map(|u| u.name.as_str()).unwrap_or("?"),
-        })
+        Cursor {
+            grid_x: c.grid_x,
+            grid_y: c.grid_y,
+            color: u.as_ref().map(|u| u.color.clone()).unwrap_or_else(|| "#888".into()),
+            name: u.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| "?".into()),
+        }
     }).collect();
     let json = serde_json::to_string(&data).unwrap();
     let _ = tx.send(format!(
