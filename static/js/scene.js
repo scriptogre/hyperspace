@@ -13,13 +13,17 @@ document.body.addEventListener('console-log', (e) =>
 
 document.body.addEventListener('cursor-update', (e) => {
   document.querySelectorAll('.iso-cursor').forEach(el => el.remove());
-  const grid = document.querySelector('.iso-grid');
   (e.detail?.cursors ?? []).forEach(c => {
-    grid?.insertAdjacentHTML('beforeend',
-      `<div class="iso-cursor" style="grid-column:${+c.grid_x + 1};grid-row:${+c.grid_y + 1};--color:${c.color}">
-        <div class="iso-cursor-dot" style="position:relative">
-          <span class="iso-label">${c.name}</span>
-        </div>
+    // Find the grid cell and get its screen position
+    const cell = document.querySelector(`.iso-cell[data-x="${c.grid_x}"][data-y="${c.grid_y}"]`);
+    if (!cell) return;
+    const rect = cell.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    document.body.insertAdjacentHTML('beforeend',
+      `<div class="iso-cursor" style="left:${cx}px;top:${cy}px;transform:translate(-50%,-100%);--color:${c.color}">
+        <div class="iso-cursor-dot"></div>
+        <span class="iso-label">${c.name}</span>
       </div>`);
   });
 });

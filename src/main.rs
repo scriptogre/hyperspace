@@ -88,8 +88,14 @@ fn broadcast_cursors(tx: &broadcast::Sender<String>, db: &RemoteTables) {
     ));
 }
 
+/// Broadcast morph + console from a reducer callback.
+fn on_reducer_done(tx: &broadcast::Sender<String>, ctx: &module_bindings::ReducerEventContext, msg: &str, color: &str) {
+    broadcast_morph(tx, &ctx.db);
+    broadcast_console(tx, msg, color);
+}
+
 /// Dispatch a browser message to SpacetimeDB reducers.
-fn handle_ws_message(text: &str, db: &DbConnection) {
+fn handle_ws_message(text: &str, db: &DbConnection, tx: &broadcast::Sender<String>) {
     let Ok(val) = serde_json::from_str::<serde_json::Value>(text) else {
         eprintln!("WS: invalid JSON: {text}");
         return;
@@ -97,31 +103,44 @@ fn handle_ws_message(text: &str, db: &DbConnection) {
 
     // {"set_name": "Alice"}
     if let Some(name) = val.get("set_name").and_then(|v| v.as_str()) {
-        let _ = db.reducers.set_name(name.to_string());
+        let tx = tx.clone();
+        let _ = db.reducers.set_name_then(name.to_string(), move |ctx, _| {
+            broadcast_morph(&tx, &ctx.db);
+        });
         return;
     }
 
     // {"action": "..."}
     if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
         if action == "create" {
-            // Random position on grid
             let x = (random_u64() % GRID_SIZE as u64) as i32;
             let y = (random_u64() % GRID_SIZE as u64) as i32;
-            let _ = db.reducers.create_object(x, y, random_color());
+            let tx = tx.clone();
+            let _ = db.reducers.create_object_then(x, y, random_color(), move |ctx, _| {
+                on_reducer_done(&tx, ctx, &format!("block created at ({x},{y})"), "text-cyan-400");
+            });
         } else if let Some(coords) = action.strip_prefix("create_at:") {
-            // "create_at:3,2" from grid cell click
             let mut parts = coords.split(',').filter_map(|s| s.parse::<i32>().ok());
             if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
-                let _ = db.reducers.create_object(x, y, random_color());
+                let tx = tx.clone();
+                let _ = db.reducers.create_object_then(x, y, random_color(), move |ctx, _| {
+                    on_reducer_done(&tx, ctx, &format!("block created at ({x},{y})"), "text-cyan-400");
+                });
             }
         } else if let Some(id_str) = action.strip_prefix("delete:") {
             if let Ok(id) = id_str.parse::<u64>() {
-                let _ = db.reducers.delete_object(id);
+                let tx = tx.clone();
+                let _ = db.reducers.delete_object_then(id, move |ctx, _| {
+                    on_reducer_done(&tx, ctx, &format!("block deleted"), "text-red-400");
+                });
             }
         } else if action == "cursor" {
             let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
             let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-            let _ = db.reducers.update_cursor(x, y);
+            let tx = tx.clone();
+            let _ = db.reducers.update_cursor_then(x, y, move |ctx, _| {
+                broadcast_cursors(&tx, &ctx.db);
+            });
         }
     }
 }
@@ -164,6 +183,7 @@ fn index(app: &State<App>) -> Template {
 #[get("/ws")]
 fn websocket(ws: rocket_ws::WebSocket, app: &State<App>) -> rocket_ws::Channel<'static> {
     let mut rx = app.tx.subscribe();
+    let tx = app.tx.clone();
     let db = Arc::clone(&app.db);
 
     ws.channel(move |mut stream| Box::pin(async move {
@@ -182,7 +202,7 @@ fn websocket(ws: rocket_ws::WebSocket, app: &State<App>) -> rocket_ws::Channel<'
                 msg = stream.next() => {
                     match msg {
                         Some(Ok(Message::Text(text))) => {
-                            handle_ws_message(&text, &db);
+                            handle_ws_message(&text, &db, &tx);
                         }
                         Some(Ok(_)) => {} // ignore binary/ping/pong
                         _ => break,
@@ -211,75 +231,36 @@ fn rocket() -> _ {
         .build()
         .expect("Failed to connect to SpacetimeDB");
 
-    // Register table change callbacks
+    // Table change callbacks — morph only (for multi-user sync via subscriptions).
+    // Console messages come from reducer _then callbacks in handle_ws_message.
     {
-        // scene_object: on_insert
         let tx_clone = tx.clone();
-        db.db.scene_object().on_insert(move |ctx, obj| {
+        db.db.scene_object().on_insert(move |ctx, _obj| {
             broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("block created at ({},{})", obj.grid_x, obj.grid_y),
-                "text-cyan-400",
-            );
         });
 
-        // scene_object: on_delete
         let tx_clone = tx.clone();
-        db.db.scene_object().on_delete(move |ctx, obj| {
+        db.db.scene_object().on_delete(move |ctx, _obj| {
             broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("block deleted at ({},{})", obj.grid_x, obj.grid_y),
-                "text-red-400",
-            );
         });
 
-        // scene_object: on_update
         let tx_clone = tx.clone();
-        db.db.scene_object().on_update(move |ctx, _old, obj| {
+        db.db.scene_object().on_update(move |ctx, _old, _obj| {
             broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("block moved to ({},{})", obj.grid_x, obj.grid_y),
-                "text-yellow-400",
-            );
         });
 
-        // user_info: on_insert
         let tx_clone = tx.clone();
         db.db.user_info().on_insert(move |ctx, user| {
             broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("{} joined", user.name),
-                "text-green-400",
-            );
+            broadcast_console(&tx_clone, &format!("{} joined", user.name), "text-green-400");
         });
 
-        // user_info: on_delete
         let tx_clone = tx.clone();
         db.db.user_info().on_delete(move |ctx, user| {
             broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("{} left", user.name),
-                "text-gray-400",
-            );
+            broadcast_console(&tx_clone, &format!("{} left", user.name), "text-gray-400");
         });
 
-        // user_info: on_update
-        let tx_clone = tx.clone();
-        db.db.user_info().on_update(move |ctx, _old, user| {
-            broadcast_morph(&tx_clone, &ctx.db);
-            broadcast_console(
-                &tx_clone,
-                &format!("{} updated", user.name),
-                "text-blue-400",
-            );
-        });
-
-        // user_cursor: on_insert
         let tx_clone = tx.clone();
         db.db.user_cursor().on_insert(move |ctx, _cursor| {
             broadcast_cursors(&tx_clone, &ctx.db);
@@ -308,10 +289,21 @@ fn rocket() -> _ {
         })
         .subscribe_to_all_tables();
 
-    // Run SDK event loop in background
-    let _db_handle = db.run_threaded();
+    // Run SDK event loop in background — use advance_one_message_blocking in a
+    // dedicated thread for lowest latency (no polling interval).
+    let db_arc = Arc::new(db);
+    {
+        let db_clone = Arc::clone(&db_arc);
+        std::thread::spawn(move || {
+            loop {
+                if db_clone.advance_one_message_blocking().is_err() {
+                    break;
+                }
+            }
+        });
+    }
 
-    let app = App { db: Arc::new(db), tx };
+    let app = App { db: db_arc, tx };
 
     rocket::build()
         .manage(app)

@@ -19,7 +19,7 @@ spacetimedb: build-wasm
     if nc -z 127.0.0.1 3000 2>/dev/null; then
         echo "SpacetimeDB already running on port 3000"
     else
-        "{{spacetime}}" start 2>/dev/null &
+        "{{spacetime}}" start --in-memory 2>/dev/null &
         echo "Waiting for SpacetimeDB..."
         for i in $(seq 1 30); do
             if nc -z 127.0.0.1 3000 2>/dev/null; then break; fi

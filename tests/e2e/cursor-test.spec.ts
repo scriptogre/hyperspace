@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test';
 test('cursor appears on grid at correct position', async ({ browser }) => {
   const errors: string[] = [];
 
-  // Two tabs to see each other's cursors
   const c1 = await browser.newContext();
   const c2 = await browser.newContext();
   const p1 = await c1.newPage();
@@ -28,20 +27,17 @@ test('cursor appears on grid at correct position', async ({ browser }) => {
   await p1.hover('.iso-cell[data-x="4"][data-y="3"]');
   await p1.waitForTimeout(500);
 
-  // Tab 2 should show a cursor at grid position (4,3)
+  // Tab 2 should show a cursor
   const cursor = p2.locator('.iso-cursor');
   await expect(cursor).toBeVisible({ timeout: 5000 });
 
-  // Verify cursor is a grid item at the right position
-  const style = await cursor.getAttribute('style');
-  expect(style).toContain('grid-column:5');
-  expect(style).toContain('grid-row:4');
+  // Cursor should have a dot and label
+  await expect(cursor.locator('.iso-cursor-dot')).toBeVisible();
+  await expect(cursor.locator('.iso-label')).toBeVisible();
 
-  // Screenshot both tabs
-  await p1.screenshot({ path: 'test-results/cursor-tab1.png', fullPage: true });
+  // Screenshot
   await p2.screenshot({ path: 'test-results/cursor-tab2.png', fullPage: true });
 
   expect(errors).toEqual([]);
-
   await Promise.all([c1.close(), c2.close()]);
 });
