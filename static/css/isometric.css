@@ -36,18 +36,22 @@
 }
 
 .iso-cursor {
-  position: absolute;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.iso-cursor-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--color);
   border: 2px solid white;
-  transform: rotateX(60deg) rotateZ(-45deg);
-  left: calc(var(--col) * 64px + 27px);
-  top: calc(var(--row) * 64px + 27px);
-  pointer-events: none;
-  transition: left 0.1s, top 0.1s;
-  z-index: 10;
+  box-shadow: 0 0 8px var(--color);
 }
 
 .iso-label {

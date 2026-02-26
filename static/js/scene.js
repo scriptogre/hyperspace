@@ -13,11 +13,13 @@ document.body.addEventListener('console-log', (e) =>
 
 document.body.addEventListener('cursor-update', (e) => {
   document.querySelectorAll('.iso-cursor').forEach(el => el.remove());
-  const scene = document.getElementById('iso-scene');
+  const grid = document.querySelector('.iso-grid');
   (e.detail?.cursors ?? []).forEach(c => {
-    scene?.insertAdjacentHTML('beforeend',
-      `<div class="iso-cursor" style="--col:${c.grid_x};--row:${c.grid_y};--color:${c.color}">
-        <span class="iso-label">${c.name}</span>
+    grid?.insertAdjacentHTML('beforeend',
+      `<div class="iso-cursor" style="grid-column:${+c.grid_x + 1};grid-row:${+c.grid_y + 1};--color:${c.color}">
+        <div class="iso-cursor-dot" style="position:relative">
+          <span class="iso-label">${c.name}</span>
+        </div>
       </div>`);
   });
 });

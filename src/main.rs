@@ -28,6 +28,18 @@ struct App {
 
 // --- Broadcast helpers ---
 
+fn cached_env() -> &'static minijinja::Environment<'static> {
+    use std::sync::OnceLock;
+    static ENV: OnceLock<minijinja::Environment<'static>> = OnceLock::new();
+    ENV.get_or_init(|| {
+        let src = std::fs::read_to_string("templates/index.html.j2")
+            .expect("Failed to read template file");
+        let mut env = minijinja::Environment::new();
+        env.add_template_owned("index", src).expect("Failed to add template");
+        env
+    })
+}
+
 fn render_body(db: &RemoteTables) -> String {
     let objects: Vec<ObjCtx> = db.scene_object().iter()
         .map(|o| ObjCtx { id: o.id, grid_x: o.grid_x, grid_y: o.grid_y, color: o.color.clone() })
@@ -36,11 +48,7 @@ fn render_body(db: &RemoteTables) -> String {
         .map(|u| UserCtx { name: u.name.clone(), color: u.color.clone(), online: u.online })
         .collect();
 
-    let template_src = std::fs::read_to_string("templates/index.html.j2")
-        .expect("Failed to read template file");
-    let mut env = minijinja::Environment::new();
-    env.add_template("index", &template_src).expect("Failed to add template");
-    let tmpl = env.get_template("index").unwrap();
+    let tmpl = cached_env().get_template("index").unwrap();
     let mut state = tmpl.eval_to_state(minijinja::context! {
         objects => objects,
         users => users,
