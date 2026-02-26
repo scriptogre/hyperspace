@@ -26,7 +26,7 @@ struct App {
     tx: broadcast::Sender<String>,
 }
 
-// --- Broadcast helpers ---
+// --- Template helpers ---
 
 fn cached_env() -> &'static minijinja::Environment<'static> {
     use std::sync::OnceLock;
@@ -40,22 +40,26 @@ fn cached_env() -> &'static minijinja::Environment<'static> {
     })
 }
 
-fn render_body(db: &RemoteTables) -> String {
-    let objects: Vec<ObjCtx> = db.scene_object().iter()
+fn build_context(db: &RemoteTables) -> (Vec<ObjCtx>, Vec<UserCtx>) {
+    let objects = db.scene_object().iter()
         .map(|o| ObjCtx { id: o.id, grid_x: o.grid_x, grid_y: o.grid_y, color: o.color.clone() })
         .collect();
-    let users: Vec<UserCtx> = db.user_info().iter()
+    let users = db.user_info().iter()
         .map(|u| UserCtx { name: u.name.clone(), color: u.color.clone(), online: u.online })
         .collect();
+    (objects, users)
+}
 
+fn render_body(db: &RemoteTables) -> String {
+    let (objects, users) = build_context(db);
     let tmpl = cached_env().get_template("index").unwrap();
     let mut state = tmpl.eval_to_state(minijinja::context! {
-        objects => objects,
-        users => users,
-        grid_size => GRID_SIZE,
+        objects => objects, users => users, grid_size => GRID_SIZE,
     }).unwrap();
     state.render_block("body").unwrap()
 }
+
+// --- Broadcast helpers ---
 
 fn broadcast_morph(tx: &broadcast::Sender<String>, db: &RemoteTables) {
     let body = render_body(db);
@@ -88,20 +92,19 @@ fn broadcast_cursors(tx: &broadcast::Sender<String>, db: &RemoteTables) {
     ));
 }
 
-/// Broadcast morph + console from a reducer callback.
-fn on_reducer_done(tx: &broadcast::Sender<String>, ctx: &module_bindings::ReducerEventContext, msg: &str, color: &str) {
+fn on_reducer_done(tx: &broadcast::Sender<String>, ctx: &ReducerEventContext, msg: &str, color: &str) {
     broadcast_morph(tx, &ctx.db);
     broadcast_console(tx, msg, color);
 }
 
-/// Dispatch a browser message to SpacetimeDB reducers.
+// --- WS dispatch ---
+
 fn handle_ws_message(text: &str, db: &DbConnection, tx: &broadcast::Sender<String>) {
     let Ok(val) = serde_json::from_str::<serde_json::Value>(text) else {
         eprintln!("WS: invalid JSON: {text}");
         return;
     };
 
-    // {"set_name": "Alice"}
     if let Some(name) = val.get("set_name").and_then(|v| v.as_str()) {
         let tx = tx.clone();
         let _ = db.reducers.set_name_then(name.to_string(), move |ctx, _| {
@@ -110,74 +113,59 @@ fn handle_ws_message(text: &str, db: &DbConnection, tx: &broadcast::Sender<Strin
         return;
     }
 
-    // {"action": "..."}
-    if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
-        if action == "create" {
-            let x = (random_u64() % GRID_SIZE as u64) as i32;
-            let y = (random_u64() % GRID_SIZE as u64) as i32;
+    let Some(action) = val.get("action").and_then(|v| v.as_str()) else { return };
+
+    if action == "create" {
+        let x = (random_u64() % GRID_SIZE as u64) as i32;
+        let y = (random_u64() % GRID_SIZE as u64) as i32;
+        let tx = tx.clone();
+        let _ = db.reducers.create_object_then(x, y, random_color(), move |ctx, _| {
+            on_reducer_done(&tx, ctx, &format!("block created at ({x},{y})"), "text-cyan-400");
+        });
+    } else if let Some(coords) = action.strip_prefix("create_at:") {
+        let mut parts = coords.split(',').filter_map(|s| s.parse::<i32>().ok());
+        if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
             let tx = tx.clone();
             let _ = db.reducers.create_object_then(x, y, random_color(), move |ctx, _| {
                 on_reducer_done(&tx, ctx, &format!("block created at ({x},{y})"), "text-cyan-400");
             });
-        } else if let Some(coords) = action.strip_prefix("create_at:") {
-            let mut parts = coords.split(',').filter_map(|s| s.parse::<i32>().ok());
-            if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
-                let tx = tx.clone();
-                let _ = db.reducers.create_object_then(x, y, random_color(), move |ctx, _| {
-                    on_reducer_done(&tx, ctx, &format!("block created at ({x},{y})"), "text-cyan-400");
-                });
-            }
-        } else if let Some(id_str) = action.strip_prefix("delete:") {
-            if let Ok(id) = id_str.parse::<u64>() {
-                let tx = tx.clone();
-                let _ = db.reducers.delete_object_then(id, move |ctx, _| {
-                    on_reducer_done(&tx, ctx, &format!("block deleted"), "text-red-400");
-                });
-            }
-        } else if action == "cursor" {
-            let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-            let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        }
+    } else if let Some(id_str) = action.strip_prefix("delete:") {
+        if let Ok(id) = id_str.parse::<u64>() {
             let tx = tx.clone();
-            let _ = db.reducers.update_cursor_then(x, y, move |ctx, _| {
-                broadcast_cursors(&tx, &ctx.db);
+            let _ = db.reducers.delete_object_then(id, move |ctx, _| {
+                on_reducer_done(&tx, ctx, &format!("block deleted"), "text-red-400");
             });
         }
+    } else if action == "cursor" {
+        let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let tx = tx.clone();
+        let _ = db.reducers.update_cursor_then(x, y, move |ctx, _| {
+            broadcast_cursors(&tx, &ctx.db);
+        });
     }
 }
 
 fn random_u64() -> u64 {
-    use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
-    let s = RandomState::new();
-    let mut h = s.build_hasher();
-    h.write_u8(0);
-    h.finish()
+    std::collections::hash_map::RandomState::new().build_hasher().finish()
 }
 
 fn random_color() -> String {
-    let colors = [
+    const COLORS: [&str; 8] = [
         "#ef4444", "#f97316", "#eab308", "#22c55e",
         "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
     ];
-    colors[(random_u64() as usize) % colors.len()].to_string()
+    COLORS[(random_u64() as usize) % COLORS.len()].to_string()
 }
 
 // --- Routes ---
 
 #[get("/")]
 fn index(app: &State<App>) -> Template {
-    let objects: Vec<_> = app.db.db.scene_object().iter()
-        .map(|o| context! { id: o.id, grid_x: o.grid_x, grid_y: o.grid_y, color: o.color.clone() })
-        .collect();
-    let users: Vec<_> = app.db.db.user_info().iter()
-        .map(|u| context! { name: u.name.clone(), color: u.color.clone(), online: u.online })
-        .collect();
-
-    Template::render("index", context! {
-        objects: objects,
-        users: users,
-        grid_size: GRID_SIZE,
-    })
+    let (objects, users) = build_context(&app.db.db);
+    Template::render("index", context! { objects: objects, users: users, grid_size: GRID_SIZE })
 }
 
 #[get("/ws")]
@@ -189,29 +177,31 @@ fn websocket(ws: rocket_ws::WebSocket, app: &State<App>) -> rocket_ws::Channel<'
     ws.channel(move |mut stream| Box::pin(async move {
         loop {
             tokio::select! {
-                result = rx.recv() => {
-                    match result {
-                        Ok(msg) => {
-                            if stream.send(Message::Text(msg)).await.is_err() {
-                                break;
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-                msg = stream.next() => {
-                    match msg {
-                        Some(Ok(Message::Text(text))) => {
-                            handle_ws_message(&text, &db, &tx);
-                        }
-                        Some(Ok(_)) => {} // ignore binary/ping/pong
-                        _ => break,
-                    }
-                }
+                result = rx.recv() => match result {
+                    Ok(msg) => if stream.send(Message::Text(msg)).await.is_err() { break },
+                    Err(_) => break,
+                },
+                msg = stream.next() => match msg {
+                    Some(Ok(Message::Text(text))) => handle_ws_message(&text, &db, &tx),
+                    Some(Ok(_)) => {}
+                    _ => break,
+                },
             }
         }
         Ok(())
     }))
+}
+
+/// Register table-change callbacks that broadcast to all connected websocket clients.
+macro_rules! on_table_change {
+    ($table:expr, $tx:expr, $handler:expr) => {{
+        let tx = $tx.clone();
+        $table.on_insert(move |ctx, _| $handler(&tx, &ctx.db));
+        let tx = $tx.clone();
+        $table.on_delete(move |ctx, _| $handler(&tx, &ctx.db));
+        let tx = $tx.clone();
+        $table.on_update(move |ctx, _, _| $handler(&tx, &ctx.db));
+    }};
 }
 
 #[launch]
@@ -221,9 +211,7 @@ fn rocket() -> _ {
     let db = DbConnection::builder()
         .with_uri("http://localhost:3000")
         .with_database_name("hyperspace")
-        .on_connect(|_ctx, _identity, _token| {
-            println!("Connected to SpacetimeDB");
-        })
+        .on_connect(|_ctx, _identity, _token| println!("Connected to SpacetimeDB"))
         .on_connect_error(|_ctx, _err| {
             eprintln!("SpacetimeDB connection error");
             std::process::exit(1);
@@ -231,82 +219,44 @@ fn rocket() -> _ {
         .build()
         .expect("Failed to connect to SpacetimeDB");
 
-    // Table change callbacks — morph only (for multi-user sync via subscriptions).
+    // Table change callbacks — morph/cursor broadcasts for multi-user sync.
     // Console messages come from reducer _then callbacks in handle_ws_message.
+    on_table_change!(db.db.scene_object(), tx, broadcast_morph);
+    on_table_change!(db.db.user_cursor(), tx, broadcast_cursors);
+
+    // user_info needs extra console broadcasts for join/leave
     {
-        let tx_clone = tx.clone();
-        db.db.scene_object().on_insert(move |ctx, _obj| {
-            broadcast_morph(&tx_clone, &ctx.db);
-        });
-
-        let tx_clone = tx.clone();
-        db.db.scene_object().on_delete(move |ctx, _obj| {
-            broadcast_morph(&tx_clone, &ctx.db);
-        });
-
-        let tx_clone = tx.clone();
-        db.db.scene_object().on_update(move |ctx, _old, _obj| {
-            broadcast_morph(&tx_clone, &ctx.db);
-        });
-
         let tx_clone = tx.clone();
         db.db.user_info().on_insert(move |ctx, user| {
             broadcast_morph(&tx_clone, &ctx.db);
             broadcast_console(&tx_clone, &format!("{} joined", user.name), "text-green-400");
         });
-
         let tx_clone = tx.clone();
         db.db.user_info().on_delete(move |ctx, user| {
             broadcast_morph(&tx_clone, &ctx.db);
             broadcast_console(&tx_clone, &format!("{} left", user.name), "text-gray-400");
         });
-
         let tx_clone = tx.clone();
-        db.db.user_cursor().on_insert(move |ctx, _cursor| {
-            broadcast_cursors(&tx_clone, &ctx.db);
-        });
-
-        // user_cursor: on_update
-        let tx_clone = tx.clone();
-        db.db.user_cursor().on_update(move |ctx, _old, _cursor| {
-            broadcast_cursors(&tx_clone, &ctx.db);
-        });
-
-        // user_cursor: on_delete
-        let tx_clone = tx.clone();
-        db.db.user_cursor().on_delete(move |ctx, _cursor| {
-            broadcast_cursors(&tx_clone, &ctx.db);
-        });
+        db.db.user_info().on_update(move |ctx, _, _| broadcast_morph(&tx_clone, &ctx.db));
     }
 
     db.subscription_builder()
         .on_applied(|ctx| {
-            println!(
-                "Subscribed — {} objects, {} users",
-                ctx.db.scene_object().count(),
-                ctx.db.user_info().count(),
-            );
+            println!("Subscribed — {} objects, {} users",
+                ctx.db.scene_object().count(), ctx.db.user_info().count());
         })
         .subscribe_to_all_tables();
 
-    // Run SDK event loop in background — use advance_one_message_blocking in a
-    // dedicated thread for lowest latency (no polling interval).
     let db_arc = Arc::new(db);
     {
         let db_clone = Arc::clone(&db_arc);
         std::thread::spawn(move || {
-            loop {
-                if db_clone.advance_one_message_blocking().is_err() {
-                    break;
-                }
-            }
+            while db_clone.advance_one_message_blocking().is_ok() {}
         });
     }
 
-    let app = App { db: db_arc, tx };
-
     rocket::build()
-        .manage(app)
+        .manage(App { db: db_arc, tx })
         .attach(Template::fairing())
         .mount("/", routes![index, websocket])
         .mount("/static", FileServer::from("static"))

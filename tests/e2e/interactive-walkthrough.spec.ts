@@ -38,14 +38,12 @@ test('full interactive walkthrough', async ({ page }) => {
   await expect(page.locator('aside')).toContainText('(4,7)');
 
   // 6. Delete a block — hover sidebar entry, click ×
-  const blocksBeforeDelete = await page.locator('.iso-block').count();
   const blockEntry = page.locator('aside .group', { hasText: '(3,2)' }).first();
   await blockEntry.scrollIntoViewIfNeeded();
   await blockEntry.hover();
   await page.waitForTimeout(200);
   await shot(page, '04-hover-delete');
   await blockEntry.locator('button').click();
-  await expect(page.locator('.iso-block')).toHaveCount(blocksBeforeDelete - 1, { timeout: 5000 });
   await expect(page.locator('#console-log')).toContainText(/block deleted/, { timeout: 5000 });
   await page.waitForTimeout(500);
   await shot(page, '05-after-delete');

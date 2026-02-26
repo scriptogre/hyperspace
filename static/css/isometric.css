@@ -29,10 +29,19 @@
   width: 64px;
   height: 64px;
   background: var(--color);
-  opacity: 0.8;
-  border: 1px solid rgba(255,255,255,0.15);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--color) 25%, transparent);
+  opacity: 0.85;
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--color) 30%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.25),
+    inset 0 -1px 0 rgba(0,0,0,0.2);
   pointer-events: none;
+  animation: block-in 0.2s ease-out;
+}
+
+@keyframes block-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 0.85; transform: scale(1); }
 }
 
 .iso-cursor {
