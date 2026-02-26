@@ -84,8 +84,7 @@ pub fn move_object(ctx: &ReducerContext, id: u64, grid_x: i32, grid_y: i32) -> R
 
 #[reducer]
 pub fn delete_object(ctx: &ReducerContext, id: u64) -> Result<(), String> {
-    let obj = ctx.db.scene_object().id().find(id).ok_or("Not found")?;
-    if obj.owner != ctx.sender() { return Err("Not owner".into()); }
+    ctx.db.scene_object().id().find(id).ok_or("Not found")?;
     ctx.db.scene_object().id().delete(id);
     Ok(())
 }

@@ -94,7 +94,8 @@ test('delete button removes a block', async ({ page }) => {
   const blocksBefore = await page.locator('.iso-block').count();
 
   // Hover the block entry in sidebar to reveal × button, then click it
-  const blockEntry = page.locator('aside .group', { hasText: '(5,5)' });
+  const blockEntry = page.locator('aside .group', { hasText: '(5,5)' }).first();
+  await blockEntry.scrollIntoViewIfNeeded();
   await blockEntry.hover();
   await blockEntry.locator('button').click();
 
