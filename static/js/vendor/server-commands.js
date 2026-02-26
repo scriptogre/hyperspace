@@ -110,7 +110,7 @@
 
             if (api.hasAttribute(commandElement, 'trigger')) {
                 const trigger = api.getAttributeValue(commandElement, 'trigger');
-                handleTriggerAttribute(trigger);
+                handleTriggerAttribute({value: trigger});
             }
             if (api.hasAttribute(commandElement, 'location')) {
                 const redirectPath = api.getAttributeValue(commandElement, 'location');

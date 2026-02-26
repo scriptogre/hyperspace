@@ -22,8 +22,28 @@ document.body.addEventListener('cursor-update', (e) => {
   });
 });
 
-// WS lifecycle
-document.body.addEventListener('htmx:wsOpen', () => log('connected', 'text-green-400'));
-document.body.addEventListener('htmx:wsClose', () => log('disconnected', 'text-red-400'));
+// Capture the WebSocket wrapper when htmx opens it
+let socketWrapper = null;
+document.body.addEventListener('htmx:wsOpen', (e) => {
+  socketWrapper = e.detail?.socketWrapper;
+  log('connected', 'text-green-400');
+});
+document.body.addEventListener('htmx:wsClose', () => {
+  socketWrapper = null;
+  log('disconnected', 'text-red-400');
+});
+
+// Cursor tracking — send grid position on mousemove
+let lastCursor = '';
+document.addEventListener('mousemove', (e) => {
+  const cell = e.target.closest('.iso-cell');
+  if (!cell) return;
+  const x = cell.dataset.x;
+  const y = cell.dataset.y;
+  const key = `${x},${y}`;
+  if (key === lastCursor) return;
+  lastCursor = key;
+  socketWrapper?.send(JSON.stringify({ action: 'cursor', x, y }));
+});
 
 log('initialized', 'text-gray-500');

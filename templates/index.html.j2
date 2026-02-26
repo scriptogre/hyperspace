@@ -51,7 +51,7 @@
             <span class="w-2 h-2 rounded-sm shrink-0" style="background:{{ obj.color }}"></span>
             <span class="text-gray-400">({{ obj.grid_x }},{{ obj.grid_y }})</span>
           </div>
-          <button ws-send name="action" value="delete:{{ obj.id }}"
+          <button hx-trigger="click" ws-send name="action" value="delete:{{ obj.id }}"
                   class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">&times;</button>
         </div>
         {% endfor %}

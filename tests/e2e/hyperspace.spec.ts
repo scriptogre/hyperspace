@@ -15,23 +15,44 @@ test('websocket connects and logs to console', async ({ page }) => {
   await expect(page.locator('#console-log')).toContainText('connected', { timeout: 5000 });
 });
 
+test('no console errors after block creation', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+
+  await page.goto('/');
+  await page.waitForSelector('#console-log:has-text("connected")');
+
+  // Create a block and wait for morph
+  await page.click('button:has-text("+ Block")');
+  await page.waitForTimeout(2000);
+
+  // Should have zero JS errors
+  expect(errors).toEqual([]);
+});
+
+test('server console messages appear after block creation', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('#console-log:has-text("connected")');
+
+  await page.click('button:has-text("+ Block")');
+
+  // Server should broadcast "block created at (x,y)" to the console
+  await expect(page.locator('#console-log')).toContainText(/block created at \(\d,\d\)/, { timeout: 5000 });
+});
+
 test('page remains intact after block creation', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('#console-log:has-text("connected")');
 
-  // Verify layout before
   await expect(page.locator('h1:has-text("Hyperspace")')).toBeVisible();
   await expect(page.locator('.iso-grid')).toBeVisible();
 
   const blocksBefore = await page.locator('.iso-block').count();
 
-  // Click + Block
   await page.click('button:has-text("+ Block")');
-
-  // Wait for block to appear
   await expect(page.locator('.iso-block')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
 
-  // Verify layout is STILL intact after morph (page should not break)
+  // Layout still intact after morph
   await expect(page.locator('h1:has-text("Hyperspace")')).toBeVisible();
   await expect(page.locator('.iso-grid')).toBeVisible();
   await expect(page.locator('#console-log')).toBeVisible();
@@ -42,12 +63,10 @@ test('sidebar updates with block info', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('#console-log:has-text("connected")');
 
-  // Click + Block and verify sidebar shows block count update
   const blocksBefore = await page.locator('.iso-block').count();
   await page.click('button:has-text("+ Block")');
   await expect(page.locator('.iso-block')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
 
-  // Sidebar should show block coordinates (random position, match any coordinate)
   await expect(page.locator('aside')).toContainText('Blocks');
   await expect(page.locator('aside')).toContainText(/\(\d,\d\)/);
 });
@@ -58,12 +77,32 @@ test('clicking grid cell creates block at that position', async ({ page }) => {
 
   const blocksBefore = await page.locator('.iso-block').count();
 
-  // Click the cell at (2,3)
   await page.click('.iso-cell[data-x="2"][data-y="3"]');
   await expect(page.locator('.iso-block')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
 
-  // Sidebar should show the exact coordinates
   await expect(page.locator('aside')).toContainText('(2,3)');
+});
+
+test('delete button removes a block', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('#console-log:has-text("connected")');
+
+  // Create a block first
+  await page.click('.iso-cell[data-x="5"][data-y="5"]');
+  await expect(page.locator('aside')).toContainText('(5,5)', { timeout: 5000 });
+
+  const blocksBefore = await page.locator('.iso-block').count();
+
+  // Hover the block entry in sidebar to reveal × button, then click it
+  const blockEntry = page.locator('aside .group', { hasText: '(5,5)' });
+  await blockEntry.hover();
+  await blockEntry.locator('button').click();
+
+  // Block count should decrease
+  await expect(page.locator('.iso-block')).toHaveCount(blocksBefore - 1, { timeout: 5000 });
+
+  // Console should show deletion message
+  await expect(page.locator('#console-log')).toContainText(/block deleted/, { timeout: 5000 });
 });
 
 test('multi-user sync: block appears in both tabs', async ({ browser }) => {
@@ -75,16 +114,11 @@ test('multi-user sync: block appears in both tabs', async ({ browser }) => {
     p2.waitForSelector('#console-log:has-text("connected")'),
   ]);
 
-  // Count blocks in page 2 before
   const before = await p2.locator('.iso-block').count();
 
-  // Add block in page 1 via button
   await p1.click('button:has-text("+ Block")');
-
-  // Verify block count increased in page 2
   await expect(p2.locator('.iso-block')).toHaveCount(before + 1, { timeout: 5000 });
 
-  // Verify page 2 layout is still intact
   await expect(p2.locator('h1:has-text("Hyperspace")')).toBeVisible();
   await expect(p2.locator('.iso-grid')).toBeVisible();
   await expect(p2.locator('#console-log')).toBeVisible();
