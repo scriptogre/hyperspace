@@ -41,11 +41,12 @@ fn render_body(db: &RemoteTables) -> String {
     let mut env = minijinja::Environment::new();
     env.add_template("index", &template_src).expect("Failed to add template");
     let tmpl = env.get_template("index").unwrap();
-    tmpl.render(minijinja::context! {
+    let mut state = tmpl.eval_to_state(minijinja::context! {
         objects => objects,
         users => users,
         grid_size => GRID_SIZE,
-    }).unwrap()
+    }).unwrap();
+    state.render_block("body").unwrap()
 }
 
 fn broadcast_morph(tx: &broadcast::Sender<String>, db: &RemoteTables) {

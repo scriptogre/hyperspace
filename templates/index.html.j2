@@ -22,7 +22,7 @@
 </head>
 <body class="bg-surface text-gray-200 font-mono h-screen flex overflow-hidden"
       hx-ext="ws,server-commands,morph">
-
+{% block body %}
   {# === Sidebar === #}
   <aside class="w-56 bg-surface-light flex flex-col border-r border-white/10 shrink-0">
     <div class="p-4 border-b border-white/10">
@@ -96,7 +96,7 @@
                     placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-36">
     </div>
   </main>
-
+{% endblock %}
 </body>
 <script src="/static/js/scene.js" type="module"></script>
 </html>
