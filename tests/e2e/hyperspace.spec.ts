@@ -47,9 +47,23 @@ test('sidebar updates with block info', async ({ page }) => {
   await page.click('button:has-text("+ Block")');
   await expect(page.locator('.iso-block')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
 
-  // Sidebar should show block coordinates
+  // Sidebar should show block coordinates (random position, match any coordinate)
   await expect(page.locator('aside')).toContainText('Blocks');
-  await expect(page.locator('aside')).toContainText('(4,4)');
+  await expect(page.locator('aside')).toContainText(/\(\d,\d\)/);
+});
+
+test('clicking grid cell creates block at that position', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('#console-log:has-text("connected")');
+
+  const blocksBefore = await page.locator('.iso-block').count();
+
+  // Click the cell at (2,3)
+  await page.click('.iso-cell[data-x="2"][data-y="3"]');
+  await expect(page.locator('.iso-block')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
+
+  // Sidebar should show the exact coordinates
+  await expect(page.locator('aside')).toContainText('(2,3)');
 });
 
 test('multi-user sync: block appears in both tabs', async ({ browser }) => {

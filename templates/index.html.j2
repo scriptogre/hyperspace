@@ -66,13 +66,14 @@
         <div class="iso-scene" id="iso-scene">
           <div class="iso-grid">
             {% for row in range(grid_size) %}{% for col in range(grid_size) %}
-            <div class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
-                 style="--col:{{ col }};--row:{{ row }}"></div>
+            <button class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
+                    hx-trigger="click" ws-send name="action" value="create_at:{{ col }},{{ row }}"
+                    style="grid-column:{{ col + 1 }};grid-row:{{ row + 1 }}"></button>
             {% endfor %}{% endfor %}
+            {% for obj in objects %}
+            <div class="iso-block" style="grid-column:{{ obj.grid_x + 1 }};grid-row:{{ obj.grid_y + 1 }};--color:{{ obj.color }}"></div>
+            {% endfor %}
           </div>
-          {% for obj in objects %}
-          <div class="iso-block" style="--col:{{ obj.grid_x }};--row:{{ obj.grid_y }};--color:{{ obj.color }}"></div>
-          {% endfor %}
         </div>
       </div>
 

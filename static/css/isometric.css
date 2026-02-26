@@ -16,8 +16,6 @@
   height: 64px;
   border: 1px solid rgba(255,255,255,0.04);
   background: rgba(255,255,255,0.015);
-  grid-column: calc(var(--col) + 1);
-  grid-row: calc(var(--row) + 1);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -28,18 +26,13 @@
 }
 
 .iso-block {
-  position: absolute;
   width: 64px;
   height: 64px;
   background: var(--color);
   opacity: 0.8;
   border: 1px solid rgba(255,255,255,0.15);
   box-shadow: 0 0 24px color-mix(in srgb, var(--color) 25%, transparent);
-  transform: rotateX(60deg) rotateZ(-45deg);
-  left: calc(var(--col) * 64px);
-  top: calc(var(--row) * 64px);
   pointer-events: none;
-  transition: left 0.15s ease, top 0.15s ease;
 }
 
 .iso-cursor {

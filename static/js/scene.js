@@ -7,31 +7,6 @@ const log = (msg, cls = 'text-gray-400') => {
   while (el.children.length > 200) el.firstChild.remove();
 };
 
-// Grid click → place block
-document.addEventListener('click', (e) => {
-  const cell = e.target.closest('.iso-cell');
-  if (!cell) return;
-  const { x, y } = cell.dataset;
-  const ws = document.querySelector('[ws-connect]')?.__ws;
-  if (ws?.readyState === 1) {
-    ws.send(JSON.stringify({ action: 'create_at', x, y }));
-    log(`placed block at (${x},${y})`, 'text-cyan-400');
-  }
-});
-
-// Cursor tracking (throttled ~15fps)
-let lastSend = 0;
-document.getElementById('iso-scene')?.addEventListener('mousemove', (e) => {
-  if (Date.now() - lastSend < 66) return;
-  lastSend = Date.now();
-  const cell = e.target.closest('.iso-cell');
-  if (!cell) return;
-  const ws = document.querySelector('[ws-connect]')?.__ws;
-  if (ws?.readyState === 1) {
-    ws.send(JSON.stringify({ action: 'cursor', x: cell.dataset.x, y: cell.dataset.y }));
-  }
-});
-
 // Server events → console
 document.body.addEventListener('console-log', (e) =>
   log(e.detail?.msg ?? '?', e.detail?.color ?? 'text-gray-400'));

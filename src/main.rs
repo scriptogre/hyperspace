@@ -93,15 +93,19 @@ fn handle_ws_message(text: &str, db: &DbConnection) {
         return;
     }
 
-    // {"action": "..."}  or  {"action": "...", "x": "3", "y": "2"}
+    // {"action": "..."}
     if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
         if action == "create" {
-            let center = GRID_SIZE / 2;
-            let _ = db.reducers.create_object(center, center, random_color());
-        } else if action == "create_at" {
-            let x = val.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-            let y = val.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            // Random position on grid
+            let x = (random_u64() % GRID_SIZE as u64) as i32;
+            let y = (random_u64() % GRID_SIZE as u64) as i32;
             let _ = db.reducers.create_object(x, y, random_color());
+        } else if let Some(coords) = action.strip_prefix("create_at:") {
+            // "create_at:3,2" from grid cell click
+            let mut parts = coords.split(',').filter_map(|s| s.parse::<i32>().ok());
+            if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
+                let _ = db.reducers.create_object(x, y, random_color());
+            }
         } else if let Some(id_str) = action.strip_prefix("delete:") {
             if let Ok(id) = id_str.parse::<u64>() {
                 let _ = db.reducers.delete_object(id);
@@ -114,18 +118,21 @@ fn handle_ws_message(text: &str, db: &DbConnection) {
     }
 }
 
-fn random_color() -> String {
+fn random_u64() -> u64 {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
     let s = RandomState::new();
     let mut h = s.build_hasher();
     h.write_u8(0);
-    let hash = h.finish();
+    h.finish()
+}
+
+fn random_color() -> String {
     let colors = [
         "#ef4444", "#f97316", "#eab308", "#22c55e",
         "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
     ];
-    colors[(hash as usize) % colors.len()].to_string()
+    colors[(random_u64() as usize) % colors.len()].to_string()
 }
 
 // --- Routes ---
