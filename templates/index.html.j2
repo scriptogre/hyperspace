@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hyperspace</title>
+</head>
+<body>
+  <h1>Hyperspace</h1>
+  <p>{{ objects | length }} objects, {{ users | length }} users</p>
+  <ul>
+  {% for obj in objects %}
+    <li style="color: {{ obj.color }}">Block at ({{ obj.grid_x }}, {{ obj.grid_y }})</li>
+  {% endfor %}
+  </ul>
+</body>
+</html>
