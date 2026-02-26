@@ -1,0 +1,73 @@
+.iso-scene {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.iso-grid {
+  display: grid;
+  transform: rotateX(60deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+}
+
+.iso-cell {
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.015);
+  grid-column: calc(var(--col) + 1);
+  grid-row: calc(var(--row) + 1);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.iso-cell:hover {
+  background: rgba(34,211,238,0.08);
+  border-color: rgba(34,211,238,0.15);
+}
+
+.iso-block {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  background: var(--color);
+  opacity: 0.8;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color) 25%, transparent);
+  transform: rotateX(60deg) rotateZ(-45deg);
+  left: calc(var(--col) * 64px);
+  top: calc(var(--row) * 64px);
+  pointer-events: none;
+  transition: left 0.15s ease, top 0.15s ease;
+}
+
+.iso-cursor {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color);
+  border: 2px solid white;
+  transform: rotateX(60deg) rotateZ(-45deg);
+  left: calc(var(--col) * 64px + 27px);
+  top: calc(var(--row) * 64px + 27px);
+  pointer-events: none;
+  transition: left 0.1s, top 0.1s;
+  z-index: 10;
+}
+
+.iso-label {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) rotateZ(45deg) rotateX(-60deg);
+  white-space: nowrap;
+  font-size: 9px;
+  background: rgba(26,35,50,0.9);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: white;
+  font-family: 'JetBrains Mono', monospace;
+}
