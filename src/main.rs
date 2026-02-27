@@ -41,9 +41,10 @@ fn cached_env() -> &'static minijinja::Environment<'static> {
 }
 
 fn build_context(db: &RemoteTables) -> (Vec<ObjCtx>, Vec<UserCtx>) {
-    let objects = db.scene_object().iter()
+    let mut objects: Vec<ObjCtx> = db.scene_object().iter()
         .map(|o| ObjCtx { id: o.id, grid_x: o.grid_x, grid_y: o.grid_y, color: o.color.clone() })
         .collect();
+    objects.sort_by_key(|o| o.id);
     let users = db.user_info().iter()
         .map(|u| UserCtx { name: u.name.clone(), color: u.color.clone(), online: u.online })
         .collect();

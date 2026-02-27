@@ -4,6 +4,8 @@ wasm_path := "target/wasm32-unknown-unknown/release/hyperspace.wasm"
 
 # Start SpacetimeDB + publish module + run Rocket server
 default: spacetimedb generate
+    #!/usr/bin/env bash
+    lsof -ti:8080 2>/dev/null | xargs kill 2>/dev/null || true
     cargo run
 
 # Build the Wasm module (lib target only)
