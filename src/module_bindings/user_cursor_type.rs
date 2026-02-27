@@ -11,6 +11,7 @@ pub struct UserCursor {
     pub grid_x: i32,
     pub grid_y: i32,
     pub last_seen: __sdk::Timestamp,
+    pub dragging_block_id: u64,
 }
 
 impl __sdk::InModule for UserCursor {
@@ -25,6 +26,7 @@ pub struct UserCursorCols {
     pub grid_x: __sdk::__query_builder::Col<UserCursor, i32>,
     pub grid_y: __sdk::__query_builder::Col<UserCursor, i32>,
     pub last_seen: __sdk::__query_builder::Col<UserCursor, __sdk::Timestamp>,
+    pub dragging_block_id: __sdk::__query_builder::Col<UserCursor, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for UserCursor {
@@ -35,6 +37,7 @@ impl __sdk::__query_builder::HasCols for UserCursor {
             grid_x: __sdk::__query_builder::Col::new(table_name, "grid_x"),
             grid_y: __sdk::__query_builder::Col::new(table_name, "grid_y"),
             last_seen: __sdk::__query_builder::Col::new(table_name, "last_seen"),
+            dragging_block_id: __sdk::__query_builder::Col::new(table_name, "dragging_block_id"),
         }
     }
 }

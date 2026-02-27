@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hyperspace</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <style type="text/tailwindcss">
     @theme {
@@ -13,90 +14,159 @@
       --font-mono: 'JetBrains Mono', monospace;
     }
   </style>
+
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/isometric.css">
+
   <script src="/static/js/vendor/htmx.min.js"></script>
   <script src="/static/js/vendor/htmx-ext-ws.js"></script>
   <script src="/static/js/vendor/idiomorph-ext.min.js"></script>
   <script src="/static/js/vendor/server-commands.js"></script>
 </head>
-<body class="bg-surface text-gray-200 font-mono h-screen flex flex-col overflow-hidden"
-      hx-ext="ws,server-commands,morph"
-      ws-connect="/ws">
 
-  {# === Top: sidebar + grid (morphed) === #}
-  <div id="app" class="flex flex-1 min-h-0">
-  {% block body %}
-    <aside class="w-56 bg-surface-light flex flex-col border-r border-white/10 shrink-0">
-      <div class="p-4 border-b border-white/10">
-        <h1 class="text-lg font-bold text-white tracking-tight">Hyperspace</h1>
-        <p class="text-[10px] text-gray-500 mt-0.5">real-time shared space</p>
+<body class="bg-surface text-gray-200 font-mono h-screen overflow-hidden"
+      hx-ext="ws,server-commands,morph"
+      ws-connect="/ws"
+>
+
+  <div id="app" class="relative w-full h-full">
+  {% block grid %}
+
+    <div class="flex-1 relative overflow-hidden bg-surface select-none w-full h-full" id="grid-viewport"
+         ws-send
+         hx-trigger="mouseenter from:[data-x], pointerdown, pointerup from:document"
+         hx-vals="js:{action: event.type, ...event.target.closest('[data-x]')?.dataset}">
+      <div class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2"
+           style="perspective: 1000px">
+        <div class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+             style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
+
+          {% for row in range(grid_size) %}
+            {% for col in range(grid_size) %}
+            <button class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
+                           transition-colors duration-150 hover:bg-cyan-400/[0.08] hover:border-cyan-400/15"
+                    data-x="{{ col }}" data-y="{{ row }}"
+                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}">
+            </button>
+            {% endfor %}
+          {% endfor %}
+
+          {% set depth = 12 %}
+          {% for block in blocks %}
+          <div id="block-{{ block.id }}"
+               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}"
+               {{ 'data-grabbing' if block.is_being_dragged else '' }}
+               class="group relative
+                      {{ 'cursor-grabbing' if block.is_being_dragged else 'cursor-grab' }}"
+               style="grid-column: {{ block.grid_x + 1 }}; grid-row: {{ block.grid_y + 1 }};
+                      --color: {{ block.color }};
+                      transform-style: preserve-3d;
+                      transform: translateZ({{ block.grid_z * depth }}px);
+                      z-index: {{ 1000 if block.is_being_dragged else (block.grid_x + block.grid_y) * 10 + block.grid_z * 100 + 1 }}">
+            {# Top face — lifted above the grid by depth #}
+            <div class="size-16 border border-white/25
+                        transition-[opacity,border-color] duration-150
+                        starting:opacity-0 starting:scale-50
+                        group-data-grabbing:opacity-40 group-data-grabbing:border-cyan-400/70"
+                 style="background: var(--color);
+                        transform: translateZ({{ depth }}px)">
+            </div>
+            {# South wall (bottom-left in iso) — stands vertical at bottom edge #}
+            <div class="absolute bottom-0 left-0 pointer-events-none border border-white/15
+                        transition-[opacity,border-color] duration-150
+                        starting:opacity-0
+                        group-data-grabbing:opacity-40 group-data-grabbing:border-cyan-400/70"
+                 style="width: 64px; height: {{ depth }}px;
+                        background: color-mix(in srgb, var(--color) 65%, black);
+                        transform-origin: bottom; transform: rotateX(-90deg)">
+            </div>
+            {# West wall (bottom-right in iso) — stands vertical at left edge #}
+            <div class="absolute top-0 left-0 pointer-events-none border border-white/15
+                        transition-[opacity,border-color] duration-150
+                        starting:opacity-0
+                        group-data-grabbing:opacity-40 group-data-grabbing:border-cyan-400/70"
+                 style="width: {{ depth }}px; height: 64px;
+                        background: color-mix(in srgb, var(--color) 45%, black);
+                        transform-origin: left; transform: rotateY(-90deg)">
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
       </div>
 
-      <div class="p-3 flex-1 overflow-y-auto">
-        <div class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 px-1">Online</div>
-        {% for user in users %}{% if user.online %}
-        <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5">
-          <span class="w-2 h-2 rounded-full shrink-0" style="background:{{ user.color }}"></span>
-          <span class="text-sm truncate">{{ user.name }}</span>
+      {# Cursor overlay #}
+      {% for cursor in cursors %}
+      {% set is_self = cursor.session_id == current_session_id %}
+      {% set cell = 64 %}
+      {% set half = grid_size * cell // 2 %}
+      {% set px = cursor.grid_x * cell + cell // 2 - half %}
+      {% set py = cursor.grid_y * cell + cell // 2 - half %}
+      {% set diff = py - px %}
+      {% set sum = px + py %}
+      {% set denom = 1000000 - 612 * diff %}
+      {% set sx = 707000 * sum // denom %}
+      {% set sy = 354000 * diff // denom %}
+      <div id="cursor-{{ cursor.name }}" data-session="{{ cursor.session_id }}"
+           class="absolute pointer-events-none flex flex-col items-center -translate-x-1/2
+                  {{ 'opacity-100' if is_self else 'opacity-60' }}"
+           style="left: calc(50% + {{ sx }}px); top: calc(40% + {{ sy }}px - 40px); --color: {{ cursor.color }}">
+        <span class="whitespace-nowrap text-[11px] px-2 py-0.5 rounded font-mono mb-1
+                     {{ 'text-white border shadow-[0_2px_8px_rgba(0,0,0,0.6)]' if is_self else 'text-white/80 border border-white/10 shadow-[0_2px_6px_rgba(0,0,0,0.4)]' }}"
+              style="background: {{ 'color-mix(in srgb, var(--color) 70%, black)' if is_self else 'rgba(10,18,28,0.9)' }};
+                     {{ 'border-color: var(--color)' if is_self else '' }}">
+          {{ cursor.name }}
+        </span>
+        <div class="rounded-full border-2 border-white
+                    {{ 'size-3.5' if is_self else 'size-2.5' }}"
+             style="background: var(--color);
+                    box-shadow: 0 0 {{ '14px' if is_self else '8px' }} var(--color), 0 2px 8px rgba(0,0,0,0.4)">
         </div>
-        {% endif %}{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
 
-        <div class="text-[10px] uppercase tracking-widest text-gray-500 mt-4 mb-2 px-1">
-          Blocks &middot; {{ objects | length }}
-        </div>
-        {% for obj in objects %}
-        <div class="flex items-center justify-between px-2 py-1 rounded hover:bg-white/5 text-xs group">
-          <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-sm shrink-0" style="background:{{ obj.color }}"></span>
-            <span class="text-gray-400">({{ obj.grid_x }},{{ obj.grid_y }})</span>
+    {# HUD overlay — top-left, minimal #}
+    <div class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
+      <div class="flex items-center gap-2">
+        {% for user in users %}
+          {% if user.online %}
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background: {{ user.color }}"></span>
+            <span class="text-gray-300">{{ user.name }}</span>
           </div>
-          <button hx-trigger="click" ws-send name="action" value="delete:{{ obj.id }}"
-                  class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">&times;</button>
-        </div>
+          {% endif %}
         {% endfor %}
       </div>
-    </aside>
+    </div>
 
-    <div class="flex-1 relative overflow-hidden bg-surface" id="grid-viewport">
-      <div class="iso-scene" id="iso-scene">
-        <div class="iso-grid">
-          {% for row in range(grid_size) %}{% for col in range(grid_size) %}
-          <button class="iso-cell" data-x="{{ col }}" data-y="{{ row }}"
-                  hx-trigger="click" ws-send name="action" value="create_at:{{ col }},{{ row }}"
-                  style="grid-column:{{ col + 1 }};grid-row:{{ row + 1 }}"></button>
-          {% endfor %}{% endfor %}
-          {% for obj in objects %}
-          <div id="block-{{ obj.id }}" class="iso-block" style="grid-column:{{ obj.grid_x + 1 }};grid-row:{{ obj.grid_y + 1 }};--color:{{ obj.color }}"></div>
-          {% endfor %}
-        </div>
-      </div>
+  {% endblock %}
+  </div>
+
+  {# Name + color — outside morph targets, never replaced #}
+  <div id="player-setup" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
+    <input ws-send name="set_name" placeholder="Set name..."
+           hx-on::ws-after-send="document.getElementById('player-setup').style.display='none'"
+           class="bg-surface/80 backdrop-blur-sm border border-white/10 rounded-full px-4 py-1.5 text-xs
+                  placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-40">
+    <div class="flex gap-1">
+      {% for c in ['#67e8f9','#f472b6','#a78bfa','#fbbf24','#34d399','#fb923c'] %}
+      <button ws-send name="set_color" value="{{ c }}"
+              class="w-4 h-4 rounded-full border border-white/20 hover:border-white/60 transition"
+              style="background: {{ c }}"></button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Console — bottom-left, minimal log #}
+  <div id="console-morph" class="absolute bottom-4 left-5 z-50 pointer-events-none">
+  {% block console %}
+    <div id="console-log" class="flex flex-col-reverse text-[10px] leading-relaxed space-y-px space-y-reverse max-h-26 overflow-hidden opacity-75">
+      {% for entry in logs | reverse %}
+      <div id="log-{{ entry.id }}" class="{{ entry.color }}">{{ entry.message }}</div>
+      {% endfor %}
     </div>
   {% endblock %}
   </div>
 
-  {# === Bottom: console + toolbar (outside morph target) === #}
-  <div class="h-40 bg-surface-light border-t border-white/10 flex flex-col shrink-0">
-    <div class="flex items-center justify-between px-3 py-1 border-b border-white/10">
-      <span class="text-[10px] uppercase tracking-widest text-gray-500">Console</span>
-      <div class="flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-        <span class="text-[10px] text-gray-500">live</span>
-      </div>
-    </div>
-    <div id="console-log" class="flex-1 overflow-y-auto p-2 text-[11px] leading-relaxed space-y-px"></div>
-  </div>
-
-  <div class="flex items-center gap-2 px-3 py-2 border-t border-white/10 bg-surface shrink-0">
-    <button ws-send name="action" value="create"
-            class="px-3 py-1 text-xs rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition">
-      + Block
-    </button>
-    <input ws-send name="set_name" placeholder="Set name..."
-           class="bg-surface-lighter border border-white/10 rounded px-2 py-1 text-xs
-                  placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-36">
-  </div>
-
-<script src="/static/js/scene.js" type="module"></script>
 </body>
 </html>

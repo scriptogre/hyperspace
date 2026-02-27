@@ -35,7 +35,6 @@ fn index(app: &State<AppState>) -> RawHtml<String> {
 fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Channel<'static> {
     let session_id = format!("{:016x}", random_u64());
     let mut receiver = app.broadcaster.subscribe();
-    let broadcaster = app.broadcaster.clone();
     let database = Arc::clone(&app.database);
 
     let _ = database.reducers.join(session_id.clone());
@@ -44,14 +43,17 @@ fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Chan
         loop {
             tokio::select! {
                 result = receiver.recv() => match result {
-                    Ok(html) => {
+                    Ok(_) => {
+                        // Coalesce: drain any queued notifications so we render once
+                        while receiver.try_recv().is_ok() {}
+                        let html = render_morph_for_session(&database.db, &session_id);
                         if stream.send(Message::Text(html)).await.is_err() { break }
                     }
                     Err(_) => break,
                 },
                 incoming = stream.next() => match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        handle_browser_message(&text, &session_id, &database, &broadcaster);
+                        handle_browser_message(&text, &session_id, &database);
                     }
                     Some(Ok(_)) => {}
                     _ => break,
@@ -69,7 +71,6 @@ fn handle_browser_message(
     text: &str,
     session_id: &str,
     database: &DbConnection,
-    broadcaster: &sync::broadcast::Sender<String>,
 ) {
     let Ok(message) = serde_json::from_str::<serde_json::Value>(text) else {
         eprintln!("WebSocket: invalid JSON: {text}");
@@ -77,10 +78,12 @@ fn handle_browser_message(
     };
 
     if let Some(name) = message.get("set_name").and_then(|v| v.as_str()) {
-        let broadcaster = broadcaster.clone();
-        let _ = database.reducers.set_name_then(session_id.to_string(), name.to_string(), move |context, _| {
-            broadcast_morph(&broadcaster, &context.db);
-        });
+        let _ = database.reducers.set_name(session_id.to_string(), name.to_string());
+        return;
+    }
+
+    if let Some(color) = message.get("set_color").and_then(|v| v.as_str()) {
+        let _ = database.reducers.set_color(session_id.to_string(), color.to_string());
         return;
     }
 
@@ -89,46 +92,42 @@ fn handle_browser_message(
     if action == "create" {
         let x = (random_u64() % 8) as i32;
         let y = (random_u64() % 8) as i32;
-        let broadcaster = broadcaster.clone();
-        let _ = database.reducers.create_object_then(session_id.to_string(), x, y, move |context, _| {
-            broadcast_state_and_log(&broadcaster, context, &format!("block created at ({x},{y})"), "text-cyan-400");
-        });
+        let _ = database.reducers.create_object(session_id.to_string(), x, y);
     } else if let Some(coordinates) = action.strip_prefix("create_at:") {
         let mut parts = coordinates.split(',').filter_map(|s| s.parse::<i32>().ok());
         if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
-            let broadcaster = broadcaster.clone();
-            let _ = database.reducers.create_object_then(session_id.to_string(), x, y, move |context, _| {
-                broadcast_state_and_log(&broadcaster, context, &format!("block created at ({x},{y})"), "text-cyan-400");
-            });
+            let _ = database.reducers.create_object(session_id.to_string(), x, y);
         }
     } else if let Some(id_string) = action.strip_prefix("delete:") {
         if let Ok(id) = id_string.parse::<u64>() {
-            let broadcaster = broadcaster.clone();
-            let _ = database.reducers.delete_object_then(id, move |context, _| {
-                broadcast_state_and_log(&broadcaster, context, "block deleted", "text-red-400");
-            });
+            let _ = database.reducers.delete_object(id);
         }
-    } else if action == "cursor" {
-        let x = message.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-        let y = message.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
-        let broadcaster = broadcaster.clone();
-        let _ = database.reducers.update_cursor_then(session_id.to_string(), x, y, move |context, _| {
-            broadcast_cursors(&broadcaster, &context.db);
-        });
+    } else if action == "mouseenter" || action == "pointerdown" {
+        let x = message.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok());
+        let y = message.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok());
+        if let (Some(x), Some(y)) = (x, y) {
+            if action == "mouseenter" {
+                let _ = database.reducers.handle_mouseenter(session_id.to_string(), x, y);
+            } else {
+                let _ = database.reducers.handle_pointerdown(session_id.to_string(), x, y);
+            }
+        }
+    } else if action == "pointerup" {
+        let _ = database.reducers.handle_pointerup(session_id.to_string());
     }
 }
 
 // --- Startup ---
 
-/// Register insert/delete/update callbacks on a table that all call the same handler.
+/// Register insert/delete/update callbacks on a table that all broadcast a morph update.
 macro_rules! on_table_change {
-    ($table:expr, $broadcaster:expr, $handler:expr) => {{
+    ($table:expr, $broadcaster:expr) => {{
         let broadcaster = $broadcaster.clone();
-        $table.on_insert(move |context, _| $handler(&broadcaster, &context.db));
+        $table.on_insert(move |_context, _| notify_refresh(&broadcaster));
         let broadcaster = $broadcaster.clone();
-        $table.on_delete(move |context, _| $handler(&broadcaster, &context.db));
+        $table.on_delete(move |_context, _| notify_refresh(&broadcaster));
         let broadcaster = $broadcaster.clone();
-        $table.on_update(move |context, _, _| $handler(&broadcaster, &context.db));
+        $table.on_update(move |_context, _, _| notify_refresh(&broadcaster));
     }};
 }
 
@@ -149,27 +148,10 @@ fn rocket() -> _ {
         .build()
         .expect("Failed to connect to SpacetimeDB");
 
-    // Scene objects and cursors: broadcast updated state to all browsers.
-    on_table_change!(database.db.scene_object(), broadcaster, broadcast_morph);
-    on_table_change!(database.db.user_cursor(), broadcaster, broadcast_cursors);
-
-    // User info: also log join/leave to the console.
-    {
-        let broadcaster_clone = broadcaster.clone();
-        database.db.user_info().on_insert(move |context, user| {
-            broadcast_morph(&broadcaster_clone, &context.db);
-            broadcast_console(&broadcaster_clone, &format!("{} joined", user.name), "text-green-400");
-        });
-        let broadcaster_clone = broadcaster.clone();
-        database.db.user_info().on_delete(move |context, user| {
-            broadcast_morph(&broadcaster_clone, &context.db);
-            broadcast_console(&broadcaster_clone, &format!("{} left", user.name), "text-gray-400");
-        });
-        let broadcaster_clone = broadcaster.clone();
-        database.db.user_info().on_update(move |context, _, _| {
-            broadcast_morph(&broadcaster_clone, &context.db);
-        });
-    }
+    on_table_change!(database.db.scene_object(), broadcaster);
+    on_table_change!(database.db.user_cursor(), broadcaster);
+    on_table_change!(database.db.user_info(), broadcaster);
+    on_table_change!(database.db.console_log(), broadcaster);
 
     database.subscription_builder()
         .on_applied(|context| {

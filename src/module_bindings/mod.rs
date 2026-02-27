@@ -6,12 +6,18 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod console_log_table;
+pub mod console_log_type;
 pub mod create_object_reducer;
 pub mod delete_object_reducer;
+pub mod handle_mouseenter_reducer;
+pub mod handle_pointerdown_reducer;
+pub mod handle_pointerup_reducer;
 pub mod join_reducer;
 pub mod leave_reducer;
 pub mod scene_object_table;
 pub mod scene_object_type;
+pub mod set_color_reducer;
 pub mod set_name_reducer;
 pub mod update_cursor_reducer;
 pub mod user_cursor_table;
@@ -19,12 +25,18 @@ pub mod user_cursor_type;
 pub mod user_info_table;
 pub mod user_info_type;
 
+pub use console_log_table::*;
+pub use console_log_type::ConsoleLog;
 pub use create_object_reducer::create_object;
 pub use delete_object_reducer::delete_object;
+pub use handle_mouseenter_reducer::handle_mouseenter;
+pub use handle_pointerdown_reducer::handle_pointerdown;
+pub use handle_pointerup_reducer::handle_pointerup;
 pub use join_reducer::join;
 pub use leave_reducer::leave;
 pub use scene_object_table::*;
 pub use scene_object_type::SceneObject;
+pub use set_color_reducer::set_color;
 pub use set_name_reducer::set_name;
 pub use update_cursor_reducer::update_cursor;
 pub use user_cursor_table::*;
@@ -48,11 +60,28 @@ pub enum Reducer {
     DeleteObject {
         id: u64,
     },
+    HandleMouseenter {
+        session_id: String,
+        grid_x: i32,
+        grid_y: i32,
+    },
+    HandlePointerdown {
+        session_id: String,
+        grid_x: i32,
+        grid_y: i32,
+    },
+    HandlePointerup {
+        session_id: String,
+    },
     Join {
         session_id: String,
     },
     Leave {
         session_id: String,
+    },
+    SetColor {
+        session_id: String,
+        color: String,
     },
     SetName {
         session_id: String,
@@ -74,8 +103,12 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::CreateObject { .. } => "create_object",
             Reducer::DeleteObject { .. } => "delete_object",
+            Reducer::HandleMouseenter { .. } => "handle_mouseenter",
+            Reducer::HandlePointerdown { .. } => "handle_pointerdown",
+            Reducer::HandlePointerup { .. } => "handle_pointerup",
             Reducer::Join { .. } => "join",
             Reducer::Leave { .. } => "leave",
+            Reducer::SetColor { .. } => "set_color",
             Reducer::SetName { .. } => "set_name",
             Reducer::UpdateCursor { .. } => "update_cursor",
             _ => unreachable!(),
@@ -96,12 +129,41 @@ impl __sdk::Reducer for Reducer {
             Reducer::DeleteObject { id } => {
                 __sats::bsatn::to_vec(&delete_object_reducer::DeleteObjectArgs { id: id.clone() })
             }
+            Reducer::HandleMouseenter {
+                session_id,
+                grid_x,
+                grid_y,
+            } => __sats::bsatn::to_vec(&handle_mouseenter_reducer::HandleMouseenterArgs {
+                session_id: session_id.clone(),
+                grid_x: grid_x.clone(),
+                grid_y: grid_y.clone(),
+            }),
+            Reducer::HandlePointerdown {
+                session_id,
+                grid_x,
+                grid_y,
+            } => __sats::bsatn::to_vec(&handle_pointerdown_reducer::HandlePointerdownArgs {
+                session_id: session_id.clone(),
+                grid_x: grid_x.clone(),
+                grid_y: grid_y.clone(),
+            }),
+            Reducer::HandlePointerup { session_id } => {
+                __sats::bsatn::to_vec(&handle_pointerup_reducer::HandlePointerupArgs {
+                    session_id: session_id.clone(),
+                })
+            }
             Reducer::Join { session_id } => __sats::bsatn::to_vec(&join_reducer::JoinArgs {
                 session_id: session_id.clone(),
             }),
             Reducer::Leave { session_id } => __sats::bsatn::to_vec(&leave_reducer::LeaveArgs {
                 session_id: session_id.clone(),
             }),
+            Reducer::SetColor { session_id, color } => {
+                __sats::bsatn::to_vec(&set_color_reducer::SetColorArgs {
+                    session_id: session_id.clone(),
+                    color: color.clone(),
+                })
+            }
             Reducer::SetName { session_id, name } => {
                 __sats::bsatn::to_vec(&set_name_reducer::SetNameArgs {
                     session_id: session_id.clone(),
@@ -126,6 +188,7 @@ impl __sdk::Reducer for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    console_log: __sdk::TableUpdate<ConsoleLog>,
     scene_object: __sdk::TableUpdate<SceneObject>,
     user_cursor: __sdk::TableUpdate<UserCursor>,
     user_info: __sdk::TableUpdate<UserInfo>,
@@ -137,6 +200,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in __sdk::transaction_update_iter_table_updates(raw) {
             match &table_update.table_name[..] {
+                "console_log" => db_update
+                    .console_log
+                    .append(console_log_table::parse_table_update(table_update)?),
                 "scene_object" => db_update
                     .scene_object
                     .append(scene_object_table::parse_table_update(table_update)?),
@@ -172,6 +238,9 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.console_log = cache
+            .apply_diff_to_table::<ConsoleLog>("console_log", &self.console_log)
+            .with_updates_by_pk(|row| &row.id);
         diff.scene_object = cache
             .apply_diff_to_table::<SceneObject>("scene_object", &self.scene_object)
             .with_updates_by_pk(|row| &row.id);
@@ -188,6 +257,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "console_log" => db_update
+                    .console_log
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "scene_object" => db_update
                     .scene_object
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -210,6 +282,9 @@ impl __sdk::DbUpdate for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_rows in raw.tables {
             match &table_rows.table[..] {
+                "console_log" => db_update
+                    .console_log
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "scene_object" => db_update
                     .scene_object
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -234,6 +309,7 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    console_log: __sdk::TableAppliedDiff<'r, ConsoleLog>,
     scene_object: __sdk::TableAppliedDiff<'r, SceneObject>,
     user_cursor: __sdk::TableAppliedDiff<'r, UserCursor>,
     user_info: __sdk::TableAppliedDiff<'r, UserInfo>,
@@ -250,6 +326,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<ConsoleLog>("console_log", &self.console_log, event);
         callbacks.invoke_table_row_callbacks::<SceneObject>(
             "scene_object",
             &self.scene_object,
@@ -901,9 +978,11 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type QueryBuilder = __sdk::QueryBuilder;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        console_log_table::register_table(client_cache);
         scene_object_table::register_table(client_cache);
         user_cursor_table::register_table(client_cache);
         user_info_table::register_table(client_cache);
     }
-    const ALL_TABLE_NAMES: &'static [&'static str] = &["scene_object", "user_cursor", "user_info"];
+    const ALL_TABLE_NAMES: &'static [&'static str] =
+        &["console_log", "scene_object", "user_cursor", "user_info"];
 }
