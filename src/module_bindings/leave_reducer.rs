@@ -6,52 +6,46 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub(super) struct UpdateCursorArgs {
+pub(super) struct LeaveArgs {
     pub session_id: String,
-    pub grid_x: i32,
-    pub grid_y: i32,
 }
 
-impl From<UpdateCursorArgs> for super::Reducer {
-    fn from(args: UpdateCursorArgs) -> Self {
-        Self::UpdateCursor {
+impl From<LeaveArgs> for super::Reducer {
+    fn from(args: LeaveArgs) -> Self {
+        Self::Leave {
             session_id: args.session_id,
-            grid_x: args.grid_x,
-            grid_y: args.grid_y,
         }
     }
 }
 
-impl __sdk::InModule for UpdateCursorArgs {
+impl __sdk::InModule for LeaveArgs {
     type Module = super::RemoteModule;
 }
 
 #[allow(non_camel_case_types)]
-/// Extension trait for access to the reducer `update_cursor`.
+/// Extension trait for access to the reducer `leave`.
 ///
 /// Implemented for [`super::RemoteReducers`].
-pub trait update_cursor {
-    /// Request that the remote module invoke the reducer `update_cursor` to run as soon as possible.
+pub trait leave {
+    /// Request that the remote module invoke the reducer `leave` to run as soon as possible.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
-    /// /// Use [`update_cursor:update_cursor_then`] to run a callback after the reducer completes.
-    fn update_cursor(&self, session_id: String, grid_x: i32, grid_y: i32) -> __sdk::Result<()> {
-        self.update_cursor_then(session_id, grid_x, grid_y, |_, _| {})
+    /// /// Use [`leave:leave_then`] to run a callback after the reducer completes.
+    fn leave(&self, session_id: String) -> __sdk::Result<()> {
+        self.leave_then(session_id, |_, _| {})
     }
 
-    /// Request that the remote module invoke the reducer `update_cursor` to run as soon as possible,
+    /// Request that the remote module invoke the reducer `leave` to run as soon as possible,
     /// registering `callback` to run when we are notified that the reducer completed.
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed with the `callback`.
-    fn update_cursor_then(
+    fn leave_then(
         &self,
         session_id: String,
-        grid_x: i32,
-        grid_y: i32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -59,24 +53,16 @@ pub trait update_cursor {
     ) -> __sdk::Result<()>;
 }
 
-impl update_cursor for super::RemoteReducers {
-    fn update_cursor_then(
+impl leave for super::RemoteReducers {
+    fn leave_then(
         &self,
         session_id: String,
-        grid_x: i32,
-        grid_y: i32,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
             + 'static,
     ) -> __sdk::Result<()> {
-        self.imp.invoke_reducer_with_callback(
-            UpdateCursorArgs {
-                session_id,
-                grid_x,
-                grid_y,
-            },
-            callback,
-        )
+        self.imp
+            .invoke_reducer_with_callback(LeaveArgs { session_id }, callback)
     }
 }

@@ -95,34 +95,32 @@ impl<'ctx> __sdk::TableWithPrimaryKey for UserInfoTableHandle<'ctx> {
     }
 }
 
-/// Access to the `identity` unique index on the table `user_info`,
+/// Access to the `session_id` unique index on the table `user_info`,
 /// which allows point queries on the field of the same name
-/// via the [`UserInfoIdentityUnique::find`] method.
+/// via the [`UserInfoSessionIdUnique::find`] method.
 ///
 /// Users are encouraged not to explicitly reference this type,
 /// but to directly chain method calls,
-/// like `ctx.db.user_info().identity().find(...)`.
-pub struct UserInfoIdentityUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<UserInfo, __sdk::Identity>,
+/// like `ctx.db.user_info().session_id().find(...)`.
+pub struct UserInfoSessionIdUnique<'ctx> {
+    imp: __sdk::UniqueConstraintHandle<UserInfo, String>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
 impl<'ctx> UserInfoTableHandle<'ctx> {
-    /// Get a handle on the `identity` unique index on the table `user_info`.
-    pub fn identity(&self) -> UserInfoIdentityUnique<'ctx> {
-        UserInfoIdentityUnique {
-            imp: self
-                .imp
-                .get_unique_constraint::<__sdk::Identity>("identity"),
+    /// Get a handle on the `session_id` unique index on the table `user_info`.
+    pub fn session_id(&self) -> UserInfoSessionIdUnique<'ctx> {
+        UserInfoSessionIdUnique {
+            imp: self.imp.get_unique_constraint::<String>("session_id"),
             phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<'ctx> UserInfoIdentityUnique<'ctx> {
-    /// Find the subscribed row whose `identity` column value is equal to `col_val`,
+impl<'ctx> UserInfoSessionIdUnique<'ctx> {
+    /// Find the subscribed row whose `session_id` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &__sdk::Identity) -> Option<UserInfo> {
+    pub fn find(&self, col_val: &String) -> Option<UserInfo> {
         self.imp.find(col_val)
     }
 }
@@ -130,7 +128,7 @@ impl<'ctx> UserInfoIdentityUnique<'ctx> {
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<UserInfo>("user_info");
-    _table.add_unique_constraint::<__sdk::Identity>("identity", |row| &row.identity);
+    _table.add_unique_constraint::<String>("session_id", |row| &row.session_id);
 }
 
 #[doc(hidden)]

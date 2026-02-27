@@ -95,34 +95,32 @@ impl<'ctx> __sdk::TableWithPrimaryKey for UserCursorTableHandle<'ctx> {
     }
 }
 
-/// Access to the `identity` unique index on the table `user_cursor`,
+/// Access to the `session_id` unique index on the table `user_cursor`,
 /// which allows point queries on the field of the same name
-/// via the [`UserCursorIdentityUnique::find`] method.
+/// via the [`UserCursorSessionIdUnique::find`] method.
 ///
 /// Users are encouraged not to explicitly reference this type,
 /// but to directly chain method calls,
-/// like `ctx.db.user_cursor().identity().find(...)`.
-pub struct UserCursorIdentityUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<UserCursor, __sdk::Identity>,
+/// like `ctx.db.user_cursor().session_id().find(...)`.
+pub struct UserCursorSessionIdUnique<'ctx> {
+    imp: __sdk::UniqueConstraintHandle<UserCursor, String>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
 impl<'ctx> UserCursorTableHandle<'ctx> {
-    /// Get a handle on the `identity` unique index on the table `user_cursor`.
-    pub fn identity(&self) -> UserCursorIdentityUnique<'ctx> {
-        UserCursorIdentityUnique {
-            imp: self
-                .imp
-                .get_unique_constraint::<__sdk::Identity>("identity"),
+    /// Get a handle on the `session_id` unique index on the table `user_cursor`.
+    pub fn session_id(&self) -> UserCursorSessionIdUnique<'ctx> {
+        UserCursorSessionIdUnique {
+            imp: self.imp.get_unique_constraint::<String>("session_id"),
             phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<'ctx> UserCursorIdentityUnique<'ctx> {
-    /// Find the subscribed row whose `identity` column value is equal to `col_val`,
+impl<'ctx> UserCursorSessionIdUnique<'ctx> {
+    /// Find the subscribed row whose `session_id` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &__sdk::Identity) -> Option<UserCursor> {
+    pub fn find(&self, col_val: &String) -> Option<UserCursor> {
         self.imp.find(col_val)
     }
 }
@@ -130,7 +128,7 @@ impl<'ctx> UserCursorIdentityUnique<'ctx> {
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<UserCursor>("user_cursor");
-    _table.add_unique_constraint::<__sdk::Identity>("identity", |row| &row.identity);
+    _table.add_unique_constraint::<String>("session_id", |row| &row.session_id);
 }
 
 #[doc(hidden)]

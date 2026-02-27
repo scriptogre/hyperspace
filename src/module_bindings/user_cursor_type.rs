@@ -7,7 +7,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct UserCursor {
-    pub identity: __sdk::Identity,
+    pub session_id: String,
     pub grid_x: i32,
     pub grid_y: i32,
     pub last_seen: __sdk::Timestamp,
@@ -21,7 +21,7 @@ impl __sdk::InModule for UserCursor {
 ///
 /// Provides typed access to columns for query building.
 pub struct UserCursorCols {
-    pub identity: __sdk::__query_builder::Col<UserCursor, __sdk::Identity>,
+    pub session_id: __sdk::__query_builder::Col<UserCursor, String>,
     pub grid_x: __sdk::__query_builder::Col<UserCursor, i32>,
     pub grid_y: __sdk::__query_builder::Col<UserCursor, i32>,
     pub last_seen: __sdk::__query_builder::Col<UserCursor, __sdk::Timestamp>,
@@ -31,7 +31,7 @@ impl __sdk::__query_builder::HasCols for UserCursor {
     type Cols = UserCursorCols;
     fn cols(table_name: &'static str) -> Self::Cols {
         UserCursorCols {
-            identity: __sdk::__query_builder::Col::new(table_name, "identity"),
+            session_id: __sdk::__query_builder::Col::new(table_name, "session_id"),
             grid_x: __sdk::__query_builder::Col::new(table_name, "grid_x"),
             grid_y: __sdk::__query_builder::Col::new(table_name, "grid_y"),
             last_seen: __sdk::__query_builder::Col::new(table_name, "last_seen"),
@@ -43,14 +43,14 @@ impl __sdk::__query_builder::HasCols for UserCursor {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct UserCursorIxCols {
-    pub identity: __sdk::__query_builder::IxCol<UserCursor, __sdk::Identity>,
+    pub session_id: __sdk::__query_builder::IxCol<UserCursor, String>,
 }
 
 impl __sdk::__query_builder::HasIxCols for UserCursor {
     type IxCols = UserCursorIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         UserCursorIxCols {
-            identity: __sdk::__query_builder::IxCol::new(table_name, "identity"),
+            session_id: __sdk::__query_builder::IxCol::new(table_name, "session_id"),
         }
     }
 }

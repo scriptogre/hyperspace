@@ -8,6 +8,8 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 pub mod create_object_reducer;
 pub mod delete_object_reducer;
+pub mod join_reducer;
+pub mod leave_reducer;
 pub mod scene_object_table;
 pub mod scene_object_type;
 pub mod set_name_reducer;
@@ -19,6 +21,8 @@ pub mod user_info_type;
 
 pub use create_object_reducer::create_object;
 pub use delete_object_reducer::delete_object;
+pub use join_reducer::join;
+pub use leave_reducer::leave;
 pub use scene_object_table::*;
 pub use scene_object_type::SceneObject;
 pub use set_name_reducer::set_name;
@@ -37,17 +41,25 @@ pub use user_info_type::UserInfo;
 
 pub enum Reducer {
     CreateObject {
+        session_id: String,
         grid_x: i32,
         grid_y: i32,
-        color: String,
     },
     DeleteObject {
         id: u64,
     },
+    Join {
+        session_id: String,
+    },
+    Leave {
+        session_id: String,
+    },
     SetName {
+        session_id: String,
         name: String,
     },
     UpdateCursor {
+        session_id: String,
         grid_x: i32,
         grid_y: i32,
     },
@@ -62,6 +74,8 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::CreateObject { .. } => "create_object",
             Reducer::DeleteObject { .. } => "delete_object",
+            Reducer::Join { .. } => "join",
+            Reducer::Leave { .. } => "leave",
             Reducer::SetName { .. } => "set_name",
             Reducer::UpdateCursor { .. } => "update_cursor",
             _ => unreachable!(),
@@ -71,26 +85,38 @@ impl __sdk::Reducer for Reducer {
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
             Reducer::CreateObject {
+                session_id,
                 grid_x,
                 grid_y,
-                color,
             } => __sats::bsatn::to_vec(&create_object_reducer::CreateObjectArgs {
+                session_id: session_id.clone(),
                 grid_x: grid_x.clone(),
                 grid_y: grid_y.clone(),
-                color: color.clone(),
             }),
             Reducer::DeleteObject { id } => {
                 __sats::bsatn::to_vec(&delete_object_reducer::DeleteObjectArgs { id: id.clone() })
             }
-            Reducer::SetName { name } => {
-                __sats::bsatn::to_vec(&set_name_reducer::SetNameArgs { name: name.clone() })
-            }
-            Reducer::UpdateCursor { grid_x, grid_y } => {
-                __sats::bsatn::to_vec(&update_cursor_reducer::UpdateCursorArgs {
-                    grid_x: grid_x.clone(),
-                    grid_y: grid_y.clone(),
+            Reducer::Join { session_id } => __sats::bsatn::to_vec(&join_reducer::JoinArgs {
+                session_id: session_id.clone(),
+            }),
+            Reducer::Leave { session_id } => __sats::bsatn::to_vec(&leave_reducer::LeaveArgs {
+                session_id: session_id.clone(),
+            }),
+            Reducer::SetName { session_id, name } => {
+                __sats::bsatn::to_vec(&set_name_reducer::SetNameArgs {
+                    session_id: session_id.clone(),
+                    name: name.clone(),
                 })
             }
+            Reducer::UpdateCursor {
+                session_id,
+                grid_x,
+                grid_y,
+            } => __sats::bsatn::to_vec(&update_cursor_reducer::UpdateCursorArgs {
+                session_id: session_id.clone(),
+                grid_x: grid_x.clone(),
+                grid_y: grid_y.clone(),
+            }),
             _ => unreachable!(),
         }
     }
@@ -151,10 +177,10 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.user_cursor = cache
             .apply_diff_to_table::<UserCursor>("user_cursor", &self.user_cursor)
-            .with_updates_by_pk(|row| &row.identity);
+            .with_updates_by_pk(|row| &row.session_id);
         diff.user_info = cache
             .apply_diff_to_table::<UserInfo>("user_info", &self.user_info)
-            .with_updates_by_pk(|row| &row.identity);
+            .with_updates_by_pk(|row| &row.session_id);
 
         diff
     }

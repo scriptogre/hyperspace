@@ -27,8 +27,8 @@ test('cursor appears on grid at correct position', async ({ browser }) => {
   await p1.hover('.iso-cell[data-x="4"][data-y="3"]');
   await p1.waitForTimeout(500);
 
-  // Tab 2 should show a cursor
-  const cursor = p2.locator('.iso-cursor');
+  // Tab 2 should show Alice's cursor (each tab is now a separate user)
+  const cursor = p2.locator('.iso-cursor', { hasText: 'Alice' });
   await expect(cursor).toBeVisible({ timeout: 5000 });
 
   // Cursor should have a dot and label

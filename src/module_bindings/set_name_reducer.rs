@@ -7,12 +7,16 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub(super) struct SetNameArgs {
+    pub session_id: String,
     pub name: String,
 }
 
 impl From<SetNameArgs> for super::Reducer {
     fn from(args: SetNameArgs) -> Self {
-        Self::SetName { name: args.name }
+        Self::SetName {
+            session_id: args.session_id,
+            name: args.name,
+        }
     }
 }
 
@@ -31,8 +35,8 @@ pub trait set_name {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`set_name:set_name_then`] to run a callback after the reducer completes.
-    fn set_name(&self, name: String) -> __sdk::Result<()> {
-        self.set_name_then(name, |_, _| {})
+    fn set_name(&self, session_id: String, name: String) -> __sdk::Result<()> {
+        self.set_name_then(session_id, name, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `set_name` to run as soon as possible,
@@ -43,6 +47,7 @@ pub trait set_name {
     ///  and its status can be observed with the `callback`.
     fn set_name_then(
         &self,
+        session_id: String,
         name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
@@ -54,6 +59,7 @@ pub trait set_name {
 impl set_name for super::RemoteReducers {
     fn set_name_then(
         &self,
+        session_id: String,
         name: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
@@ -61,6 +67,6 @@ impl set_name for super::RemoteReducers {
             + 'static,
     ) -> __sdk::Result<()> {
         self.imp
-            .invoke_reducer_with_callback(SetNameArgs { name }, callback)
+            .invoke_reducer_with_callback(SetNameArgs { session_id, name }, callback)
     }
 }

@@ -103,7 +103,7 @@ pub fn broadcast_console(broadcaster: &broadcast::Sender<String>, message: &str,
 
 pub fn broadcast_cursors(broadcaster: &broadcast::Sender<String>, tables: &RemoteTables) {
     let cursors: Vec<CursorPosition> = tables.user_cursor().iter().map(|cursor| {
-        let user = tables.user_info().identity().find(&cursor.identity);
+        let user = tables.user_info().session_id().find(&cursor.session_id);
         CursorPosition {
             grid_x: cursor.grid_x,
             grid_y: cursor.grid_y,

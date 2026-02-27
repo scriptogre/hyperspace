@@ -33,9 +33,12 @@ fn index(app: &State<AppState>) -> RawHtml<String> {
 
 #[get("/ws")]
 fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Channel<'static> {
+    let session_id = format!("{:016x}", random_u64());
     let mut receiver = app.broadcaster.subscribe();
     let broadcaster = app.broadcaster.clone();
     let database = Arc::clone(&app.database);
+
+    let _ = database.reducers.join(session_id.clone());
 
     ws.channel(move |mut stream| Box::pin(async move {
         loop {
@@ -48,13 +51,14 @@ fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Chan
                 },
                 incoming = stream.next() => match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        handle_browser_message(&text, &database, &broadcaster);
+                        handle_browser_message(&text, &session_id, &database, &broadcaster);
                     }
                     Some(Ok(_)) => {}
                     _ => break,
                 },
             }
         }
+        let _ = database.reducers.leave(session_id);
         Ok(())
     }))
 }
@@ -63,6 +67,7 @@ fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Chan
 
 fn handle_browser_message(
     text: &str,
+    session_id: &str,
     database: &DbConnection,
     broadcaster: &sync::broadcast::Sender<String>,
 ) {
@@ -73,7 +78,7 @@ fn handle_browser_message(
 
     if let Some(name) = message.get("set_name").and_then(|v| v.as_str()) {
         let broadcaster = broadcaster.clone();
-        let _ = database.reducers.set_name_then(name.to_string(), move |context, _| {
+        let _ = database.reducers.set_name_then(session_id.to_string(), name.to_string(), move |context, _| {
             broadcast_morph(&broadcaster, &context.db);
         });
         return;
@@ -85,14 +90,14 @@ fn handle_browser_message(
         let x = (random_u64() % 8) as i32;
         let y = (random_u64() % 8) as i32;
         let broadcaster = broadcaster.clone();
-        let _ = database.reducers.create_object_then(x, y, random_color(), move |context, _| {
+        let _ = database.reducers.create_object_then(session_id.to_string(), x, y, move |context, _| {
             broadcast_state_and_log(&broadcaster, context, &format!("block created at ({x},{y})"), "text-cyan-400");
         });
     } else if let Some(coordinates) = action.strip_prefix("create_at:") {
         let mut parts = coordinates.split(',').filter_map(|s| s.parse::<i32>().ok());
         if let (Some(x), Some(y)) = (parts.next(), parts.next()) {
             let broadcaster = broadcaster.clone();
-            let _ = database.reducers.create_object_then(x, y, random_color(), move |context, _| {
+            let _ = database.reducers.create_object_then(session_id.to_string(), x, y, move |context, _| {
                 broadcast_state_and_log(&broadcaster, context, &format!("block created at ({x},{y})"), "text-cyan-400");
             });
         }
@@ -107,7 +112,7 @@ fn handle_browser_message(
         let x = message.get("x").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
         let y = message.get("y").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).unwrap_or(0);
         let broadcaster = broadcaster.clone();
-        let _ = database.reducers.update_cursor_then(x, y, move |context, _| {
+        let _ = database.reducers.update_cursor_then(session_id.to_string(), x, y, move |context, _| {
             broadcast_cursors(&broadcaster, &context.db);
         });
     }

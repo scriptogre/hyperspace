@@ -1,7 +1,7 @@
 //! SpacetimeDB module — compiled to Wasm, runs inside the database.
 #![cfg(target_arch = "wasm32")]
 
-use spacetimedb::{reducer, Identity, ReducerContext, Table, Timestamp};
+use spacetimedb::{reducer, ReducerContext, Table, Timestamp};
 
 // --- Tables ---
 
@@ -18,7 +18,7 @@ pub struct SceneObject {
 #[spacetimedb::table(accessor = user_cursor, public)]
 pub struct UserCursor {
     #[primary_key]
-    pub identity: Identity,
+    pub session_id: String,
     pub grid_x: i32,
     pub grid_y: i32,
     pub last_seen: Timestamp,
@@ -27,49 +27,50 @@ pub struct UserCursor {
 #[spacetimedb::table(accessor = user_info, public)]
 pub struct UserInfo {
     #[primary_key]
-    pub identity: Identity,
+    pub session_id: String,
     pub name: String,
     pub color: String,
     pub online: bool,
 }
 
-// --- Lifecycle ---
+const COLORS: [&str; 6] = ["#22d3ee", "#a78bfa", "#fb923c", "#4ade80", "#f472b6", "#facc15"];
 
-#[reducer(client_connected)]
-pub fn client_connected(ctx: &ReducerContext) {
-    let colors = ["#22d3ee", "#a78bfa", "#fb923c", "#4ade80", "#f472b6", "#facc15"];
-    let color_index = ctx.db.user_info().count() as usize % colors.len();
+// --- Session lifecycle (called by Rocket server per WebSocket connection) ---
 
-    if let Some(existing) = ctx.db.user_info().identity().find(ctx.sender()) {
-        ctx.db.user_info().identity().update(UserInfo { online: true, ..existing });
+#[reducer]
+pub fn join(ctx: &ReducerContext, session_id: String) {
+    let color_index = ctx.db.user_info().count() as usize % COLORS.len();
+
+    if let Some(existing) = ctx.db.user_info().session_id().find(&session_id) {
+        ctx.db.user_info().session_id().update(UserInfo { online: true, ..existing });
     } else {
         ctx.db.user_info().insert(UserInfo {
-            identity: ctx.sender(),
+            session_id,
             name: format!("User {}", ctx.db.user_info().count() + 1),
-            color: colors[color_index].to_string(),
+            color: COLORS[color_index].to_string(),
             online: true,
         });
     }
 }
 
-#[reducer(client_disconnected)]
-pub fn client_disconnected(ctx: &ReducerContext) {
-    if let Some(existing) = ctx.db.user_info().identity().find(ctx.sender()) {
-        ctx.db.user_info().identity().update(UserInfo { online: false, ..existing });
+#[reducer]
+pub fn leave(ctx: &ReducerContext, session_id: String) {
+    if let Some(existing) = ctx.db.user_info().session_id().find(&session_id) {
+        ctx.db.user_info().session_id().update(UserInfo { online: false, ..existing });
     }
-    ctx.db.user_cursor().identity().delete(ctx.sender());
+    if ctx.db.user_cursor().session_id().find(&session_id).is_some() {
+        ctx.db.user_cursor().session_id().delete(&session_id);
+    }
 }
 
 // --- Reducers ---
 
 #[reducer]
-pub fn create_object(ctx: &ReducerContext, grid_x: i32, grid_y: i32, color: String) {
-    ctx.db.scene_object().insert(SceneObject {
-        id: 0,
-        grid_x,
-        grid_y,
-        color,
-    });
+pub fn create_object(ctx: &ReducerContext, session_id: String, grid_x: i32, grid_y: i32) {
+    let color = ctx.db.user_info().session_id().find(&session_id)
+        .map(|user| user.color.clone())
+        .unwrap_or_else(|| "#888".to_string());
+    ctx.db.scene_object().insert(SceneObject { id: 0, grid_x, grid_y, color });
 }
 
 #[reducer]
@@ -80,26 +81,26 @@ pub fn delete_object(ctx: &ReducerContext, id: u64) -> Result<(), String> {
 }
 
 #[reducer]
-pub fn update_cursor(ctx: &ReducerContext, grid_x: i32, grid_y: i32) {
+pub fn update_cursor(ctx: &ReducerContext, session_id: String, grid_x: i32, grid_y: i32) {
     let cursor = UserCursor {
-        identity: ctx.sender(),
+        session_id: session_id.clone(),
         grid_x,
         grid_y,
         last_seen: ctx.timestamp,
     };
-    if ctx.db.user_cursor().identity().find(ctx.sender()).is_some() {
-        ctx.db.user_cursor().identity().update(cursor);
+    if ctx.db.user_cursor().session_id().find(&session_id).is_some() {
+        ctx.db.user_cursor().session_id().update(cursor);
     } else {
         ctx.db.user_cursor().insert(cursor);
     }
 }
 
 #[reducer]
-pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
+pub fn set_name(ctx: &ReducerContext, session_id: String, name: String) -> Result<(), String> {
     if name.is_empty() {
         return Err("Empty name".into());
     }
-    let user = ctx.db.user_info().identity().find(ctx.sender()).ok_or("Not found")?;
-    ctx.db.user_info().identity().update(UserInfo { name, ..user });
+    let user = ctx.db.user_info().session_id().find(&session_id).ok_or("Not found")?;
+    ctx.db.user_info().session_id().update(UserInfo { name, ..user });
     Ok(())
 }

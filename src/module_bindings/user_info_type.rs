@@ -7,7 +7,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct UserInfo {
-    pub identity: __sdk::Identity,
+    pub session_id: String,
     pub name: String,
     pub color: String,
     pub online: bool,
@@ -21,7 +21,7 @@ impl __sdk::InModule for UserInfo {
 ///
 /// Provides typed access to columns for query building.
 pub struct UserInfoCols {
-    pub identity: __sdk::__query_builder::Col<UserInfo, __sdk::Identity>,
+    pub session_id: __sdk::__query_builder::Col<UserInfo, String>,
     pub name: __sdk::__query_builder::Col<UserInfo, String>,
     pub color: __sdk::__query_builder::Col<UserInfo, String>,
     pub online: __sdk::__query_builder::Col<UserInfo, bool>,
@@ -31,7 +31,7 @@ impl __sdk::__query_builder::HasCols for UserInfo {
     type Cols = UserInfoCols;
     fn cols(table_name: &'static str) -> Self::Cols {
         UserInfoCols {
-            identity: __sdk::__query_builder::Col::new(table_name, "identity"),
+            session_id: __sdk::__query_builder::Col::new(table_name, "session_id"),
             name: __sdk::__query_builder::Col::new(table_name, "name"),
             color: __sdk::__query_builder::Col::new(table_name, "color"),
             online: __sdk::__query_builder::Col::new(table_name, "online"),
@@ -43,14 +43,14 @@ impl __sdk::__query_builder::HasCols for UserInfo {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct UserInfoIxCols {
-    pub identity: __sdk::__query_builder::IxCol<UserInfo, __sdk::Identity>,
+    pub session_id: __sdk::__query_builder::IxCol<UserInfo, String>,
 }
 
 impl __sdk::__query_builder::HasIxCols for UserInfo {
     type IxCols = UserInfoIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         UserInfoIxCols {
-            identity: __sdk::__query_builder::IxCol::new(table_name, "identity"),
+            session_id: __sdk::__query_builder::IxCol::new(table_name, "session_id"),
         }
     }
 }

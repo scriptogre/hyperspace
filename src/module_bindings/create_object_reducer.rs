@@ -7,17 +7,17 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub(super) struct CreateObjectArgs {
+    pub session_id: String,
     pub grid_x: i32,
     pub grid_y: i32,
-    pub color: String,
 }
 
 impl From<CreateObjectArgs> for super::Reducer {
     fn from(args: CreateObjectArgs) -> Self {
         Self::CreateObject {
+            session_id: args.session_id,
             grid_x: args.grid_x,
             grid_y: args.grid_y,
-            color: args.color,
         }
     }
 }
@@ -37,8 +37,8 @@ pub trait create_object {
     /// The reducer will run asynchronously in the future,
     ///  and this method provides no way to listen for its completion status.
     /// /// Use [`create_object:create_object_then`] to run a callback after the reducer completes.
-    fn create_object(&self, grid_x: i32, grid_y: i32, color: String) -> __sdk::Result<()> {
-        self.create_object_then(grid_x, grid_y, color, |_, _| {})
+    fn create_object(&self, session_id: String, grid_x: i32, grid_y: i32) -> __sdk::Result<()> {
+        self.create_object_then(session_id, grid_x, grid_y, |_, _| {})
     }
 
     /// Request that the remote module invoke the reducer `create_object` to run as soon as possible,
@@ -49,9 +49,9 @@ pub trait create_object {
     ///  and its status can be observed with the `callback`.
     fn create_object_then(
         &self,
+        session_id: String,
         grid_x: i32,
         grid_y: i32,
-        color: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -62,9 +62,9 @@ pub trait create_object {
 impl create_object for super::RemoteReducers {
     fn create_object_then(
         &self,
+        session_id: String,
         grid_x: i32,
         grid_y: i32,
-        color: String,
 
         callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
             + Send
@@ -72,9 +72,9 @@ impl create_object for super::RemoteReducers {
     ) -> __sdk::Result<()> {
         self.imp.invoke_reducer_with_callback(
             CreateObjectArgs {
+                session_id,
                 grid_x,
                 grid_y,
-                color,
             },
             callback,
         )
