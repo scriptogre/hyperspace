@@ -15,9 +15,8 @@ log = "0.4"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rocket = { version = "0.5", features = ["json"] }
 rocket_ws = "0.1"
-rocket_dyn_templates = { version = "0.2", features = ["minijinja"] }
 spacetimedb-sdk = "2.0"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-minijinja = "2"
+minijinja = { version = "2", features = ["loader"] }

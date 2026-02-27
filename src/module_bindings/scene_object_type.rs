@@ -11,7 +11,6 @@ pub struct SceneObject {
     pub grid_x: i32,
     pub grid_y: i32,
     pub color: String,
-    pub owner: __sdk::Identity,
 }
 
 impl __sdk::InModule for SceneObject {
@@ -26,7 +25,6 @@ pub struct SceneObjectCols {
     pub grid_x: __sdk::__query_builder::Col<SceneObject, i32>,
     pub grid_y: __sdk::__query_builder::Col<SceneObject, i32>,
     pub color: __sdk::__query_builder::Col<SceneObject, String>,
-    pub owner: __sdk::__query_builder::Col<SceneObject, __sdk::Identity>,
 }
 
 impl __sdk::__query_builder::HasCols for SceneObject {
@@ -37,7 +35,6 @@ impl __sdk::__query_builder::HasCols for SceneObject {
             grid_x: __sdk::__query_builder::Col::new(table_name, "grid_x"),
             grid_y: __sdk::__query_builder::Col::new(table_name, "grid_y"),
             color: __sdk::__query_builder::Col::new(table_name, "color"),
-            owner: __sdk::__query_builder::Col::new(table_name, "owner"),
         }
     }
 }

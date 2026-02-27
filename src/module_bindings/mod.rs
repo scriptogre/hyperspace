@@ -8,7 +8,6 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 pub mod create_object_reducer;
 pub mod delete_object_reducer;
-pub mod move_object_reducer;
 pub mod scene_object_table;
 pub mod scene_object_type;
 pub mod set_name_reducer;
@@ -20,7 +19,6 @@ pub mod user_info_type;
 
 pub use create_object_reducer::create_object;
 pub use delete_object_reducer::delete_object;
-pub use move_object_reducer::move_object;
 pub use scene_object_table::*;
 pub use scene_object_type::SceneObject;
 pub use set_name_reducer::set_name;
@@ -46,11 +44,6 @@ pub enum Reducer {
     DeleteObject {
         id: u64,
     },
-    MoveObject {
-        id: u64,
-        grid_x: i32,
-        grid_y: i32,
-    },
     SetName {
         name: String,
     },
@@ -69,7 +62,6 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::CreateObject { .. } => "create_object",
             Reducer::DeleteObject { .. } => "delete_object",
-            Reducer::MoveObject { .. } => "move_object",
             Reducer::SetName { .. } => "set_name",
             Reducer::UpdateCursor { .. } => "update_cursor",
             _ => unreachable!(),
@@ -89,13 +81,6 @@ impl __sdk::Reducer for Reducer {
             }),
             Reducer::DeleteObject { id } => {
                 __sats::bsatn::to_vec(&delete_object_reducer::DeleteObjectArgs { id: id.clone() })
-            }
-            Reducer::MoveObject { id, grid_x, grid_y } => {
-                __sats::bsatn::to_vec(&move_object_reducer::MoveObjectArgs {
-                    id: id.clone(),
-                    grid_x: grid_x.clone(),
-                    grid_y: grid_y.clone(),
-                })
             }
             Reducer::SetName { name } => {
                 __sats::bsatn::to_vec(&set_name_reducer::SetNameArgs { name: name.clone() })

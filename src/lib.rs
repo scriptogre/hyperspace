@@ -13,7 +13,6 @@ pub struct SceneObject {
     pub grid_x: i32,
     pub grid_y: i32,
     pub color: String,
-    pub owner: Identity,
 }
 
 #[spacetimedb::table(accessor = user_cursor, public)]
@@ -39,15 +38,15 @@ pub struct UserInfo {
 #[reducer(client_connected)]
 pub fn client_connected(ctx: &ReducerContext) {
     let colors = ["#22d3ee", "#a78bfa", "#fb923c", "#4ade80", "#f472b6", "#facc15"];
-    let idx = ctx.db.user_info().count() as usize % colors.len();
+    let color_index = ctx.db.user_info().count() as usize % colors.len();
 
-    if let Some(user) = ctx.db.user_info().identity().find(ctx.sender()) {
-        ctx.db.user_info().identity().update(UserInfo { online: true, ..user });
+    if let Some(existing) = ctx.db.user_info().identity().find(ctx.sender()) {
+        ctx.db.user_info().identity().update(UserInfo { online: true, ..existing });
     } else {
         ctx.db.user_info().insert(UserInfo {
             identity: ctx.sender(),
             name: format!("User {}", ctx.db.user_info().count() + 1),
-            color: colors[idx].to_string(),
+            color: colors[color_index].to_string(),
             online: true,
         });
     }
@@ -55,8 +54,8 @@ pub fn client_connected(ctx: &ReducerContext) {
 
 #[reducer(client_disconnected)]
 pub fn client_disconnected(ctx: &ReducerContext) {
-    if let Some(user) = ctx.db.user_info().identity().find(ctx.sender()) {
-        ctx.db.user_info().identity().update(UserInfo { online: false, ..user });
+    if let Some(existing) = ctx.db.user_info().identity().find(ctx.sender()) {
+        ctx.db.user_info().identity().update(UserInfo { online: false, ..existing });
     }
     ctx.db.user_cursor().identity().delete(ctx.sender());
 }
@@ -70,16 +69,7 @@ pub fn create_object(ctx: &ReducerContext, grid_x: i32, grid_y: i32, color: Stri
         grid_x,
         grid_y,
         color,
-        owner: ctx.sender(),
     });
-}
-
-#[reducer]
-pub fn move_object(ctx: &ReducerContext, id: u64, grid_x: i32, grid_y: i32) -> Result<(), String> {
-    let obj = ctx.db.scene_object().id().find(id).ok_or("Not found")?;
-    if obj.owner != ctx.sender() { return Err("Not owner".into()); }
-    ctx.db.scene_object().id().update(SceneObject { grid_x, grid_y, ..obj });
-    Ok(())
 }
 
 #[reducer]
@@ -106,7 +96,9 @@ pub fn update_cursor(ctx: &ReducerContext, grid_x: i32, grid_y: i32) {
 
 #[reducer]
 pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
-    if name.is_empty() { return Err("Empty name".into()); }
+    if name.is_empty() {
+        return Err("Empty name".into());
+    }
     let user = ctx.db.user_info().identity().find(ctx.sender()).ok_or("Not found")?;
     ctx.db.user_info().identity().update(UserInfo { name, ..user });
     Ok(())
