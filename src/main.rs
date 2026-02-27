@@ -1,8 +1,10 @@
 #[macro_use]
 extern crate rocket;
 
+mod broadcast;
 mod module_bindings;
 
+use broadcast::*;
 use module_bindings::*;
 use rocket::fs::FileServer;
 use rocket::futures::{SinkExt, StreamExt};
@@ -11,133 +13,57 @@ use rocket::State;
 use rocket_ws::Message;
 use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync;
 
-const GRID_SIZE: i32 = 8;
-
-#[derive(serde::Serialize)]
-struct Block {
-    id: u64,
-    grid_x: i32,
-    grid_y: i32,
-    color: String,
-}
-
-#[derive(serde::Serialize)]
-struct User {
-    name: String,
-    color: String,
-    online: bool,
-}
+// --- Application state ---
 
 struct AppState {
     database: Arc<DbConnection>,
-    broadcaster: broadcast::Sender<String>,
+    broadcaster: sync::broadcast::Sender<String>,
 }
 
-// --- Template rendering ---
+// --- Routes ---
 
-fn template_engine() -> &'static minijinja::Environment<'static> {
-    use std::sync::OnceLock;
-    static ENGINE: OnceLock<minijinja::Environment<'static>> = OnceLock::new();
-    ENGINE.get_or_init(|| {
-        let source = std::fs::read_to_string(rocket::fs::relative!("templates/index.html.j2"))
-            .expect("Failed to read template file");
-        let mut engine = minijinja::Environment::new();
-        engine.add_template_owned("index", source).expect("Failed to add template");
-        engine
-    })
+#[get("/")]
+fn index(app: &State<AppState>) -> RawHtml<String> {
+    RawHtml(render_full_page(&app.database.db))
 }
 
-fn template_context(tables: &RemoteTables) -> minijinja::Value {
-    let mut blocks: Vec<Block> = tables.scene_object().iter()
-        .map(|object| Block {
-            id: object.id,
-            grid_x: object.grid_x,
-            grid_y: object.grid_y,
-            color: object.color.clone(),
-        })
-        .collect();
-    blocks.sort_by_key(|block| block.id);
+#[get("/ws")]
+fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Channel<'static> {
+    let mut receiver = app.broadcaster.subscribe();
+    let broadcaster = app.broadcaster.clone();
+    let database = Arc::clone(&app.database);
 
-    let users: Vec<User> = tables.user_info().iter()
-        .map(|user| User {
-            name: user.name.clone(),
-            color: user.color.clone(),
-            online: user.online,
-        })
-        .collect();
-
-    minijinja::context! {
-        objects => blocks,
-        users => users,
-        grid_size => GRID_SIZE,
-    }
-}
-
-fn render_full_page(tables: &RemoteTables) -> String {
-    let template = template_engine().get_template("index").unwrap();
-    template.render(template_context(tables)).unwrap()
-}
-
-fn render_body_block(tables: &RemoteTables) -> String {
-    let template = template_engine().get_template("index").unwrap();
-    let mut state = template.eval_to_state(template_context(tables)).unwrap();
-    state.render_block("body").unwrap()
-}
-
-// --- Broadcasting to all connected browsers ---
-
-fn broadcast_morph(broadcaster: &broadcast::Sender<String>, tables: &RemoteTables) {
-    let body = render_body_block(tables);
-    let _ = broadcaster.send(
-        format!("<htmx target=\"#app\" swap=\"morph:innerHTML\">{body}</htmx>")
-    );
-}
-
-fn broadcast_console(broadcaster: &broadcast::Sender<String>, message: &str, color: &str) {
-    let event = serde_json::json!({
-        "console-log": { "msg": message, "color": color }
-    });
-    let _ = broadcaster.send(format!("<htmx trigger='{event}'></htmx>"));
-}
-
-fn broadcast_cursors(broadcaster: &broadcast::Sender<String>, tables: &RemoteTables) {
-    #[derive(serde::Serialize)]
-    struct CursorPosition {
-        grid_x: i32,
-        grid_y: i32,
-        color: String,
-        name: String,
-    }
-
-    let cursors: Vec<CursorPosition> = tables.user_cursor().iter().map(|cursor| {
-        let user = tables.user_info().identity().find(&cursor.identity);
-        CursorPosition {
-            grid_x: cursor.grid_x,
-            grid_y: cursor.grid_y,
-            color: user.as_ref().map(|u| u.color.clone()).unwrap_or_else(|| "#888".into()),
-            name: user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| "?".into()),
+    ws.channel(move |mut stream| Box::pin(async move {
+        loop {
+            tokio::select! {
+                result = receiver.recv() => match result {
+                    Ok(html) => {
+                        if stream.send(Message::Text(html)).await.is_err() { break }
+                    }
+                    Err(_) => break,
+                },
+                incoming = stream.next() => match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        handle_browser_message(&text, &database, &broadcaster);
+                    }
+                    Some(Ok(_)) => {}
+                    _ => break,
+                },
+            }
         }
-    }).collect();
-
-    let event = serde_json::json!({ "cursor-update": { "cursors": cursors } });
-    let _ = broadcaster.send(format!("<htmx trigger='{event}'></htmx>"));
-}
-
-fn broadcast_state_and_log(
-    broadcaster: &broadcast::Sender<String>,
-    context: &ReducerEventContext,
-    message: &str,
-    color: &str,
-) {
-    broadcast_morph(broadcaster, &context.db);
-    broadcast_console(broadcaster, message, color);
+        Ok(())
+    }))
 }
 
 // --- WebSocket message dispatch ---
 
-fn handle_ws_message(text: &str, database: &DbConnection, broadcaster: &broadcast::Sender<String>) {
+fn handle_browser_message(
+    text: &str,
+    database: &DbConnection,
+    broadcaster: &sync::broadcast::Sender<String>,
+) {
     let Ok(message) = serde_json::from_str::<serde_json::Value>(text) else {
         eprintln!("WebSocket: invalid JSON: {text}");
         return;
@@ -154,8 +80,8 @@ fn handle_ws_message(text: &str, database: &DbConnection, broadcaster: &broadcas
     let Some(action) = message.get("action").and_then(|v| v.as_str()) else { return };
 
     if action == "create" {
-        let x = (random_u64() % GRID_SIZE as u64) as i32;
-        let y = (random_u64() % GRID_SIZE as u64) as i32;
+        let x = (random_u64() % 8) as i32;
+        let y = (random_u64() % 8) as i32;
         let broadcaster = broadcaster.clone();
         let _ = database.reducers.create_object_then(x, y, random_color(), move |context, _| {
             broadcast_state_and_log(&broadcaster, context, &format!("block created at ({x},{y})"), "text-cyan-400");
@@ -201,42 +127,7 @@ fn random_color() -> String {
     PALETTE[random_u64() as usize % PALETTE.len()].to_string()
 }
 
-// --- Routes ---
-
-#[get("/")]
-fn index(app: &State<AppState>) -> RawHtml<String> {
-    RawHtml(render_full_page(&app.database.db))
-}
-
-#[get("/ws")]
-fn websocket(ws: rocket_ws::WebSocket, app: &State<AppState>) -> rocket_ws::Channel<'static> {
-    let mut receiver = app.broadcaster.subscribe();
-    let broadcaster = app.broadcaster.clone();
-    let database = Arc::clone(&app.database);
-
-    ws.channel(move |mut stream| Box::pin(async move {
-        loop {
-            tokio::select! {
-                result = receiver.recv() => match result {
-                    Ok(html) => {
-                        if stream.send(Message::Text(html)).await.is_err() { break }
-                    }
-                    Err(_) => break,
-                },
-                incoming = stream.next() => match incoming {
-                    Some(Ok(Message::Text(text))) => {
-                        handle_ws_message(&text, &database, &broadcaster);
-                    }
-                    Some(Ok(_)) => {} // ignore binary/ping/pong
-                    _ => break,
-                },
-            }
-        }
-        Ok(())
-    }))
-}
-
-// --- Table change callbacks ---
+// --- Startup ---
 
 /// Register insert/delete/update callbacks on a table that all call the same handler.
 macro_rules! on_table_change {
@@ -252,7 +143,7 @@ macro_rules! on_table_change {
 
 #[launch]
 fn rocket() -> _ {
-    let (broadcaster, _) = broadcast::channel::<String>(256);
+    let (broadcaster, _) = sync::broadcast::channel::<String>(256);
 
     let database = DbConnection::builder()
         .with_uri("http://localhost:3000")
@@ -268,7 +159,6 @@ fn rocket() -> _ {
         .expect("Failed to connect to SpacetimeDB");
 
     // Scene objects and cursors: broadcast updated state to all browsers.
-    // Console messages come from reducer _then callbacks in handle_ws_message.
     on_table_change!(database.db.scene_object(), broadcaster, broadcast_morph);
     on_table_change!(database.db.user_cursor(), broadcaster, broadcast_cursors);
 
