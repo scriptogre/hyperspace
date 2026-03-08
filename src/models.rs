@@ -1,4 +1,5 @@
-use spacetimedb::{ReducerContext, SpacetimeType, Timestamp};
+use spacetimedb::{Identity, ReducerContext, SpacetimeType, Timestamp};
+use spacetimedb::Filter;
 use spacetimedb::rand::Rng;
 
 // --- Custom types ---
@@ -52,6 +53,29 @@ pub enum EventKind {
     DragEnded,
 }
 
+impl EventKind {
+    pub fn label(&self) -> &str {
+        match self {
+            EventKind::UserConnected => "joined",
+            EventKind::UserDisconnected => "left",
+            EventKind::BrickCreated => "placed a brick",
+            EventKind::BrickDeleted => "removed a brick",
+            EventKind::DragStarted => "started dragging",
+            EventKind::DragEnded => "stopped dragging",
+        }
+    }
+
+    pub fn css_color(&self) -> &str {
+        match self {
+            EventKind::UserConnected => "text-green-400",
+            EventKind::UserDisconnected => "text-gray-500",
+            EventKind::BrickCreated => "text-cyan-400",
+            EventKind::BrickDeleted => "text-red-400",
+            EventKind::DragStarted | EventKind::DragEnded => "text-yellow-400",
+        }
+    }
+}
+
 // --- Tables ---
 
 #[spacetimedb::table(accessor = brick, public)]
@@ -61,13 +85,13 @@ pub struct Brick {
     pub id: u64,
     pub position: Position,
     pub color: Color,
-    pub dragged_by: Option<u64>,
+    pub dragged_by: Option<Identity>,
 }
 
 #[spacetimedb::table(accessor = user, public)]
 pub struct User {
     #[primary_key]
-    pub id: u64,
+    pub identity: Identity,
     pub name: String,
     pub color: Color,
     pub online: bool,
@@ -76,8 +100,8 @@ pub struct User {
 #[spacetimedb::table(accessor = cursor, public)]
 pub struct Cursor {
     #[primary_key]
-    pub user_id: u64,
-    pub position: Position
+    pub identity: Identity,
+    pub position: Position,
 }
 
 #[spacetimedb::table(accessor = event, public)]
@@ -86,7 +110,21 @@ pub struct Event {
     #[auto_inc]
     pub id: u64,
     pub kind: EventKind,
-    pub user_id: u64,
+    pub identity: Identity,
     pub brick_id: Option<u64>,
     pub timestamp: Timestamp,
 }
+
+// --- Event table for broadcasting rendered HTML ---
+
+#[spacetimedb::table(accessor = html_broadcast, public)]
+pub struct HtmlBroadcast {
+    #[primary_key]
+    pub identity: Identity,
+    pub html: String,
+}
+
+#[spacetimedb::client_visibility_filter]
+const BROADCAST_FILTER: Filter = Filter::Sql(
+    "SELECT * FROM html_broadcast WHERE html_broadcast.identity = :sender"
+);

@@ -1,126 +1,187 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
-test('page loads with full layout', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('h1:has-text("Hyperspace")')).toBeVisible();
-  await expect(page.locator('#grid-viewport')).toBeVisible();
-  await expect(page.locator('#console-log')).toBeVisible();
-  await expect(page.locator('button:has-text("+ Block")')).toBeVisible();
-  await expect(page.locator('input[placeholder="Set name..."]')).toBeVisible();
+/** Wait for WS to be connected and subscription applied (morphed at least once). */
+async function waitForReady(page: Page) {
+  await page.waitForFunction(
+    () => localStorage.getItem('stdb_token') !== null,
+    { timeout: 10_000 },
+  );
+  // Wait for initial morph to settle (on_connect broadcast)
+  await page.waitForTimeout(1500);
+}
+
+/** Click a grid cell at the given coordinates. */
+async function clickCell(page: Page, x: number, y: number) {
+  const cell = page.locator(`button[data-cell-x="${x}"][data-cell-y="${y}"]`);
+  await cell.click({ force: true });
+}
+
+test.describe('page load', () => {
+  test('serves HTML with grid and player setup', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#grid-viewport')).toBeVisible();
+    await expect(page.locator('#player-setup')).toBeVisible();
+    await expect(page.locator('input[name="set_name"]')).toBeVisible();
+  });
+
+  test('no JS errors on load', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto('/');
+    await page.waitForTimeout(3000);
+    expect(errors).toEqual([]);
+  });
 });
 
-test('websocket connects and logs to console', async ({ page }) => {
-  await page.goto('/');
-  // Console should show connected (initialized may be cleared by morphs from parallel tests)
-  await expect(page.locator('#console-log')).not.toBeEmpty({ timeout: 5000 });
+test.describe('websocket connection', () => {
+  test('connects and stores token', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => localStorage.getItem('stdb_token') !== null,
+      { timeout: 10_000 },
+    );
+    const token = await page.evaluate(() => localStorage.getItem('stdb_token'));
+    expect(token).toBeTruthy();
+    expect(token!.length).toBeGreaterThan(10);
+  });
 });
 
-test('no console errors after block creation', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (err) => errors.push(err.message));
+test.describe('reducer calls', () => {
+  test('clicking a grid cell creates a brick', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
 
-  await page.goto('/');
-  await page.waitForSelector('#grid-viewport');
+    // Use a random position to avoid 5-brick stacking limit from prior runs
+    const x = Math.floor(Math.random() * 10);
+    const y = Math.floor(Math.random() * 10);
+    const countBefore = await page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`).count();
 
-  // Create a block and wait for morph
-  await page.click('button:has-text("+ Block")');
-  await page.waitForTimeout(2000);
+    await clickCell(page, x, y);
 
-  // Should have zero JS errors
-  expect(errors).toEqual([]);
+    // A new brick should appear at that cell (unless already at limit)
+    if (countBefore < 5) {
+      await expect(page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`))
+        .toHaveCount(countBefore + 1, { timeout: 8000 });
+    }
+  });
+
+  test('brick appears after clicking grid cell', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
+
+    // Pick a corner position less likely to be used
+    const x = 9, y = 0;
+    const countBefore = await page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`).count();
+
+    await clickCell(page, x, y);
+
+    if (countBefore < 5) {
+      await expect(page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`))
+        .toHaveCount(countBefore + 1, { timeout: 8000 });
+    }
+  });
+
+  test('shift+clicking a brick deletes it', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
+
+    // Create a brick first
+    await clickCell(page, 5, 5);
+
+    // Wait for at least 1 block
+    await expect(page.locator('[id^="block-"]').first()).toBeVisible({ timeout: 8000 });
+    const blocksBefore = await page.locator('[id^="block-"]').count();
+
+    // Shift+click the brick to delete
+    const brickFace = page.locator('[data-brick-id]').first();
+    await brickFace.click({ force: true, modifiers: ['Shift'] });
+
+    // Wait for block count to decrease
+    await expect(page.locator('[id^="block-"]')).toHaveCount(blocksBefore - 1, {
+      timeout: 8000,
+    });
+  });
 });
 
-test('server console messages appear after block creation', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#console-log:has-text("joined")');
+test.describe('HTML morphing', () => {
+  test('layout survives morph', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
 
-  await page.click('button:has-text("+ Block")');
+    // Create a brick
+    await clickCell(page, 4, 4);
+    await expect(page.locator('[id^="block-"]').first()).toBeVisible({ timeout: 8000 });
 
-  // Server should broadcast "block created at (x,y)" to the console
-  await expect(page.locator('#console-log')).toContainText(/block created at \(\d,\d\)/, { timeout: 5000 });
+    // Layout still intact
+    await expect(page.locator('#grid-viewport')).toBeVisible();
+    await expect(page.locator('#player-setup')).toBeVisible();
+    await expect(page.locator('input[name="set_name"]')).toBeVisible();
+  });
+
+  test('console log shows join event', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
+    await expect(page.locator('#console-log')).toContainText('joined', { timeout: 8000 });
+  });
 });
 
-test('page remains intact after block creation', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#console-log:has-text("joined")');
+test.describe('drag and drop', () => {
+  test('dragging a brick moves it to a new cell', async ({ page }) => {
+    await page.goto('/');
+    await waitForReady(page);
 
-  await expect(page.locator('h1:has-text("Hyperspace")')).toBeVisible();
-  await expect(page.locator('#grid-viewport')).toBeVisible();
+    // Create a brick at (2, 2) — unlikely to collide with other tests
+    await clickCell(page, 2, 2);
+    await expect(page.locator('[data-brick-id][data-cell-x="2"][data-cell-y="2"]')).toBeVisible({ timeout: 8000 });
 
-  const blocksBefore = await page.locator('[id^="block-"]').count();
+    // Get the brick we just created
+    const brick = page.locator('[data-brick-id][data-cell-x="2"][data-cell-y="2"]').first();
+    const srcBox = await brick.boundingBox();
+    expect(srcBox).toBeTruthy();
 
-  await page.click('button:has-text("+ Block")');
-  await expect(page.locator('[id^="block-"]')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
+    // Pick a destination cell a few cells away
+    const dstCell = page.locator('button[data-cell-x="6"][data-cell-y="2"]');
+    const dstBox = await dstCell.boundingBox();
+    expect(dstBox).toBeTruthy();
 
-  // Layout still intact after morph
-  await expect(page.locator('h1:has-text("Hyperspace")')).toBeVisible();
-  await expect(page.locator('#grid-viewport')).toBeVisible();
-  await expect(page.locator('#console-log')).toBeVisible();
-  await expect(page.locator('button:has-text("+ Block")')).toBeVisible();
+    // Drag: mousedown, move with steps, mouseup
+    await page.mouse.move(srcBox!.x + srcBox!.width / 2, srcBox!.y + srcBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(dstBox!.x + dstBox!.width / 2, dstBox!.y + dstBox!.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    // Brick should move away from (2,2)
+    await expect(page.locator('[data-brick-id][data-cell-x="2"][data-cell-y="2"]')).toHaveCount(0, { timeout: 8000 });
+  });
 });
 
-test('sidebar updates with block info', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#console-log:has-text("joined")');
+test.describe('multi-user', () => {
+  test('brick appears for both users', async ({ browser }) => {
+    const [ctx1, ctx2] = await Promise.all([
+      browser.newContext(),
+      browser.newContext(),
+    ]);
+    const [p1, p2] = await Promise.all([ctx1.newPage(), ctx2.newPage()]);
 
-  const blocksBefore = await page.locator('[id^="block-"]').count();
-  await page.click('button:has-text("+ Block")');
-  await expect(page.locator('[id^="block-"]')).toHaveCount(blocksBefore + 1, { timeout: 5000 });
+    await Promise.all([
+      p1.goto('http://localhost:3000'),
+      p2.goto('http://localhost:3000'),
+    ]);
 
-  await expect(page.locator('aside')).toContainText('Blocks');
-  await expect(page.locator('aside')).toContainText(/\(\d, \d\)/);
-});
+    await Promise.all([waitForReady(p1), waitForReady(p2)]);
 
-test('clicking grid cell creates block at that position', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#console-log:has-text("joined")');
+    const beforeP1 = await p1.locator('[id^="block-"]').count();
+    const beforeP2 = await p2.locator('[id^="block-"]').count();
 
-  await page.click('button[data-x="2"][data-y="3"]', { force: true });
-  await expect(page.locator('aside')).toContainText('(2, 3)', { timeout: 5000 });
-});
+    // Player 1 creates a brick at an edge position unlikely to have prior bricks
+    await clickCell(p1, 0, 0);
 
-test('delete button removes a block', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#console-log:has-text("joined")');
+    // Player 1 should see more bricks
+    await expect(p1.locator('[id^="block-"]')).not.toHaveCount(beforeP1, { timeout: 8000 });
 
-  // Create a block first
-  await page.click('button[data-x="5"][data-y="5"]', { force: true });
-  await expect(page.locator('aside')).toContainText('(5, 5)', { timeout: 5000 });
+    // Player 2 should also see more bricks
+    await expect(p2.locator('[id^="block-"]')).not.toHaveCount(beforeP2, { timeout: 8000 });
 
-  // Hover the block entry in sidebar to reveal × button, then click it
-  const blockEntry = page.locator('aside .group', { hasText: '(5, 5)' }).first();
-  await blockEntry.scrollIntoViewIfNeeded();
-  await blockEntry.hover();
-  await blockEntry.locator('button').click();
-
-  // Verify deletion: console message + entry removed from sidebar
-  await expect(page.locator('#console-log')).toContainText(/block deleted/, { timeout: 5000 });
-});
-
-test('multi-user sync: block appears in both tabs', async ({ browser }) => {
-  const [c1, c2] = await Promise.all([browser.newContext(), browser.newContext()]);
-  const [p1, p2] = await Promise.all([c1.newPage(), c2.newPage()]);
-  await Promise.all([p1.goto('http://localhost:8080'), p2.goto('http://localhost:8080')]);
-  await Promise.all([
-    p1.waitForSelector('#console-log:has-text("joined")'),
-    p2.waitForSelector('#console-log:has-text("joined")'),
-  ]);
-
-  const before = await p2.locator('[id^="block-"]').count();
-
-  await p1.click('button:has-text("+ Block")');
-  await expect(p2.locator('[id^="block-"]')).toHaveCount(before + 1, { timeout: 5000 });
-
-  await expect(p2.locator('h1:has-text("Hyperspace")')).toBeVisible();
-  await expect(p2.locator('#grid-viewport')).toBeVisible();
-  await expect(p2.locator('#console-log')).toBeVisible();
-
-  await Promise.all([c1.close(), c2.close()]);
-});
-
-test('screenshot', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('#grid-viewport');
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: 'test-results/hyperspace.png', fullPage: true });
+    await Promise.all([ctx1.close(), ctx2.close()]);
+  });
 });

@@ -17,15 +17,52 @@
 
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
-  <script src="/static/js/vendor/htmx.min.js"></script>
+  <script src="/static/js/vendor/idiomorph.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="/static/js/htmx-spacetimedb.js"></script>
 </head>
 
-{# Color name to hex mapping #}
-{% set colors = {"Cyan": "#22d3ee", "Purple": "#a78bfa", "Orange": "#fb923c", "Green": "#4ade80", "Pink": "#f472b6", "Yellow": "#facc15"} %}
-
-<body class="bg-surface text-gray-200 font-mono h-screen overflow-hidden">
+<body class="group/body bg-surface text-gray-200 font-mono h-screen overflow-hidden"
+      hx-ext="spacetimedb"
+      ws-connect="ws://localhost:3000/v1/database/hyperspace/subscribe"
+      hx-on:keydown="if(event.key==='Shift') document.body?.setAttribute('data-delete-mode','')"
+      hx-on:keyup="if(event.key==='Shift') document.body?.removeAttribute('data-delete-mode')"
+      hx-on:mousemove="
+        var vp = document.body;
+        if (!vp || !vp.dataset.dragBrick) return;
+        var dx = event.clientX - parseInt(vp.dataset.dragStartX);
+        var dy = event.clientY - parseInt(vp.dataset.dragStartY);
+        if (vp.dataset.dragMoved !== '1' && Math.abs(dx) + Math.abs(dy) > 8) {
+          vp.dataset.dragMoved = '1';
+          stdb.callReducer('start_drag', [parseInt(vp.dataset.dragBrick)]);
+        }
+        if (vp.dataset.dragMoved !== '1') return;
+        var el = document.getElementById('block-' + vp.dataset.dragBrick);
+        if (el) el.style.pointerEvents = 'none';
+        var under = document.elementFromPoint(event.clientX, event.clientY);
+        if (el) el.style.pointerEvents = '';
+        if (!under) return;
+        var cell = under.closest('[data-cell-x]');
+        if (!cell) return;
+        var cx = cell.dataset.cellX, cy = cell.dataset.cellY;
+        if (vp.dataset.dragLastX !== cx || vp.dataset.dragLastY !== cy) {
+          vp.dataset.dragLastX = cx; vp.dataset.dragLastY = cy;
+          stdb.callReducer('move_brick', [parseInt(vp.dataset.dragBrick), parseInt(cx), parseInt(cy)]);
+        }"
+      hx-on:mouseup="
+        var vp = document.body;
+        if (!vp || !vp.dataset.dragBrick) return;
+        if (vp.dataset.dragMoved === '1') {
+          stdb.callReducer('end_drag', []);
+        } else {
+          stdb.callReducer('create_brick', [parseInt(vp.dataset.dragCellX), parseInt(vp.dataset.dragCellY)]);
+        }
+        delete vp.dataset.dragBrick; delete vp.dataset.dragStartX; delete vp.dataset.dragStartY;
+        delete vp.dataset.dragMoved; delete vp.dataset.dragLastX; delete vp.dataset.dragLastY;
+        delete vp.dataset.dragCellX; delete vp.dataset.dragCellY;">
 
   <div id="app" class="relative w-full h-full">
+  {% block grid %}
 
     <div class="flex-1 relative overflow-hidden bg-surface select-none w-full h-full" id="grid-viewport">
       <div class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2"
@@ -33,88 +70,154 @@
         <div class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
              style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
 
-          {# Grid cells — click to create brick #}
           {% for row in range(grid_size) %}
             {% for col in range(grid_size) %}
-            <form method="post" action="/brick"
-                  style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}">
-              <input type="hidden" name="x" value="{{ col }}">
-              <input type="hidden" name="y" value="{{ row }}">
-              <button type="submit"
-                      class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
-                             transition-colors duration-150 hover:bg-cyan-400/[0.08] hover:border-cyan-400/15">
-              </button>
-            </form>
+            <button class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
+                           transition-colors duration-100 hover:bg-cyan-400/[0.08] hover:border-cyan-400/15
+                           focus:outline-none"
+                    data-cell-x="{{ col }}" data-cell-y="{{ row }}"
+                    hx-on:click="stdb.callReducer('create_brick',[{{ col }},{{ row }}])"
+                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}">
+            </button>
             {% endfor %}
           {% endfor %}
 
-          {# Bricks #}
           {% set depth = 12 %}
-          {% for brick in bricks %}
-          {% set is_dragged = brick.dragged_by is not none %}
-          <div id="block-{{ brick.id }}"
-               class="group relative"
-               style="grid-column: {{ brick.x + 1 }}; grid-row: {{ brick.y + 1 }};
-                      --color: {{ colors[brick.color] }};
+          {% for block in blocks %}
+          <div id="block-{{ block.id }}"
+               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}"
+               data-cell-x="{{ block.grid_x }}" data-cell-y="{{ block.grid_y }}"
+               data-brick-id="{{ block.id }}"
+               {{ 'data-grabbing' if block.is_being_dragged else '' }}
+               class="group/brick relative cursor-grab
+                      data-[grabbing]:cursor-grabbing
+                      group-data-[delete-mode]/body:cursor-crosshair"
+               hx-on:mousedown="
+                 event.preventDefault(); event.stopPropagation();
+                 var id = parseInt(this.dataset.brickId);
+                 if (event.shiftKey) { stdb.callReducer('delete_brick', [id]); return; }
+                 var vp = document.body;
+                 vp.dataset.dragBrick = id; vp.dataset.dragStartX = event.clientX;
+                 vp.dataset.dragStartY = event.clientY; vp.dataset.dragMoved = '0';
+                 vp.dataset.dragCellX = this.dataset.cellX;
+                 vp.dataset.dragCellY = this.dataset.cellY;"
+               style="grid-column: {{ block.grid_x + 1 }}; grid-row: {{ block.grid_y + 1 }};
+                      --color: {{ block.color }};
                       transform-style: preserve-3d;
-                      transform: translateZ({{ brick.z * depth }}px);
-                      z-index: {{ (brick.x + brick.y) * 10 + brick.z * 100 + 1 }}">
-              {# Top face — click to delete #}
-              <form method="post" action="/brick/{{ brick.id }}/delete"
-                    class="size-16 border border-white/25 cursor-pointer
-                           transition-[opacity,border-color] duration-150
-                           starting:opacity-0 starting:scale-50
-                           hover:border-red-400/70"
-                    style="background: var(--color);
-                           transform: translateZ({{ depth }}px)">
-                <button type="submit" class="size-full"></button>
-              </form>
-              {# South wall #}
-              <div class="absolute bottom-0 left-0 pointer-events-none border border-white/15
-                          transition-[opacity,border-color] duration-150
-                          starting:opacity-0"
-                   style="width: 64px; height: {{ depth }}px;
-                          background: color-mix(in srgb, var(--color) 65%, black);
-                          transform-origin: bottom; transform: rotateX(-90deg)">
-              </div>
-              {# West wall #}
-              <div class="absolute top-0 left-0 pointer-events-none border border-white/15
-                          transition-[opacity,border-color] duration-150
-                          starting:opacity-0"
-                   style="width: {{ depth }}px; height: 64px;
-                          background: color-mix(in srgb, var(--color) 45%, black);
-                          transform-origin: left; transform: rotateY(-90deg)">
-              </div>
+                      transform: translateZ({{ block.grid_z * depth }}px);
+                      z-index: {{ 1000 if block.is_being_dragged else (block.grid_x + block.grid_y) * 10 + block.grid_z * 100 + 1 }}">
+            {# Top face #}
+            <div class="size-16 border-2 border-white/25
+                        transition-[opacity,border-color,background-color,box-shadow] duration-150
+                        starting:opacity-0 starting:scale-50
+                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
+                        group-hover/brick:border-cyan-400/80 group-hover/brick:shadow-[inset_0_0_16px_rgba(34,211,238,0.25)]
+                        group-data-[delete-mode]/body:group-hover/brick:border-red-500 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/20 group-data-[delete-mode]/body:group-hover/brick:shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]"
+                 style="background: var(--color);
+                        transform: translateZ({{ depth }}px)">
+            </div>
+            {# South wall (bottom-left in iso) #}
+            <div class="absolute bottom-0 left-0 border-2 border-white/15
+                        transition-[opacity,border-color,background-color] duration-150
+                        starting:opacity-0
+                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
+                        group-hover/brick:border-cyan-400/60
+                        group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
+                 style="width: 64px; height: {{ depth }}px;
+                        background: color-mix(in srgb, var(--color) 65%, black);
+                        transform-origin: bottom; transform: rotateX(-90deg)">
+            </div>
+            {# West wall (bottom-right in iso) #}
+            <div class="absolute top-0 left-0 border-2 border-white/15
+                        transition-[opacity,border-color,background-color] duration-150
+                        starting:opacity-0
+                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
+                        group-hover/brick:border-cyan-400/60
+                        group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
+                 style="width: {{ depth }}px; height: 64px;
+                        background: color-mix(in srgb, var(--color) 45%, black);
+                        transform-origin: left; transform: rotateY(-90deg)">
+            </div>
           </div>
           {% endfor %}
 
         </div>
       </div>
 
-      {# HUD overlay #}
-      <div class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
-        <div class="flex items-center gap-2">
-          {% for user in users %}
-            {% if user.online %}
-            <div class="flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full" style="background: {{ colors[user.color] }}"></span>
-              <span class="text-gray-300">{{ user.name }}</span>
-            </div>
-            {% endif %}
-          {% endfor %}
+      {# Cursor overlay — renders empty until WS is wired up #}
+      {% for cursor in cursors %}
+      {% set is_self = cursor.session_id == current_session_id %}
+      {% set cell = 64 %}
+      {% set half = grid_size * cell // 2 %}
+      {% set px = cursor.grid_x * cell + cell // 2 - half %}
+      {% set py = cursor.grid_y * cell + cell // 2 - half %}
+      {% set diff = py - px %}
+      {% set sum = px + py %}
+      {% set denom = 1000000 - 612 * diff %}
+      {% set sx = 707000 * sum // denom %}
+      {% set sy = 354000 * diff // denom %}
+      <div id="cursor-{{ cursor.name }}" data-session="{{ cursor.session_id }}"
+           class="absolute pointer-events-none flex flex-col items-center -translate-x-1/2
+                  {{ 'opacity-100' if is_self else 'opacity-60' }}"
+           style="left: calc(50% + {{ sx }}px); top: calc(40% + {{ sy }}px - 40px); --color: {{ cursor.color }}">
+        <span class="whitespace-nowrap text-[11px] px-2 py-0.5 rounded font-mono mb-1
+                     {{ 'text-white border shadow-[0_2px_8px_rgba(0,0,0,0.6)]' if is_self else 'text-white/80 border border-white/10 shadow-[0_2px_6px_rgba(0,0,0,0.4)]' }}"
+              style="background: {{ 'color-mix(in srgb, var(--color) 70%, black)' if is_self else 'rgba(10,18,28,0.9)' }};
+                     {{ 'border-color: var(--color)' if is_self else '' }}">
+          {{ cursor.name }}
+        </span>
+        <div class="rounded-full border-2 border-white
+                    {{ 'size-3.5' if is_self else 'size-2.5' }}"
+             style="background: var(--color);
+                    box-shadow: 0 0 {{ '14px' if is_self else '8px' }} var(--color), 0 2px 8px rgba(0,0,0,0.4)">
         </div>
       </div>
-
+      {% endfor %}
     </div>
+
+    {# HUD overlay — top-left, minimal #}
+    <div class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
+      <div class="flex items-center gap-2">
+        {% for user in users %}
+          {% if user.online %}
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" style="background: {{ user.color }}"></span>
+            <span class="text-gray-300">{{ user.name }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Console — bottom-left, minimal log #}
+    <div id="console-log" class="absolute bottom-4 left-5 z-50 pointer-events-none
+                                  flex flex-col-reverse text-[10px] leading-relaxed space-y-px space-y-reverse max-h-26 overflow-hidden opacity-75">
+      {% for entry in logs | reverse %}
+      <div id="log-{{ entry.id }}" class="{{ entry.color }}">{{ entry.message }}</div>
+      {% endfor %}
+    </div>
+
+    {# Name + color — server-driven visibility #}
+    {% if show_player_setup %}
+    <div id="player-setup" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
+      <input name="set_name" placeholder="Set name..."
+             hx-on:keydown="if(event.key==='Enter') stdb.callReducer('set_name',[this.value])"
+             class="bg-surface/80 backdrop-blur-sm border border-white/10 rounded-full px-4 py-1.5 text-xs
+                    placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-40">
+      <div class="flex gap-1">
+        {% for c in ['Cyan','Pink','Purple','Yellow','Green','Orange'] %}
+        <button hx-on:click="stdb.callReducer('set_color',[{'{{ c }}': {}}])"
+                class="w-4 h-4 rounded-full border border-white/20 hover:border-white/60 transition"
+                style="background: {{ {'Cyan':'#22d3ee','Pink':'#f472b6','Purple':'#a78bfa','Yellow':'#facc15','Green':'#4ade80','Orange':'#fb923c'}[c] }}"></button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  {% endblock %}
   </div>
 
-  {# Console #}
-  <div id="console-log" class="absolute bottom-4 left-5 z-50 pointer-events-none
-                                flex flex-col-reverse text-[10px] leading-relaxed space-y-px space-y-reverse max-h-26 overflow-hidden opacity-75">
-    {% for event in events | reverse %}
-    <div class="text-gray-400">{{ event.kind }}: user {{ event.user_id }}{% if event.brick_id %} brick {{ event.brick_id }}{% endif %}</div>
-    {% endfor %}
-  </div>
+
 
 </body>
 </html>
