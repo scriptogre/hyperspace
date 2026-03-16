@@ -2,6 +2,8 @@
 
 Real-time multiplayer isometric sandbox. Zero application JavaScript.
 
+![Hyperspace demo](docs/demo.gif)
+
 ```
     ╭─────────────────────────────────────────────────────────╮
     │                                                         │
@@ -68,7 +70,7 @@ Real-time multiplayer isometric sandbox. Zero application JavaScript.
   └──────────────┘                                    └──────────────┘
 ```
 
-Every mutation — place, delete, drag, move, set name, set color — follows this exact flow. The server re-renders personalized HTML for every connected client on every state change.
+Every mutation (place, delete, drag, move, set name, set color) follows this exact flow. The server re-renders personalized HTML for every connected client on every state change.
 
 ## The Entire Interaction Model
 
@@ -91,28 +93,6 @@ Every mutation — place, delete, drag, move, set name, set color — follows th
 ```
 
 No application JavaScript files. No `<script>` blocks. Just HTML attributes calling server reducers.
-
-## 3D Blocks in Pure CSS
-
-```
-            ┌──────────┐ ◄── top face: translateZ(12px)
-           ╱          ╱│     background: var(--color)
-          ╱          ╱ │
-         └──────────┘  │
-         │          │  │ ◄── west wall: rotateY(-90deg)
-         │   top    │ ╱      color-mix(var(--color) 45%, black)
-         │          │╱
-         └──────────┘
-              ▲
-              │
-         south wall: rotateX(-90deg)
-         color-mix(var(--color) 65%, black)
-
-
-    Stacking: translateZ(grid_z * 12px)     Isometric view: rotateX(60deg) rotateZ(-45deg)
-```
-
-Three `<div>`s per block. `color-mix()` darkens walls to simulate lighting. The grid container applies a single isometric rotation. No canvas, no WebGL, no SVG.
 
 ## Data Model
 
@@ -144,7 +124,36 @@ static/js/
   htmx-spacetimedb.js   generic SpacetimeDB ↔ htmx bridge      214 lines
 ```
 
+## Patched SpacetimeDB
+
+This project runs on a [custom fork](https://github.com/scriptogre/SpacetimeDB/tree/hypermedia) of SpacetimeDB that adds an **HTTP route system** — the missing piece that makes server-driven hypermedia possible without an external web framework.
+
+```
+  Official SpacetimeDB           Patched (hypermedia branch)
+  ─────────────────────          ──────────────────────────────
+
+  WebSocket reducers     ✓       WebSocket reducers            ✓
+  Client subscriptions   ✓       Client subscriptions          ✓
+  Row-level security     ✓       Row-level security            ✓
+                                 #[get], #[post], ... routes   ✓  ◄── new
+                                 Html, Json response types     ✓  ◄── new
+                                 HttpRequest (headers, etc.)   ✓  ◄── new
+                                 Static file serving           ✓  ◄── new
+```
+
+Without this patch, `GET /` couldn't return server-rendered HTML from inside the module — you'd need Rocket or Axum sitting in front, breaking the single-runtime model.
+
+```rust
+// This is what the patch enables:
+#[get("/")]
+fn index(ctx: &mut ProcedureContext, _req: HttpRequest) -> Html {
+    ctx.with_tx(|tx| Html(render::render_page(&tx.db, None)))
+}
+```
+
 ## Running
+
+Requires the patched SpacetimeDB built locally as a sibling directory (`../SpacetimeDB` on the `hypermedia` branch).
 
 ```bash
 just up      # start SpacetimeDB, publish module
@@ -154,5 +163,3 @@ just check   # clippy + fmt
 ```
 
 Open `http://localhost:3000` in multiple tabs.
-
-Requires [SpacetimeDB](https://spacetimedb.com) built locally (see `Justfile`).
