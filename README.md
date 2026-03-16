@@ -1,177 +1,158 @@
 # Hyperspace
 
-A real-time multiplayer isometric sandbox where players place, drag, and stack 3D blocks on a shared 12x12 grid — built with **zero application JavaScript**.
-
-Every pixel you see is server-rendered HTML. Every interaction is a declarative attribute. The server is the single source of truth, and the client just morphs what it's told.
-
-## What It Does
-
-- **Place blocks** — click any grid cell to stack a colored 3D brick (up to 5 high)
-- **Drag blocks** — grab and move bricks between cells in real time
-- **Delete blocks** — hold Shift and click to remove (cursor turns to crosshair, borders glow red)
-- **See other players** — live cursors, player list, and an event log of everything happening
-- **Pick a name and color** — personalize on first join, reflected immediately for everyone
-
-All of this happens across multiple browser tabs or devices simultaneously, with sub-second sync.
-
-## The Architecture
-
-This is a **server-driven hypermedia** app. There is no client-side state, no React, no virtual DOM diffing, no API calls. The entire UI lifecycle is:
+Real-time multiplayer isometric sandbox. Zero application JavaScript.
 
 ```
-1. User clicks a grid cell
-2. Inline handler calls stdb.callReducer('create_brick', [x, y])
-3. WebSocket sends the call to SpacetimeDB
-4. Rust reducer runs: inserts a Brick row, then calls broadcast()
-5. broadcast() renders the Jinja2 template once per connected user
-6. Each user's personalized HTML is inserted into the html_broadcast event table
-7. SpacetimeDB pushes the row to that user's WebSocket (RLS-filtered)
-8. htmx-spacetimedb.js receives the HTML and Idiomorph morphs #app
-9. The block appears — with 3D CSS transforms, hover effects, and all
+    ╭─────────────────────────────────────────────────────────╮
+    │                                                         │
+    │           ◆ Alice        ◆ Bob        ◆ Carol           │
+    │                                                         │
+    │                  ┌──┐                                   │
+    │                  │▓▓│                                   │
+    │               ┌──┼──┤  ┌──┐                             │
+    │               │▒▒│▓▓│  │░░│                             │
+    │            ┌──┼──┼──┤  ├──┤                             │
+    │            │░░│▒▒│▓▓│  │░░│        ┌──┐                 │
+    │         ╱ ╱ ╱├──┼──┤  ├──┤     ╱ ╱│▒▒│                 │
+    │        ╱ ╱ ╱ │░░│▒▒│  │░░│    ╱ ╱ ├──┤                 │
+    │       ╱ ╱ ╱ ╱├──┼──┘  ├──┘   ╱ ╱ ╱│▒▒│                 │
+    │      ╱ ╱ ╱ ╱ │░░│     │░░│  ╱ ╱ ╱ ├──┘                 │
+    │     ╱ ╱ ╱ ╱  └──┘     └──┘ ╱ ╱ ╱                       │
+    │    ╱ ╱ ╱ ╱             ╱ ╱ ╱ ╱                          │
+    │   ╱ ╱ ╱ ╱             ╱ ╱ ╱ ╱     12×12 isometric grid  │
+    │                                    CSS 3D transforms     │
+    │  Alice joined                      No canvas or WebGL    │
+    │  Bob placed a brick                                      │
+    │  Carol started dragging                                  │
+    │                                                         │
+    ╰─────────────────────────────────────────────────────────╯
 ```
 
-Every reducer — create, delete, drag, move, set name, set color — ends with `broadcast(ctx)`. The server re-renders the world for every connected client on every state change.
+## How It Works
 
-### Why Per-User Rendering?
+```
+  Browser A              SpacetimeDB (Rust → Wasm)              Browser B
+  ─────────              ──────────────────────────              ─────────
 
-The template is personalized. Your cursor is brighter than others. Your name badge has a colored border. The setup prompt only shows for new users. This is impossible with a single broadcast — each client gets HTML tailored to their identity.
-
-```rust
-fn broadcast(ctx: &ReducerContext) {
-    for user in ctx.db.user().iter().filter(|u| u.online) {
-        let html = render::render_body(&ctx.db, Some(&user.identity));
-        let _ = ctx.db.html_broadcast().identity().delete(user.identity);
-        ctx.db.html_broadcast().insert(HtmlBroadcast {
-            identity: user.identity,
-            html,
-        });
-    }
-}
+  click cell
+       │
+       ▼
+  stdb.callReducer ──────► create_brick(x, y)
+  ('create_brick',        ┌──────────────────────┐
+   [3, 5])                │ INSERT INTO brick     │
+        ┌─────────────────│ ...                   │
+        │                 │ broadcast()           │──────────────────┐
+        │                 │  for each online user │                  │
+        │                 │    render(template,   │                  │
+        │                 │      viewer=identity) │                  │
+        │                 └──────────┬────────────┘                  │
+        │                            │                               │
+        │           ┌────────────────┴────────────────┐              │
+        │           ▼                                 ▼              │
+        │   html_broadcast                    html_broadcast         │
+        │   ┌─────────────────┐               ┌─────────────────┐   │
+        │   │ identity: Alice │               │ identity: Bob   │   │
+        │   │ html: "<div..." │               │ html: "<div..." │   │
+        │   └────────┬────────┘               └────────┬────────┘   │
+        │            │ RLS filter:                      │            │
+        │            │ each client only                 │            │
+        │            │ gets their own row               │            │
+        │            ▼                                  ▼            │
+        │   Idiomorph.morph(#app)              Idiomorph.morph(#app) │
+        │                                                           │
+        ▼                                                           ▼
+  ┌──────────────┐                                    ┌──────────────┐
+  │ Block appears │                                   │ Block appears │
+  │ (your cursor  │                                   │ (your cursor  │
+  │  is brighter) │                                   │  is brighter) │
+  └──────────────┘                                    └──────────────┘
 ```
 
-## The Stack
+Every mutation — place, delete, drag, move, set name, set color — follows this exact flow. The server re-renders personalized HTML for every connected client on every state change.
 
-| Layer | Role |
-|---|---|
-| **SpacetimeDB** | Database + WebSocket server + reducer execution, all in one. Compiles Rust to Wasm and runs it at the edge. |
-| **MiniJinja** | Server-side HTML rendering. Templates are embedded at compile time via `include_str!`. |
-| **htmx** | Declarative HTML attributes (`hx-on:*`, `ws-send`, `hx-vals`) for user interactions. |
-| **htmx-spacetimedb.js** | Generic bridge (~200 lines) connecting htmx to SpacetimeDB's WebSocket protocol. Reusable across any project. |
-| **Idiomorph** | DOM morphing that preserves focus, scroll position, CSS transitions, and form state during full-page updates. |
-| **Tailwind CSS v4** | All styling, including 3D transforms, hover states, transitions, and conditional visual effects via `data-*` selectors. |
-| **Playwright** | E2E tests covering multi-user sync, drag-and-drop, and WebSocket lifecycle. |
-
-## How the 3D Works
-
-The isometric view is pure CSS — no canvas, no WebGL, no SVG:
-
-```css
-/* The grid container is rotated into isometric perspective */
-.grid-container {
-    transform: rotateX(60deg) rotateZ(-45deg);
-    transform-style: preserve-3d;
-}
-```
-
-Each block is three divs (top face, south wall, west wall) with CSS 3D transforms:
+## The Entire Interaction Model
 
 ```html
-<!-- Top face — lifted by depth -->
-<div style="background: var(--color); transform: translateZ(12px)">
+<!-- Place a brick: click a grid cell -->
+<button hx-on:click="stdb.callReducer('create_brick', [3, 5])">
 
-<!-- South wall — rotated down from bottom edge -->
-<div style="background: color-mix(in srgb, var(--color) 65%, black);
-            transform-origin: bottom; transform: rotateX(-90deg)">
+<!-- Delete a brick: Shift+click -->
+<div hx-on:mousedown="
+    if (event.shiftKey) { stdb.callReducer('delete_brick', [id]); return; }
+    /* otherwise start drag */
+">
 
-<!-- West wall — rotated left from left edge -->
-<div style="background: color-mix(in srgb, var(--color) 45%, black);
-            transform-origin: left; transform: rotateY(-90deg)">
+<!-- Delete mode visuals: pure CSS via data attribute -->
+<body hx-on:keydown="if(event.key==='Shift') this.setAttribute('data-delete-mode','')">
+<div class="group-data-[delete-mode]/body:group-hover/brick:border-red-500">
+
+<!-- Set name: Enter key -->
+<input hx-on:keydown="if(event.key==='Enter') stdb.callReducer('set_name', [this.value])">
 ```
 
-Stacking is a `translateZ` offset: `transform: translateZ({{ block.grid_z * 12 }}px)`. The walls get progressively darker using `color-mix()` to simulate lighting.
+No application JavaScript files. No `<script>` blocks. Just HTML attributes calling server reducers.
+
+## 3D Blocks in Pure CSS
+
+```
+            ┌──────────┐ ◄── top face: translateZ(12px)
+           ╱          ╱│     background: var(--color)
+          ╱          ╱ │
+         └──────────┘  │
+         │          │  │ ◄── west wall: rotateY(-90deg)
+         │   top    │ ╱      color-mix(var(--color) 45%, black)
+         │          │╱
+         └──────────┘
+              ▲
+              │
+         south wall: rotateX(-90deg)
+         color-mix(var(--color) 65%, black)
+
+
+    Stacking: translateZ(grid_z * 12px)     Isometric view: rotateX(60deg) rotateZ(-45deg)
+```
+
+Three `<div>`s per block. `color-mix()` darkens walls to simulate lighting. The grid container applies a single isometric rotation. No canvas, no WebGL, no SVG.
 
 ## Data Model
 
-Five tables, all in Rust, all in SpacetimeDB:
-
-```rust
-Brick    { id, position: {x, y, z}, color, dragged_by: Option<Identity> }
-User     { identity, name, color, online }
-Cursor   { identity, position: {x, y, z} }
-Event    { id, kind, identity, brick_id, timestamp }
-
-// Ephemeral — RLS-filtered so each client only sees their own row
-HtmlBroadcast { identity, html }
 ```
-
-The `HtmlBroadcast` table is the key innovation. It's an event table (rows are ephemeral) with a client visibility filter:
-
-```rust
-#[client_visibility_filter]
-const BROADCAST_FILTER: Filter =
-    Filter::Sql("SELECT * FROM html_broadcast WHERE html_broadcast.identity = :sender");
-```
-
-Clients subscribe to `SELECT * FROM html_broadcast` and SpacetimeDB ensures they only receive rows addressed to their identity. No client-side filtering needed.
-
-## Interactions Are Declarative
-
-There is no application JavaScript. Interactions are expressed entirely as HTML attributes:
-
-**Click to place a brick:**
-```html
-<button hx-on:click="stdb.callReducer('create_brick', [{{ col }}, {{ row }}])">
-```
-
-**Shift+click to delete:**
-```html
-<div hx-on:mousedown="
-    if (event.shiftKey) { stdb.callReducer('delete_brick', [id]); return; }
-    /* ...otherwise start drag... */
-">
-```
-
-**Hold Shift for delete mode (CSS-only visual change):**
-```html
-<body hx-on:keydown="if(event.key==='Shift') document.body?.setAttribute('data-delete-mode','')">
-
-<!-- Blocks respond with Tailwind's group-data selector -->
-<div class="group-data-[delete-mode]/body:group-hover/brick:border-red-500">
-```
-
-**Set name on Enter:**
-```html
-<input hx-on:keydown="if(event.key==='Enter') stdb.callReducer('set_name', [this.value])">
+┌─────────────────────────────────────────────────────────────────────┐
+│ SpacetimeDB Tables                                                  │
+├──────────────────┬──────────────────────────────────────────────────┤
+│ Brick            │ id, position{x,y,z}, color, dragged_by?         │
+│ User             │ identity, name, color, online                    │
+│ Cursor           │ identity, position{x,y,z}                       │
+│ Event            │ id, kind, identity, brick_id?, timestamp         │
+├──────────────────┼──────────────────────────────────────────────────┤
+│ HtmlBroadcast    │ identity, html                                   │
+│ (event table)    │ RLS: each client only receives their own row     │
+└──────────────────┴──────────────────────────────────────────────────┘
 ```
 
 ## Project Structure
 
 ```
 src/
-  lib.rs          — HTTP route: GET / returns full page
-  models.rs       — Tables (Brick, User, Cursor, Event, HtmlBroadcast) and types
-  reducers.rs     — All mutations + lifecycle hooks + broadcast()
-  render.rs       — MiniJinja template engine, world_state() context builder
+  lib.rs          GET / → full HTML page                         13 lines
+  models.rs       tables + types                                134 lines
+  reducers.rs     mutations + lifecycle + broadcast()            255 lines
+  render.rs       MiniJinja template engine                     127 lines
 templates/
-  index.html.j2   — The entire UI: 12x12 grid, 3D blocks, cursors, HUD, event log
+  index.html.j2   entire UI                                     217 lines
 static/js/
-  htmx-spacetimedb.js  — Generic htmx extension for SpacetimeDB WebSocket protocol
-  vendor/               — htmx, Idiomorph
-tests/e2e/
-  hyperspace.spec.ts    — Playwright tests: multi-user, drag-drop, WebSocket lifecycle
+  htmx-spacetimedb.js   generic SpacetimeDB ↔ htmx bridge      214 lines
 ```
-
-~530 lines of Rust. ~220 lines of template. ~210 lines of bridge JS. Zero lines of application JS.
 
 ## Running
 
-Requires [SpacetimeDB](https://spacetimedb.com) built locally (see `Justfile` for path conventions).
-
 ```bash
-just up      # Start SpacetimeDB, publish the module
-just down    # Stop SpacetimeDB
-just test    # Run Playwright E2E tests
-just check   # Clippy + fmt
+just up      # start SpacetimeDB, publish module
+just down    # stop
+just test    # Playwright E2E
+just check   # clippy + fmt
 ```
 
-The app runs at `http://localhost:3000`. Open multiple tabs to see multiplayer sync.
+Open `http://localhost:3000` in multiple tabs.
+
+Requires [SpacetimeDB](https://spacetimedb.com) built locally (see `Justfile`).
