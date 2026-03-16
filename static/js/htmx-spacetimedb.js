@@ -5,7 +5,7 @@
  * v1.json.spacetimedb JSON text WebSocket protocol.
  *
  * Usage:
- *   <body hx-ext="spacetimedb" ws-connect="ws://localhost:3000/v1/database/my_db/subscribe">
+ *   <body hx-ext="spacetimedb" ws-connect="/v1/database/my_db/subscribe">
  *     <button ws-send hx-vals='{"_reducer":"create_brick","x":0,"y":0}'>Place</button>
  *   </body>
  *
@@ -23,6 +23,15 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
     }
+  }
+
+  function resolveWsUrl(url) {
+    if (!url) return null;
+    if (/^wss?:\/\//i.test(url)) return url;
+
+    var resolved = new URL(url, window.location.href);
+    resolved.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return resolved.toString();
   }
 
   function subscribe() {
@@ -146,9 +155,10 @@
   function connect(url) {
     if (ws) return;
 
-    var wsUrl = url;
+    var wsUrl = resolveWsUrl(url);
+    if (!wsUrl) return;
     if (token) {
-      wsUrl += (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+      wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
     }
 
     ws = new WebSocket(wsUrl, "v1.json.spacetimedb");

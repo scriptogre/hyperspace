@@ -1,9 +1,14 @@
-use spacetimedb::{reducer, ReducerContext, Table};
 use crate::models::*;
 use crate::render;
+use spacetimedb::{reducer, ReducerContext, Table};
+
+const MAX_EVENT_LOGS: usize = 40;
 
 fn restack_cell(ctx: &ReducerContext, x: i32, y: i32) {
-    let mut bricks: Vec<_> = ctx.db.brick().iter()
+    let mut bricks: Vec<_> = ctx
+        .db
+        .brick()
+        .iter()
         .filter(|b| b.position.x == x && b.position.y == y)
         .collect();
     bricks.sort_by_key(|b| b.position.z);
@@ -19,6 +24,19 @@ fn restack_cell(ctx: &ReducerContext, x: i32, y: i32) {
     }
 }
 
+fn trim_events(ctx: &ReducerContext) {
+    let mut ids: Vec<_> = ctx.db.event().iter().map(|event| event.id).collect();
+    if ids.len() <= MAX_EVENT_LOGS {
+        return;
+    }
+
+    ids.sort_unstable();
+    let to_delete = ids.len() - MAX_EVENT_LOGS;
+    for id in ids.into_iter().take(to_delete) {
+        ctx.db.event().id().delete(id);
+    }
+}
+
 fn log_event(ctx: &ReducerContext, kind: EventKind, brick_id: Option<u64>) {
     ctx.db.event().insert(Event {
         id: 0,
@@ -27,13 +45,14 @@ fn log_event(ctx: &ReducerContext, kind: EventKind, brick_id: Option<u64>) {
         brick_id,
         timestamp: ctx.timestamp,
     });
+    trim_events(ctx);
 }
 
 fn broadcast(ctx: &ReducerContext) {
     for user in ctx.db.user().iter().filter(|u| u.online) {
         let html = render::render_body(&ctx.db, Some(&user.identity));
         // Upsert: delete old row if present, then insert new one
-        let _ = ctx.db.html_broadcast().identity().delete(&user.identity);
+        let _ = ctx.db.html_broadcast().identity().delete(user.identity);
         ctx.db.html_broadcast().insert(HtmlBroadcast {
             identity: user.identity,
             html,
@@ -46,8 +65,11 @@ fn broadcast(ctx: &ReducerContext) {
 #[reducer(client_connected)]
 pub fn on_connect(ctx: &ReducerContext) {
     let identity = ctx.sender();
-    if let Some(existing) = ctx.db.user().identity().find(&identity) {
-        ctx.db.user().identity().update(User { online: true, ..existing });
+    if let Some(existing) = ctx.db.user().identity().find(identity) {
+        ctx.db.user().identity().update(User {
+            online: true,
+            ..existing
+        });
     } else {
         let name = format!("User {}", ctx.db.user().count() + 1);
         ctx.db.user().insert(User {
@@ -64,18 +86,28 @@ pub fn on_connect(ctx: &ReducerContext) {
 #[reducer(client_disconnected)]
 pub fn on_disconnect(ctx: &ReducerContext) {
     let identity = ctx.sender();
-    if let Some(existing) = ctx.db.user().identity().find(&identity) {
-        ctx.db.user().identity().update(User { online: false, ..existing });
+    if let Some(existing) = ctx.db.user().identity().find(identity) {
+        ctx.db.user().identity().update(User {
+            online: false,
+            ..existing
+        });
     }
-    if ctx.db.cursor().identity().find(&identity).is_some() {
-        ctx.db.cursor().identity().delete(&identity);
+    if ctx.db.cursor().identity().find(identity).is_some() {
+        ctx.db.cursor().identity().delete(identity);
     }
-    for brick in ctx.db.brick().iter()
+    for brick in ctx
+        .db
+        .brick()
+        .iter()
         .filter(|b| b.dragged_by.as_ref() == Some(&identity))
         .collect::<Vec<_>>()
     {
-        ctx.db.brick().id().update(Brick { dragged_by: None, ..brick });
+        ctx.db.brick().id().update(Brick {
+            dragged_by: None,
+            ..brick
+        });
     }
+    let _ = ctx.db.html_broadcast().identity().delete(identity);
     log_event(ctx, EventKind::UserDisconnected, None);
     broadcast(ctx);
 }
@@ -84,11 +116,20 @@ pub fn on_disconnect(ctx: &ReducerContext) {
 
 #[reducer]
 pub fn create_brick(ctx: &ReducerContext, x: i32, y: i32) {
-    let z = ctx.db.brick().iter()
+    let z = ctx
+        .db
+        .brick()
+        .iter()
         .filter(|b| b.position.x == x && b.position.y == y)
         .count() as i32;
-    if z >= 5 { return; }
-    let color = ctx.db.user().identity().find(&ctx.sender())
+    if z >= 5 {
+        return;
+    }
+    let color = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
         .map(|u| u.color)
         .unwrap_or(Color::Cyan);
     ctx.db.brick().insert(Brick {
@@ -114,8 +155,15 @@ pub fn delete_brick(ctx: &ReducerContext, brick_id: u64) -> Result<(), String> {
 
 #[reducer]
 pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
-    if name.is_empty() { return Err("Empty name".into()); }
-    let user = ctx.db.user().identity().find(ctx.sender()).ok_or("Not found")?;
+    if name.is_empty() {
+        return Err("Empty name".into());
+    }
+    let user = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
+        .ok_or("Not found")?;
     ctx.db.user().identity().update(User { name, ..user });
     broadcast(ctx);
     Ok(())
@@ -123,7 +171,12 @@ pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
 
 #[reducer]
 pub fn set_color(ctx: &ReducerContext, color: Color) -> Result<(), String> {
-    let user = ctx.db.user().identity().find(ctx.sender()).ok_or("Not found")?;
+    let user = ctx
+        .db
+        .user()
+        .identity()
+        .find(ctx.sender())
+        .ok_or("Not found")?;
     ctx.db.user().identity().update(User { color, ..user });
     broadcast(ctx);
     Ok(())
@@ -131,8 +184,11 @@ pub fn set_color(ctx: &ReducerContext, color: Color) -> Result<(), String> {
 
 #[reducer]
 pub fn update_cursor(ctx: &ReducerContext, x: i32, y: i32, z: i32) {
-    let cursor = Cursor { identity: ctx.sender(), position: Position { x, y, z } };
-    if ctx.db.cursor().identity().find(&ctx.sender()).is_some() {
+    let cursor = Cursor {
+        identity: ctx.sender(),
+        position: Position { x, y, z },
+    };
+    if ctx.db.cursor().identity().find(ctx.sender()).is_some() {
         ctx.db.cursor().identity().update(cursor);
     } else {
         ctx.db.cursor().insert(cursor);
@@ -143,8 +199,13 @@ pub fn update_cursor(ctx: &ReducerContext, x: i32, y: i32, z: i32) {
 #[reducer]
 pub fn start_drag(ctx: &ReducerContext, brick_id: u64) -> Result<(), String> {
     let brick = ctx.db.brick().id().find(brick_id).ok_or("Not found")?;
-    if brick.dragged_by.is_some() { return Err("Already being dragged".into()); }
-    ctx.db.brick().id().update(Brick { dragged_by: Some(ctx.sender()), ..brick });
+    if brick.dragged_by.is_some() {
+        return Err("Already being dragged".into());
+    }
+    ctx.db.brick().id().update(Brick {
+        dragged_by: Some(ctx.sender()),
+        ..brick
+    });
     log_event(ctx, EventKind::DragStarted, Some(brick_id));
     broadcast(ctx);
     Ok(())
@@ -152,11 +213,17 @@ pub fn start_drag(ctx: &ReducerContext, brick_id: u64) -> Result<(), String> {
 
 #[reducer]
 pub fn end_drag(ctx: &ReducerContext) {
-    for brick in ctx.db.brick().iter()
+    for brick in ctx
+        .db
+        .brick()
+        .iter()
         .filter(|b| b.dragged_by.as_ref() == Some(&ctx.sender()))
         .collect::<Vec<_>>()
     {
-        ctx.db.brick().id().update(Brick { dragged_by: None, ..brick });
+        ctx.db.brick().id().update(Brick {
+            dragged_by: None,
+            ..brick
+        });
         log_event(ctx, EventKind::DragEnded, Some(brick.id));
     }
     broadcast(ctx);
@@ -165,10 +232,15 @@ pub fn end_drag(ctx: &ReducerContext) {
 #[reducer]
 pub fn move_brick(ctx: &ReducerContext, brick_id: u64, x: i32, y: i32) {
     if let Some(brick) = ctx.db.brick().id().find(brick_id) {
-        if brick.dragged_by.as_ref() != Some(&ctx.sender()) { return; }
+        if brick.dragged_by.as_ref() != Some(&ctx.sender()) {
+            return;
+        }
         let src_x = brick.position.x;
         let src_y = brick.position.y;
-        let new_z = ctx.db.brick().iter()
+        let new_z = ctx
+            .db
+            .brick()
+            .iter()
             .filter(|b| b.position.x == x && b.position.y == y)
             .count() as i32;
         ctx.db.brick().id().delete(brick.id);

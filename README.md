@@ -4,32 +4,6 @@ Real-time multiplayer isometric sandbox. Zero application JavaScript.
 
 ![Hyperspace demo](docs/demo.gif)
 
-```
-    ╭─────────────────────────────────────────────────────────╮
-    │                                                         │
-    │           ◆ Alice        ◆ Bob        ◆ Carol           │
-    │                                                         │
-    │                  ┌──┐                                   │
-    │                  │▓▓│                                   │
-    │               ┌──┼──┤  ┌──┐                             │
-    │               │▒▒│▓▓│  │░░│                             │
-    │            ┌──┼──┼──┤  ├──┤                             │
-    │            │░░│▒▒│▓▓│  │░░│        ┌──┐                 │
-    │         ╱ ╱ ╱├──┼──┤  ├──┤     ╱ ╱│▒▒│                 │
-    │        ╱ ╱ ╱ │░░│▒▒│  │░░│    ╱ ╱ ├──┤                 │
-    │       ╱ ╱ ╱ ╱├──┼──┘  ├──┘   ╱ ╱ ╱│▒▒│                 │
-    │      ╱ ╱ ╱ ╱ │░░│     │░░│  ╱ ╱ ╱ ├──┘                 │
-    │     ╱ ╱ ╱ ╱  └──┘     └──┘ ╱ ╱ ╱                       │
-    │    ╱ ╱ ╱ ╱             ╱ ╱ ╱ ╱                          │
-    │   ╱ ╱ ╱ ╱             ╱ ╱ ╱ ╱     12×12 isometric grid  │
-    │                                    CSS 3D transforms     │
-    │  Alice joined                      No canvas or WebGL    │
-    │  Bob placed a brick                                      │
-    │  Carol started dragging                                  │
-    │                                                         │
-    ╰─────────────────────────────────────────────────────────╯
-```
-
 ## How It Works
 
 ```
@@ -124,9 +98,9 @@ static/js/
   htmx-spacetimedb.js   generic SpacetimeDB ↔ htmx bridge      214 lines
 ```
 
-## Patched SpacetimeDB
+## SpacetimeDB
 
-This project runs on a [custom fork](https://github.com/scriptogre/SpacetimeDB/tree/hypermedia) of SpacetimeDB that adds an **HTTP route system** — the missing piece that makes server-driven hypermedia possible without an external web framework.
+This project runs on a [custom fork](https://github.com/scriptogre/SpacetimeDB/tree/hypermedia) of SpacetimeDB that adds an **HTTP route system**.
 
 ```
   Official SpacetimeDB           Patched (hypermedia branch)
@@ -141,7 +115,7 @@ This project runs on a [custom fork](https://github.com/scriptogre/SpacetimeDB/t
                                  Static file serving           ✓  ◄── new
 ```
 
-Without this patch, `GET /` couldn't return server-rendered HTML from inside the module — you'd need Rocket or Axum sitting in front, breaking the single-runtime model.
+Without this patch, `GET /` couldn't return server-rendered HTML from inside the module, and you'd need Rocket or Axum sitting in front, breaking the single-runtime model.
 
 ```rust
 // This is what the patch enables:

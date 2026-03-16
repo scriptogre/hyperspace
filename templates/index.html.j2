@@ -18,13 +18,13 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
   <script src="/static/js/vendor/idiomorph.min.js"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="/static/js/vendor/htmx.min.js"></script>
   <script src="/static/js/htmx-spacetimedb.js"></script>
 </head>
 
 <body class="group/body bg-surface text-gray-200 font-mono h-screen overflow-hidden"
       hx-ext="spacetimedb"
-      ws-connect="ws://localhost:3000/v1/database/hyperspace/subscribe"
+      ws-connect="/v1/database/hyperspace/subscribe"
       hx-on:keydown="if(event.key==='Shift') document.body?.setAttribute('data-delete-mode','')"
       hx-on:keyup="if(event.key==='Shift') document.body?.removeAttribute('data-delete-mode')"
       hx-on:mousemove="
@@ -54,28 +54,27 @@
         if (!vp || !vp.dataset.dragBrick) return;
         if (vp.dataset.dragMoved === '1') {
           stdb.callReducer('end_drag', []);
-        } else {
-          stdb.callReducer('create_brick', [parseInt(vp.dataset.dragCellX), parseInt(vp.dataset.dragCellY)]);
         }
         delete vp.dataset.dragBrick; delete vp.dataset.dragStartX; delete vp.dataset.dragStartY;
-        delete vp.dataset.dragMoved; delete vp.dataset.dragLastX; delete vp.dataset.dragLastY;
-        delete vp.dataset.dragCellX; delete vp.dataset.dragCellY;">
+        delete vp.dataset.dragMoved; delete vp.dataset.dragLastX; delete vp.dataset.dragLastY;">
 
   <div id="app" class="relative w-full h-full">
   {% block grid %}
 
     <div class="flex-1 relative overflow-hidden bg-surface select-none w-full h-full" id="grid-viewport">
-      <div class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2"
+      <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2"
            style="perspective: 1000px">
-        <div class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+        <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
              style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
 
           {% for row in range(grid_size) %}
             {% for col in range(grid_size) %}
-            <button class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
+            <button id="cell-{{ col }}-{{ row }}"
+                    class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
                            transition-colors duration-100 hover:bg-cyan-400/[0.08] hover:border-cyan-400/15
                            focus:outline-none"
                     data-cell-x="{{ col }}" data-cell-y="{{ row }}"
+                    hx-on:mouseenter="stdb.callReducer('update_cursor',[{{ col }},{{ row }},0])"
                     hx-on:click="stdb.callReducer('create_brick',[{{ col }},{{ row }}])"
                     style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}">
             </button>
@@ -98,9 +97,7 @@
                  if (event.shiftKey) { stdb.callReducer('delete_brick', [id]); return; }
                  var vp = document.body;
                  vp.dataset.dragBrick = id; vp.dataset.dragStartX = event.clientX;
-                 vp.dataset.dragStartY = event.clientY; vp.dataset.dragMoved = '0';
-                 vp.dataset.dragCellX = this.dataset.cellX;
-                 vp.dataset.dragCellY = this.dataset.cellY;"
+                 vp.dataset.dragStartY = event.clientY; vp.dataset.dragMoved = '0';"
                style="grid-column: {{ block.grid_x + 1 }}; grid-row: {{ block.grid_y + 1 }};
                       --color: {{ block.color }};
                       transform-style: preserve-3d;
@@ -109,7 +106,6 @@
             {# Top face #}
             <div class="size-16 border-2 border-white/25
                         transition-[opacity,border-color,background-color,box-shadow] duration-150
-                        starting:opacity-0 starting:scale-50
                         group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
                         group-hover/brick:border-cyan-400/80 group-hover/brick:shadow-[inset_0_0_16px_rgba(34,211,238,0.25)]
                         group-data-[delete-mode]/body:group-hover/brick:border-red-500 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/20 group-data-[delete-mode]/body:group-hover/brick:shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]"
@@ -119,7 +115,6 @@
             {# South wall (bottom-left in iso) #}
             <div class="absolute bottom-0 left-0 border-2 border-white/15
                         transition-[opacity,border-color,background-color] duration-150
-                        starting:opacity-0
                         group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
                         group-hover/brick:border-cyan-400/60
                         group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
@@ -130,7 +125,6 @@
             {# West wall (bottom-right in iso) #}
             <div class="absolute top-0 left-0 border-2 border-white/15
                         transition-[opacity,border-color,background-color] duration-150
-                        starting:opacity-0
                         group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
                         group-hover/brick:border-cyan-400/60
                         group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
@@ -156,7 +150,7 @@
       {% set denom = 1000000 - 612 * diff %}
       {% set sx = 707000 * sum // denom %}
       {% set sy = 354000 * diff // denom %}
-      <div id="cursor-{{ cursor.name }}" data-session="{{ cursor.session_id }}"
+      <div id="cursor-{{ cursor.session_id }}" data-session="{{ cursor.session_id }}"
            class="absolute pointer-events-none flex flex-col items-center -translate-x-1/2
                   {{ 'opacity-100' if is_self else 'opacity-60' }}"
            style="left: calc(50% + {{ sx }}px); top: calc(40% + {{ sy }}px - 40px); --color: {{ cursor.color }}">
@@ -176,7 +170,7 @@
     </div>
 
     {# HUD overlay — top-left, minimal #}
-    <div class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
+    <div id="hud-players" class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
       <div class="flex items-center gap-2">
         {% for user in users %}
           {% if user.online %}

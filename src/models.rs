@@ -1,6 +1,6 @@
-use spacetimedb::{Identity, ReducerContext, SpacetimeType, Timestamp};
-use spacetimedb::Filter;
 use spacetimedb::rand::Rng;
+use spacetimedb::Filter;
+use spacetimedb::{Identity, ReducerContext, SpacetimeType, Timestamp};
 
 // --- Custom types ---
 
@@ -16,8 +16,12 @@ pub enum Color {
 
 impl Color {
     pub const ALL: [Color; 6] = [
-        Color::Cyan, Color::Purple, Color::Orange,
-        Color::Green, Color::Pink, Color::Yellow,
+        Color::Cyan,
+        Color::Purple,
+        Color::Orange,
+        Color::Green,
+        Color::Pink,
+        Color::Yellow,
     ];
 
     pub fn hex(&self) -> &str {
@@ -125,6 +129,5 @@ pub struct HtmlBroadcast {
 }
 
 #[spacetimedb::client_visibility_filter]
-const BROADCAST_FILTER: Filter = Filter::Sql(
-    "SELECT * FROM html_broadcast WHERE html_broadcast.identity = :sender"
-);
+const BROADCAST_FILTER: Filter =
+    Filter::Sql("SELECT * FROM html_broadcast WHERE html_broadcast.identity = :sender");

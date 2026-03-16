@@ -6,8 +6,7 @@ async function waitForReady(page: Page) {
     () => localStorage.getItem('stdb_token') !== null,
     { timeout: 10_000 },
   );
-  // Wait for initial morph to settle (on_connect broadcast)
-  await page.waitForTimeout(1500);
+  await expect(page.locator('#console-log')).toContainText('joined', { timeout: 10_000 });
 }
 
 /** Click a grid cell at the given coordinates. */
@@ -51,9 +50,8 @@ test.describe('reducer calls', () => {
     await page.goto('/');
     await waitForReady(page);
 
-    // Use a random position to avoid 5-brick stacking limit from prior runs
-    const x = Math.floor(Math.random() * 10);
-    const y = Math.floor(Math.random() * 10);
+    const x = 10;
+    const y = 0;
     const countBefore = await page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`).count();
 
     await clickCell(page, x, y);
@@ -69,8 +67,7 @@ test.describe('reducer calls', () => {
     await page.goto('/');
     await waitForReady(page);
 
-    // Pick a corner position less likely to be used
-    const x = 9, y = 0;
+    const x = 11, y = 0;
     const countBefore = await page.locator(`[data-brick-id][data-cell-x="${x}"][data-cell-y="${y}"]`).count();
 
     await clickCell(page, x, y);
@@ -89,11 +86,12 @@ test.describe('reducer calls', () => {
     await clickCell(page, 5, 5);
 
     // Wait for at least 1 block
-    await expect(page.locator('[id^="block-"]').first()).toBeVisible({ timeout: 8000 });
+    const cellBricks = page.locator('[data-brick-id][data-cell-x="5"][data-cell-y="5"]');
+    await expect(cellBricks.first()).toBeVisible({ timeout: 8000 });
     const blocksBefore = await page.locator('[id^="block-"]').count();
 
     // Shift+click the brick to delete
-    const brickFace = page.locator('[data-brick-id]').first();
+    const brickFace = cellBricks.first();
     await brickFace.click({ force: true, modifiers: ['Shift'] });
 
     // Wait for block count to decrease
@@ -150,8 +148,9 @@ test.describe('drag and drop', () => {
     await page.mouse.move(dstBox!.x + dstBox!.width / 2, dstBox!.y + dstBox!.height / 2, { steps: 10 });
     await page.mouse.up();
 
-    // Brick should move away from (2,2)
+    // Brick should move away from (2,2) and land at (6,2)
     await expect(page.locator('[data-brick-id][data-cell-x="2"][data-cell-y="2"]')).toHaveCount(0, { timeout: 8000 });
+    await expect(page.locator('[data-brick-id][data-cell-x="6"][data-cell-y="2"]')).toHaveCount(1, { timeout: 8000 });
   });
 });
 
@@ -170,17 +169,18 @@ test.describe('multi-user', () => {
 
     await Promise.all([waitForReady(p1), waitForReady(p2)]);
 
-    const beforeP1 = await p1.locator('[id^="block-"]').count();
-    const beforeP2 = await p2.locator('[id^="block-"]').count();
+    const target = '[data-brick-id][data-cell-x="0"][data-cell-y="0"]';
+    const beforeP1 = await p1.locator(target).count();
+    const beforeP2 = await p2.locator(target).count();
 
     // Player 1 creates a brick at an edge position unlikely to have prior bricks
     await clickCell(p1, 0, 0);
 
     // Player 1 should see more bricks
-    await expect(p1.locator('[id^="block-"]')).not.toHaveCount(beforeP1, { timeout: 8000 });
+    await expect(p1.locator(target)).toHaveCount(beforeP1 + 1, { timeout: 8000 });
 
-    // Player 2 should also see more bricks
-    await expect(p2.locator('[id^="block-"]')).not.toHaveCount(beforeP2, { timeout: 8000 });
+    // Player 2 should also see the same cell update
+    await expect(p2.locator(target)).toHaveCount(beforeP2 + 1, { timeout: 8000 });
 
     await Promise.all([ctx1.close(), ctx2.close()]);
   });
