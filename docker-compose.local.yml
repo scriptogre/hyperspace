@@ -1,0 +1,12 @@
+services:
+  spacetimedb:
+    build: .
+    container_name: spacetimedb
+    ports:
+      - "3000:3000"
+    volumes:
+      - hyperspace_stdb:/stdb
+    restart: unless-stopped
+
+volumes:
+  hyperspace_stdb:

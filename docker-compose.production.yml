@@ -1,0 +1,19 @@
+services:
+  spacetimedb:
+    build: .
+    container_name: spacetimedb
+    expose:
+      - "3000"
+    volumes:
+      - hyperspace_stdb:/stdb
+    networks:
+      - proxy
+      - default
+    restart: unless-stopped
+
+volumes:
+  hyperspace_stdb:
+
+networks:
+  proxy:
+    external: true
