@@ -4,16 +4,11 @@ services:
     container_name: spacetimedb
     expose:
       - "3000"
+    environment:
+      - SPACETIMEDB_DEFAULT_MODULE=hyperspace
     volumes:
       - hyperspace_stdb:/stdb
-    networks:
-      - proxy
-      - default
     restart: unless-stopped
 
 volumes:
   hyperspace_stdb:
-
-networks:
-  proxy:
-    external: true
