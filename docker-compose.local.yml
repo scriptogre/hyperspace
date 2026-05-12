@@ -8,5 +8,14 @@ services:
       - hyperspace_stdb:/stdb
     restart: unless-stopped
 
+  tailwindcss:
+    image: oven/bun:1-alpine
+    tty: true
+    init: true
+    working_dir: /code
+    volumes:
+      - .:/code
+    command: sh -c "bun install --frozen-lockfile && bunx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch"
+
 volumes:
   hyperspace_stdb:

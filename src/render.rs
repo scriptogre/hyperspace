@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use minijinja::{context, Environment};
+use minijinja::{context, Environment, Value};
 use spacetimedb::{Identity, Local, Table};
 
 use crate::models::*;
@@ -13,7 +13,7 @@ static TEMPLATES: LazyLock<Environment<'static>> = LazyLock::new(|| {
 });
 
 const GRID_SIZE: i32 = 12;
-const MAX_RENDERED_LOGS: usize = 40;
+const MAX_RENDERED_LOGS: usize = 10;
 
 fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
     let mut brick_rows: Vec<_> = db.brick().iter().collect();
@@ -76,16 +76,14 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
     let logs: Vec<_> = event_rows
         .into_iter()
         .map(|e| {
-            let user_name = db
-                .user()
-                .identity()
-                .find(e.identity)
-                .map(|u| u.name.clone())
-                .unwrap_or_else(|| "Someone".into());
+            let user = db.user().identity().find(e.identity);
+            let user_name = user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| "Someone".into());
+            let user_color = user.as_ref().map(|u| u.color.hex()).unwrap_or("#888");
             context! {
                 id => e.id,
-                message => format!("{} {}", user_name, e.kind.label()),
-                color => e.kind.css_color(),
+                user_name,
+                user_color,
+                kind => Value::from_serialize(&e.kind),
             }
         })
         .collect();

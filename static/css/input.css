@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@plugin "@iconify/tailwind4";
+
+@source '../../templates';
+
+@theme {
+  --color-surface: #1a2332;
+  --color-surface-light: #243447;
+  --color-surface-lighter: #2d4055;
+  --font-mono: 'JetBrains Mono', monospace;
+}

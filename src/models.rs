@@ -47,7 +47,7 @@ pub struct Position {
     pub z: i32,
 }
 
-#[derive(SpacetimeType)]
+#[derive(SpacetimeType, serde::Serialize)]
 pub enum EventKind {
     UserConnected,
     UserDisconnected,
@@ -57,28 +57,6 @@ pub enum EventKind {
     DragEnded,
 }
 
-impl EventKind {
-    pub fn label(&self) -> &str {
-        match self {
-            EventKind::UserConnected => "joined",
-            EventKind::UserDisconnected => "left",
-            EventKind::BrickCreated => "placed a brick",
-            EventKind::BrickDeleted => "removed a brick",
-            EventKind::DragStarted => "started dragging",
-            EventKind::DragEnded => "stopped dragging",
-        }
-    }
-
-    pub fn css_color(&self) -> &str {
-        match self {
-            EventKind::UserConnected => "text-green-400",
-            EventKind::UserDisconnected => "text-gray-500",
-            EventKind::BrickCreated => "text-cyan-400",
-            EventKind::BrickDeleted => "text-red-400",
-            EventKind::DragStarted | EventKind::DragEnded => "text-yellow-400",
-        }
-    }
-}
 
 // --- Tables ---
 

@@ -5,15 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hyperspace</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style type="text/tailwindcss">
-    @theme {
-      --color-surface: #1a2332;
-      --color-surface-light: #243447;
-      --color-surface-lighter: #2d4055;
-      --font-mono: 'JetBrains Mono', monospace;
-    }
-  </style>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link href="/static/css/output.css" rel="stylesheet">
 
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
@@ -183,11 +176,22 @@
       </div>
     </div>
 
-    {# Console — bottom-left, minimal log #}
-    <div id="console-log" class="absolute bottom-4 left-5 z-50 pointer-events-none
-                                  flex flex-col-reverse text-[10px] leading-relaxed space-y-px space-y-reverse max-h-26 overflow-hidden opacity-75">
-      {% for entry in logs | reverse %}
-      <div id="log-{{ entry.id }}" class="{{ entry.color }}">{{ entry.message }}</div>
+    {# Console — top-right, HL2-style kill feed #}
+    {% set events = {
+      'UserConnected':    'joined',
+      'UserDisconnected': 'left',
+      'BrickCreated':     'placed a brick',
+      'BrickDeleted':     'removed a brick',
+      'DragStarted':      'started dragging',
+      'DragEnded':        'stopped dragging',
+    } %}
+    <div id="console-log" class="absolute top-4 right-5 z-50 pointer-events-none
+                                  w-52 h-[200px] flex flex-col justify-end items-end gap-1.5 text-[10px] text-gray-400 overflow-hidden opacity-75">
+      {% for entry in logs %}
+      <div id="log-{{ entry.id }}" class="flex items-center gap-1.5 whitespace-nowrap">
+        <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: {{ entry.user_color }}"></span>
+        <span>{{ entry.user_name }} {{ events[entry.kind] }}</span>
+      </div>
       {% endfor %}
     </div>
 
