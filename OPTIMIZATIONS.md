@@ -161,9 +161,38 @@ wins and we would hit the 125ms wall.
 
 Two honest notes. The ORM is its own tax: reading everything raw is 1.3ms, but
 through Tortoise it was 18.8ms, almost all of it building objects. We dodge that
-with raw SQL on the hot paths. And our remaining bottleneck is rendering HTML,
-about 14ms for a thousand cursors, which SpacetimeDB sidesteps because it ships
-row deltas and lets the client draw.
+with raw SQL on the hot paths. And rendering HTML still costs us, about 9ms for a
+thousand cursors moving at once, which SpacetimeDB sidesteps because it ships row
+deltas and lets the client draw.
+
+## What the load test was hiding
+
+Our load test ran a thousand fake clients over loopback. It said render was the
+wall at a few milliseconds and everything else was cheap. Then we made some
+clients read slowly, like a phone on a bad connection.
+
+One broadcast round jumped to 872ms.
+
+The broadcast loop sent to each client in turn and waited for each send to finish:
+
+```python
+for ws in connections:
+    await ws.send_bytes(blob)
+```
+
+On loopback every send finishes instantly, so this looked free. Over a real link a
+slow client's buffer fills, that one await blocks, and the whole loop stops. One
+person on bad wifi freezes the room.
+
+Fix: give each client its own small queue and a background task that drains it. The
+loop only drops the bytes into the queue and moves on. A slow client backs up its
+own queue (we drop its oldest frames), never the loop.
+
+Result: the same test went from 872ms back to 0.6ms, and slow clients fall behind
+on their own instead of stalling everyone.
+
+The lesson: loopback measures your CPU, not your network. The bottleneck that bites
+in production was invisible until we simulated a slow reader.
 
 ## The throughline
 
