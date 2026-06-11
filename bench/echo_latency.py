@@ -8,13 +8,14 @@ generate background cursor load. Run the server on :8001 first, then:
 """
 
 import asyncio
+import os
 import statistics
 import time
 import uuid
 
 import websockets
 
-URL = "ws://127.0.0.1:8001/ws"
+URL = os.environ.get("HS_WS_URL", "ws://127.0.0.1:8001/ws")
 
 
 def _conn(session_id: str):

@@ -18,9 +18,9 @@ from app.jinja import render
 _ZSTD = zstandard.ZstdCompressor(level=3)
 
 PAGE = "index.html.j2"
-STAGE = "_stage.html.j2"
-CURSORS = "_cursors.html.j2"
-CURSOR_FRAGMENTS = "_cursor_fragments.html.j2"
+STAGE = "index.html.j2#stage"
+CURSORS = "index.html.j2#cursor_layer"
+CURSOR_FRAGMENTS = "index.html.j2#cursor_fragments"
 
 # Tables whose changes affect the structural region (everything but cursors).
 _STRUCTURAL = {"brick", "user", "event"}
@@ -111,6 +111,12 @@ async def index(session_id: str = Depends(get_session_id)):
         "current_session_id": session_id,
         "show_player_setup": session_id not in services.known_ids(),
     })
+
+
+@router.get("/health")
+async def health() -> str:
+    """Liveness probe for the container healthcheck."""
+    return "ok"
 
 
 @router.websocket("/ws")

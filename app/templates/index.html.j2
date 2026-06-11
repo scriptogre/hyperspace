@@ -1,0 +1,328 @@
+{# One lean node per cursor. Position is driven by --sx/--sy custom props; the
+   client's own cursor (id from body data-session) sets them locally for instant
+   prediction, and the morph preserves its style. #}
+{% macro cursor_node(cursor, grid_size) %}
+{% set cell = 64 %}
+{% set half = grid_size * cell // 2 %}
+{% set px = cursor.grid_x * cell + cell // 2 - half %}
+{% set py = cursor.grid_y * cell + cell // 2 - half %}
+{% set diff = py - px %}
+{% set sum = px + py %}
+{% set denom = 1000000 - 612 * diff %}
+{% set sx = 707000 * sum // denom %}
+{% set sy = 354000 * diff // denom %}
+<div id="cursor-{{ cursor.session_id }}" class="cursor"
+     style="--sx:{{ sx }}px; --sy:{{ sy }}px; --color:var(--color-brick-{{ cursor.color }})">
+  <span class="cursor-name">{{ cursor.name }}</span>
+  <span class="cursor-dot"></span>
+</div>
+{% endmacro %}
+{# Grid, bricks, HUD and kill-feed. Broadcast as the #stage region. #}
+{% macro stage() %}
+<div id="stage" class="absolute inset-0">
+
+    <div class="flex-1 relative overflow-hidden bg-background select-none w-full h-full" id="grid-viewport">
+      <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
+           style="perspective: 1000px">
+        <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+             data-grid-size="{{ grid_size }}"
+             style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)"
+             hx-on="
+               pointerover -> {
+                 var cell = event.target.closest('[data-cell-x]');
+                 if (!cell) return;
+                 var cx = +cell.dataset.cellX, cy = +cell.dataset.cellY;
+                 hyperspace.call('update_cursor', [cx, cy, 0]);
+                 var c = document.getElementById('cursor-' + document.body.dataset.session);
+                 if (!c) return;
+                 var half = +this.dataset.gridSize * 32;
+                 var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
+                 var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
+                 c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
+                 c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
+               };
+               click -> {
+                 var cell = event.target.closest('[data-cell-x]');
+                 if (cell) hyperspace.call('create_brick', [+cell.dataset.cellX, +cell.dataset.cellY]);
+               };
+               pointerdown -> {
+                 var brick = event.target.closest('[data-brick-id]');
+                 if (!brick) return;
+                 event.preventDefault(); event.stopPropagation();
+                 var id = parseInt(brick.dataset.brickId);
+                 if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); hyperspace.call('delete_brick', [id]); return; }
+                 document.body.dataset.dragBrick = id;
+                 document.body.dataset.dragStartX = event.clientX;
+                 document.body.dataset.dragStartY = event.clientY;
+                 document.body.dataset.dragMoved = '0';
+               }">
+
+          {% for row in range(grid_size) %}
+            {% for col in range(grid_size) %}
+            <button data-cell-x="{{ col }}" data-cell-y="{{ row }}" class="grid-cell"
+                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}"></button>
+            {% endfor %}
+          {% endfor %}
+
+          {% set depth = 12 %}
+          {% for block in blocks %}
+          <div id="block-{{ block.id }}"
+               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}" data-z="{{ block.grid_z }}"
+               data-brick-id="{{ block.id }}"
+               {{ 'data-server-grabbing' if block.is_being_dragged else '' }}
+               :data-grabbing="(data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing') ? '' : null"
+               :data-pred-x="data.predX != null && data.x === data.predX ? null : data.predX"
+               :data-pred-y="data.predY != null && data.y === data.predY ? null : data.predY"
+               :style="{
+                 gridColumn: (data.predX != null ? +data.predX : +data.x) + 1,
+                 gridRow:    (data.predY != null ? +data.predY : +data.y) + 1,
+                 zIndex: ((data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing'))
+                           ? 1000
+                           : ((+data.x + +data.y) * 10 + +data.z * 100 + 1)
+               }"
+               class="group/brick brick"
+               style="--color: var(--color-brick-{{ block.color }});
+                      transform-style: preserve-3d;
+                      transform: translateZ({{ block.grid_z * depth }}px)">
+            {# Top face #}
+            <div class="brick-top"
+                 style="background: var(--color);
+                        transform: translateZ({{ depth }}px)">
+              <div class="brick-overlay"></div>
+            </div>
+            {# South wall (bottom-left in iso) #}
+            <div class="brick-wall bottom-0"
+                 style="width: 64px; height: {{ depth }}px;
+                        background: color-mix(in srgb, var(--color) 65%, black);
+                        transform-origin: bottom; transform: rotateX(-90deg)">
+            </div>
+            {# West wall (bottom-right in iso) #}
+            <div class="brick-wall top-0"
+                 style="width: {{ depth }}px; height: 64px;
+                        background: color-mix(in srgb, var(--color) 45%, black);
+                        transform-origin: left; transform: rotateY(-90deg)">
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
+      </div>
+    </div>
+
+    {# HUD overlay #}
+    <button id="logout-btn"
+            hx-on="click -> { document.cookie = 'hyperspace_id=; Max-Age=0; Path=/; SameSite=Lax'; location.reload(); }"
+            title="Log out"
+            class="absolute bottom-12 sm:bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
+      <span class="icon-[lucide--log-out] size-4 block"></span>
+    </button>
+
+    {% if online_count > 0 %}
+    <div id="hud-players" class="absolute top-16 sm:top-4 left-4 pointer-events-none z-50 font-sans text-xs">
+      <div class="rounded-xl bg-card/80 backdrop-blur-md border border-border shadow-iso-sm px-3 py-2 space-y-1.5 min-w-[120px] max-w-[200px]">
+        <div class="text-[10px] uppercase tracking-widest font-medium text-muted-foreground">
+          Online · {{ online_count }}
+        </div>
+        <div class="space-y-1">
+          {% for user in users if user.online %}
+            {% if loop.index <= 5 %}
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full shrink-0" style="background: var(--color-brick-{{ user.color }})"></span>
+              <span class="text-foreground truncate">{{ user.name }}</span>
+            </div>
+            {% endif %}
+          {% endfor %}
+          {% if online_count > 5 %}
+          <div class="text-muted-foreground text-[10px] pl-4 pt-0.5">+ {{ online_count - 5 }} more</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Console, top-right, HL2-style kill feed #}
+    {% set event_labels = {
+      'UserConnected':    'joined',
+      'UserDisconnected': 'left',
+      'BrickCreated':     'placed a brick',
+      'BrickDeleted':     'removed a brick',
+      'DragStarted':      'started dragging',
+      'DragEnded':        'stopped dragging',
+    } %}
+    <div id="console-log" class="absolute top-4 right-5 z-50 pointer-events-none
+                                  w-52 h-[200px] hidden sm:flex flex-col justify-end items-end gap-1.5 font-sans text-xs text-muted-foreground overflow-hidden">
+      {% for entry in logs %}
+      <div id="log-{{ entry.id }}" class="flex items-center gap-1.5 whitespace-nowrap">
+        <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: var(--color-brick-{{ entry.user_color }})"></span>
+        <span>{{ entry.user_name }} {{ event_labels[entry.kind] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+</div>
+{% endmacro %}
+{# All active cursors. Broadcast as the #cursors region on first connect. #}
+{% macro cursor_layer() %}
+<div id="cursors" class="absolute inset-0 pointer-events-none">
+  {% for cursor in cursors %}{{ cursor_node(cursor, grid_size) }}{% endfor %}
+</div>
+{% endmacro %}
+{# A flat batch of changed cursors. Active ones morph into place (appended if
+   new); inactive ones carry data-remove so the client drops them. #}
+{% macro cursor_fragments() %}
+{% for cursor in cursors %}
+{% if cursor.active %}{{ cursor_node(cursor, grid_size) }}
+{% else %}<div id="cursor-{{ cursor.session_id }}" data-remove></div>
+{% endif %}
+{% endfor %}
+{% endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="htmx-config" content='{"morphIgnore":["data-htmx-powered","data-grabbing","data-pending-delete","data-pred-x","data-pred-y","data-pred-sx","data-pred-sy"]}'>
+  <title>Hyperspace</title>
+
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link href="/static/css/output.css?v=mobile4" rel="stylesheet">
+
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="/static/js/vendor/htmx.min.js"></script>
+  <script src="/static/js/vendor/hx-live.min.js"></script>
+  <script src="/static/js/vendor/hx-optimistic.min.js"></script>
+  <script src="/static/js/vendor/idiomorph.min.js"></script>
+  <script src="/static/js/vendor/fzstd.min.js"></script>
+  <script src="/static/js/hyperspace.js"></script>
+</head>
+
+<body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
+      data-session="{{ current_session_id }}"
+      hx-on="
+        keydown[event.key=='Shift'] -> data.deleteMode = true;
+        keyup[event.key=='Shift']   -> data.deleteMode = false;
+        pointermove -> {
+          if (!data.dragBrick) return;
+          var dx = event.clientX - parseInt(data.dragStartX);
+          var dy = event.clientY - parseInt(data.dragStartY);
+          if (data.dragMoved !== '1' && Math.abs(dx) + Math.abs(dy) > 8) {
+            data.dragMoved = '1';
+            hyperspace.call('start_drag', [parseInt(data.dragBrick)]);
+          }
+          if (data.dragMoved !== '1') return;
+          var el = document.getElementById('block-' + data.dragBrick);
+          if (el) el.style.pointerEvents = 'none';
+          var under = document.elementFromPoint(event.clientX, event.clientY);
+          if (el) el.style.pointerEvents = '';
+          if (!under) return;
+          var target = under.closest('[data-brick-id]') || under.closest('button[data-cell-x]');
+          if (!target) return;
+          var cx = target.dataset.x ?? target.dataset.cellX;
+          var cy = target.dataset.y ?? target.dataset.cellY;
+          if (data.dragLastX !== cx || data.dragLastY !== cy) {
+            data.dragLastX = cx; data.dragLastY = cy;
+            if (el) { el.dataset.predX = cx; el.dataset.predY = cy; }
+            hyperspace.call('move_brick', [parseInt(data.dragBrick), parseInt(cx), parseInt(cy)]);
+          }
+        };
+        pointerup -> {
+          if (!data.dragBrick) return;
+          if (data.dragMoved === '1') hyperspace.call('end_drag', []);
+          attr('data-drag-brick', false);
+          attr('data-drag-start-x', false);
+          attr('data-drag-start-y', false);
+          attr('data-drag-moved', false);
+          attr('data-drag-last-x', false);
+          attr('data-drag-last-y', false);
+        }">
+
+  <div id="app" class="relative w-full h-full">
+    {{ stage() }}
+    {{ cursor_layer() }}
+  </div>
+
+  {# Welcome modal lives outside #app so broadcasts (which morph #app) never wipe it. #}
+  {% if show_player_setup %}
+  <div id="setup-overlay" class="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md font-sans text-sm text-foreground overflow-y-auto p-4">
+    <div class="flex flex-col sm:flex-row items-stretch gap-4 my-auto">
+
+      {# Form card #}
+      <div class="w-full sm:w-[280px] rounded-2xl bg-card border border-border p-6 shadow-iso flex flex-col gap-5">
+        <div class="space-y-2">
+          <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Name</div>
+          <input name="set_name" autofocus
+                 hx-on="keydown[event.key=='Enter'] -> q('button[name=continue]').click()"
+                 class="w-full rounded-xl bg-card border border-border px-3 py-2 text-foreground outline-none focus:border-primary transition-colors font-sans text-base sm:text-sm">
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Color</div>
+          <div class="flex gap-2 justify-between">
+            {% for c in ['Cyan','Pink','Purple','Yellow','Green','Orange'] %}
+            <button type="button" data-color="{{ c }}"
+                    hx-on="click -> take('.is-selected', '.color-pick')"
+                    class="color-pick relative h-7 w-7 rounded-md cursor-pointer transition-transform hover:scale-110 bg-brick-{{ c|lower }}">
+              <span class="pick-check absolute inset-0 items-center justify-center">
+                <span class="icon-[lucide--check] text-foreground size-5 [filter:drop-shadow(0_1px_2px_rgba(255,255,255,0.85))] dark:[filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.85))]"></span>
+              </span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <button name="continue"
+                :disabled="!q('input[name=set_name]').value.trim() || q('.color-pick.is-selected').count === 0"
+                hx-on="click -> {
+                  var name = document.querySelector('input[name=set_name]').value.trim();
+                  var sel = document.querySelector('.color-pick.is-selected');
+                  hyperspace.call('complete_setup', [name, sel.dataset.color]);
+                  document.getElementById('setup-overlay').remove();
+                }"
+                class="mt-auto w-full rounded-xl bg-primary text-primary-foreground font-semibold py-2 cursor-pointer transition-colors hover:bg-primary/90
+                       disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary">
+          Continue
+        </button>
+      </div>
+
+      {# Controls card #}
+      <div class="w-full sm:w-[260px] rounded-2xl bg-card border border-border p-6 shadow-iso flex flex-col gap-5">
+        <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Controls</div>
+        <div class="flex-1 grid grid-cols-[auto_1fr] items-center gap-x-5 gap-y-4 py-2 text-sm">
+          <div class="flex items-center justify-end gap-1.5">
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+              <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+            </kbd>
+          </div>
+          <span class="text-foreground">Place</span>
+
+          <div class="flex items-center justify-end gap-1.5">
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+              <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+            </kbd>
+            <span class="text-muted-foreground">+</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+              <span class="icon-[lucide--move] size-3 text-muted-foreground"></span>DRAG
+            </kbd>
+          </div>
+          <span class="text-foreground">Move</span>
+
+          <div class="flex items-center justify-end gap-1.5">
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+              <span class="icon-[lucide--arrow-big-up] size-3 text-muted-foreground"></span>SHIFT
+            </kbd>
+            <span class="text-muted-foreground">+</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+              <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+            </kbd>
+          </div>
+          <span class="text-foreground">Erase</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  {% endif %}
+
+</body>
+</html>

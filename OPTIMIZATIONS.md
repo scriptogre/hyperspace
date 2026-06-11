@@ -116,6 +116,55 @@ realistic mix (a fraction moving at once), one worker reaches ~4000 users.
 - **No Redis cache.** Redis is a separate process, so a read still pays a network
   round trip. That is the same cost as reading Postgres, so it would not help.
 
+## Aren't the database round-trips the real cost?
+
+You might expect that, without colocating data and logic the way SpacetimeDB
+does, every cursor move paying a trip to Postgres would be the bottleneck. We
+measured it (`bench/db_reads.py`). It is not.
+
+Reading the changed cursors for a round where 1000 people moved, against a normal
+Postgres:
+
+| how we read it                         | trips/round | time   |
+| -------------------------------------- | ----------- | ------ |
+| one query, names from the memory cache | 1           | 0.7ms  |
+| one query with a JOIN, no cache        | 1           | 1.2ms  |
+| read all four tables every round       | 4           | 1.3ms  |
+| one user lookup per cursor             | 1001        | 125ms  |
+
+Each round-trip is about 0.12ms. So the cost is not Postgres being slow. It is
+how many trips you make.
+
+One query is cheap, even when it reads everything. The memory cache saves about
+half a millisecond over a plain JOIN, so it is a convenience, not the thing
+holding the system up.
+
+The cliff is the last row: one query per cursor, the classic N+1. A thousand
+trips back to back is 125ms. That is the pattern to never write.
+
+## So do we still need SpacetimeDB?
+
+SpacetimeDB runs your logic inside the database, against in-memory tables, so a
+read is a function call: no socket, no SQL parse, no row-to-object step. It
+removes the round-trip entirely.
+
+We reach a similar place a different way: we refuse to make more than one trip per
+round. The version-column change feed, render-once, the player cache, and raw SQL
+on the hot paths all exist to hold that line.
+
+The difference is who carries the discipline. SpacetimeDB lets you write the naive
+per-cursor loop and stays fast because nothing leaves the process. We have to keep
+the access batched ourselves. For a simple world (cursors and bricks) that is
+easy. For heavy per-entity simulation (physics, AI touching hundreds of entities
+a tick) you cannot fold the logic into one query, and that is where colocation
+wins and we would hit the 125ms wall.
+
+Two honest notes. The ORM is its own tax: reading everything raw is 1.3ms, but
+through Tortoise it was 18.8ms, almost all of it building objects. We dodge that
+with raw SQL on the hot paths. And our remaining bottleneck is rendering HTML,
+about 14ms for a thousand cursors, which SpacetimeDB sidesteps because it ships
+row deltas and lets the client draw.
+
 ## The throughline
 
 Two ideas did most of the work:
