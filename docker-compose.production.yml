@@ -21,7 +21,11 @@ services:
       - target_cache:/module/target
       - stdb_cli:/opt/stdb
       - publisher_home:/root
-    command: ["bash", "scripts/publish.sh"]
+      - hyperspace_static:/assets       # snapshot the global Caddy serves
+    # Publish the module, then refresh the static snapshot. The global Caddy
+    # serves /assets from a volume, not the live tree, so editing the synced
+    # working dir never touches production until the next deploy.
+    command: ["bash", "-c", "bash scripts/publish.sh && rm -rf /assets/* && cp -a static/. /assets/"]
     depends_on:
       spacetimedb:
         condition: service_started
@@ -33,3 +37,5 @@ volumes:
   target_cache:
   stdb_cli:
   publisher_home:
+  hyperspace_static:
+    name: hyperspace_static
