@@ -1,13 +1,11 @@
 """minijinja (Rust) template rendering. Named jinja.py by convention."""
 
-from pathlib import Path
-
 import minijinja
 
-_TEMPLATES_DIR = Path(__file__).parent / "templates"
+from app.config import settings
 
 _env = minijinja.Environment(
-    loader=lambda name: (_TEMPLATES_DIR / name).read_text(),
+    loader=lambda name: (settings.TEMPLATES_DIR / name).read_text(),
     auto_escape_callback=lambda name: True,
 )
 
