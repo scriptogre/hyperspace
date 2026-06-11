@@ -31,8 +31,13 @@ TICK = 0.02
 
 router = APIRouter()
 
-# session_id -> active WebSocket for all connections on this worker
-connections: dict[str, WebSocket] = {}
+# A slow client may fall this many frames behind before the broadcast loop drops
+# its oldest. Bounds how far one bad link can lag without stalling everyone.
+SEND_QUEUE_MAX = 64
+
+# session_id -> per-client send queue. A background writer drains each one, so a
+# slow socket backs up only its own queue, never the broadcast loop.
+connections: dict[str, asyncio.Queue] = {}
 
 # Set by the Postgres listener (one table name per change) to wake the loop.
 _dirty = asyncio.Event()
@@ -76,12 +81,13 @@ async def broadcast_loop() -> None:
         blobs = [_ZSTD.compress(r.encode()) for r in regions]  # compress once
         t2b = time.monotonic()
 
-        for session_id, websocket in list(connections.items()):
-            try:
-                for blob in blobs:
-                    await websocket.send_bytes(blob)
-            except Exception:
-                connections.pop(session_id, None)
+        for queue in list(connections.values()):
+            if queue.full():
+                try:
+                    queue.get_nowait()  # drop this slow client's oldest frame
+                except asyncio.QueueEmpty:
+                    pass
+            queue.put_nowait(blobs)
         t3 = time.monotonic()
 
         if _BCAST_LOG:
@@ -119,6 +125,18 @@ async def health() -> str:
     return "ok"
 
 
+async def _client_writer(session_id: str, websocket: WebSocket, queue: asyncio.Queue) -> None:
+    """Drain one client's queue to its socket. A slow socket backs up only this
+    task; the broadcast loop keeps going."""
+    try:
+        while True:
+            blobs = await queue.get()
+            for blob in blobs:
+                await websocket.send_bytes(blob)
+    except Exception:
+        connections.pop(session_id, None)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -128,13 +146,17 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001)
         return
 
-    connections[session_id] = websocket
+    # Send the full initial state before registering for broadcasts, so the first
+    # frame a client sees is the whole stage, never a delta morphed onto nothing.
+    await services.on_connect(session_id)
+    await websocket.send_bytes(_ZSTD.compress(render(STAGE, await services.stage_state()).encode()))
+    await websocket.send_bytes(_ZSTD.compress(render(CURSORS, await services.cursor_state()).encode()))
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
+    connections[session_id] = queue
+    writer = asyncio.create_task(_client_writer(session_id, websocket, queue))
 
     try:
-        await services.on_connect(session_id)
-        await websocket.send_bytes(_ZSTD.compress(render(STAGE, await services.stage_state()).encode()))
-        await websocket.send_bytes(_ZSTD.compress(render(CURSORS, await services.cursor_state()).encode()))
-
         while True:
             msg = json.loads(await websocket.receive_text())
             await _dispatch(session_id, msg["fn"], msg.get("args", []))
@@ -143,6 +165,7 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
     finally:
         connections.pop(session_id, None)
+        writer.cancel()
         await services.on_disconnect(session_id)
 
 
