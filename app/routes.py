@@ -18,9 +18,9 @@ from app.jinja import render
 _ZSTD = zstandard.ZstdCompressor(level=3)
 
 PAGE = "index.html.j2"
-STAGE = "index.html.j2#stage"
-CURSORS = "index.html.j2#cursor_layer"
-CURSOR_FRAGMENTS = "index.html.j2#cursor_fragments"
+STAGE = "_stage.html.j2"
+CURSORS = "_cursors.html.j2"
+CURSOR_FRAGMENTS = "_cursor_fragments.html.j2"
 
 # Tables whose changes affect the structural region (everything but cursors).
 _STRUCTURAL = {"brick", "user", "event"}
