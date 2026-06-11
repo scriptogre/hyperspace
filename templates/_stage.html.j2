@@ -1,0 +1,141 @@
+<div id="stage" class="absolute inset-0">
+
+    <div class="flex-1 relative overflow-hidden bg-background select-none w-full h-full" id="grid-viewport">
+      <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
+           style="perspective: 1000px">
+        <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+             data-grid-size="{{ grid_size }}"
+             style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)"
+             hx-on="
+               pointerover -> {
+                 var cell = event.target.closest('[data-cell-x]');
+                 if (!cell) return;
+                 var cx = +cell.dataset.cellX, cy = +cell.dataset.cellY;
+                 hyperspace.call('update_cursor', [cx, cy, 0]);
+                 var c = document.getElementById('cursor-' + document.body.dataset.session);
+                 if (!c) return;
+                 var half = +this.dataset.gridSize * 32;
+                 var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
+                 var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
+                 c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
+                 c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
+               };
+               click -> {
+                 var cell = event.target.closest('[data-cell-x]');
+                 if (cell) hyperspace.call('create_brick', [+cell.dataset.cellX, +cell.dataset.cellY]);
+               };
+               pointerdown -> {
+                 var brick = event.target.closest('[data-brick-id]');
+                 if (!brick) return;
+                 event.preventDefault(); event.stopPropagation();
+                 var id = parseInt(brick.dataset.brickId);
+                 if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); hyperspace.call('delete_brick', [id]); return; }
+                 document.body.dataset.dragBrick = id;
+                 document.body.dataset.dragStartX = event.clientX;
+                 document.body.dataset.dragStartY = event.clientY;
+                 document.body.dataset.dragMoved = '0';
+               }">
+
+          {% for row in range(grid_size) %}
+            {% for col in range(grid_size) %}
+            <button data-cell-x="{{ col }}" data-cell-y="{{ row }}" class="grid-cell"
+                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}"></button>
+            {% endfor %}
+          {% endfor %}
+
+          {% set depth = 12 %}
+          {% for block in blocks %}
+          <div id="block-{{ block.id }}"
+               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}" data-z="{{ block.grid_z }}"
+               data-brick-id="{{ block.id }}"
+               {{ 'data-server-grabbing' if block.is_being_dragged else '' }}
+               :data-grabbing="(data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing') ? '' : null"
+               :data-pred-x="data.predX != null && data.x === data.predX ? null : data.predX"
+               :data-pred-y="data.predY != null && data.y === data.predY ? null : data.predY"
+               :style="{
+                 gridColumn: (data.predX != null ? +data.predX : +data.x) + 1,
+                 gridRow:    (data.predY != null ? +data.predY : +data.y) + 1,
+                 zIndex: ((data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing'))
+                           ? 1000
+                           : ((+data.x + +data.y) * 10 + +data.z * 100 + 1)
+               }"
+               class="group/brick brick"
+               style="--color: var(--color-brick-{{ block.color }});
+                      transform-style: preserve-3d;
+                      transform: translateZ({{ block.grid_z * depth }}px)">
+            {# Top face #}
+            <div class="brick-top"
+                 style="background: var(--color);
+                        transform: translateZ({{ depth }}px)">
+              <div class="brick-overlay"></div>
+            </div>
+            {# South wall (bottom-left in iso) #}
+            <div class="brick-wall bottom-0"
+                 style="width: 64px; height: {{ depth }}px;
+                        background: color-mix(in srgb, var(--color) 65%, black);
+                        transform-origin: bottom; transform: rotateX(-90deg)">
+            </div>
+            {# West wall (bottom-right in iso) #}
+            <div class="brick-wall top-0"
+                 style="width: {{ depth }}px; height: 64px;
+                        background: color-mix(in srgb, var(--color) 45%, black);
+                        transform-origin: left; transform: rotateY(-90deg)">
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
+      </div>
+    </div>
+
+    {# HUD overlay #}
+    <button id="logout-btn"
+            hx-on="click -> { document.cookie = 'hyperspace_id=; Max-Age=0; Path=/; SameSite=Lax'; location.reload(); }"
+            title="Log out"
+            class="absolute bottom-12 sm:bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
+      <span class="icon-[lucide--log-out] size-4 block"></span>
+    </button>
+
+    {% if online_count > 0 %}
+    <div id="hud-players" class="absolute top-16 sm:top-4 left-4 pointer-events-none z-50 font-sans text-xs">
+      <div class="rounded-xl bg-card/80 backdrop-blur-md border border-border shadow-iso-sm px-3 py-2 space-y-1.5 min-w-[120px] max-w-[200px]">
+        <div class="text-[10px] uppercase tracking-widest font-medium text-muted-foreground">
+          Online · {{ online_count }}
+        </div>
+        <div class="space-y-1">
+          {% for user in users if user.online %}
+            {% if loop.index <= 5 %}
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full shrink-0" style="background: var(--color-brick-{{ user.color }})"></span>
+              <span class="text-foreground truncate">{{ user.name }}</span>
+            </div>
+            {% endif %}
+          {% endfor %}
+          {% if online_count > 5 %}
+          <div class="text-muted-foreground text-[10px] pl-4 pt-0.5">+ {{ online_count - 5 }} more</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Console, top-right, HL2-style kill feed #}
+    {% set event_labels = {
+      'UserConnected':    'joined',
+      'UserDisconnected': 'left',
+      'BrickCreated':     'placed a brick',
+      'BrickDeleted':     'removed a brick',
+      'DragStarted':      'started dragging',
+      'DragEnded':        'stopped dragging',
+    } %}
+    <div id="console-log" class="absolute top-4 right-5 z-50 pointer-events-none
+                                  w-52 h-[200px] hidden sm:flex flex-col justify-end items-end gap-1.5 font-sans text-xs text-muted-foreground overflow-hidden">
+      {% for entry in logs %}
+      <div id="log-{{ entry.id }}" class="flex items-center gap-1.5 whitespace-nowrap">
+        <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: var(--color-brick-{{ entry.user_color }})"></span>
+        <span>{{ entry.user_name }} {{ event_labels[entry.kind] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+</div>

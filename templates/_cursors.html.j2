@@ -1,0 +1,21 @@
+<div id="cursors" class="absolute inset-0 pointer-events-none">
+  {# One lean node per cursor. Position is driven by --sx/--sy custom props;
+     the client's own cursor (id from body data-session) sets them locally for
+     instant prediction, and the morph preserves its style. #}
+  {% for cursor in cursors %}
+  {% set cell = 64 %}
+  {% set half = grid_size * cell // 2 %}
+  {% set px = cursor.grid_x * cell + cell // 2 - half %}
+  {% set py = cursor.grid_y * cell + cell // 2 - half %}
+  {% set diff = py - px %}
+  {% set sum = px + py %}
+  {% set denom = 1000000 - 612 * diff %}
+  {% set sx = 707000 * sum // denom %}
+  {% set sy = 354000 * diff // denom %}
+  <div id="cursor-{{ cursor.session_id }}" class="cursor"
+       style="--sx:{{ sx }}px; --sy:{{ sy }}px; --color:var(--color-brick-{{ cursor.color }})">
+    <span class="cursor-name">{{ cursor.name }}</span>
+    <span class="cursor-dot"></span>
+  </div>
+  {% endfor %}
+</div>
