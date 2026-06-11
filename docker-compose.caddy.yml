@@ -1,0 +1,21 @@
+# Layer onto production for a public host that terminates TLS itself (a cloud
+# droplet, not the homelab where a shared Caddy already fronts things):
+#   COMPOSE_FILE=docker-compose.production.yml:docker-compose.caddy.yml
+services:
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - fastapi
+
+volumes:
+  caddy_data:
+  caddy_config:

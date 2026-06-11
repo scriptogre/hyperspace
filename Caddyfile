@@ -1,0 +1,5 @@
+# Public reverse proxy. Caddy auto-provisions a Let's Encrypt cert for
+# $SITE_DOMAIN (HTTP-01) and proxies WebSocket upgrades transparently.
+{$SITE_DOMAIN} {
+	reverse_proxy fastapi:8000
+}
