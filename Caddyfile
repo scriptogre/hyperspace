@@ -1,0 +1,19 @@
+# Local reverse proxy. Mirrors the production homelab Caddy block:
+# serve /static from disk, pass /v1/* (WS + reducers) through, and rewrite
+# everything else to the module's HTTP route.
+:3000 {
+	handle /static/* {
+		root * /srv
+		file_server
+	}
+
+	@stdb path /v1/* /internal/*
+	handle @stdb {
+		reverse_proxy spacetimedb:3000
+	}
+
+	handle {
+		rewrite * /v1/database/hyperspace/route{uri}
+		reverse_proxy spacetimedb:3000
+	}
+}

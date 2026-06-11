@@ -100,40 +100,63 @@ static/js/
 
 ## SpacetimeDB
 
-This project runs on a [custom fork](https://github.com/scriptogre/SpacetimeDB/tree/hypermedia) of SpacetimeDB that adds an **HTTP route system**.
-
-```
-  Official SpacetimeDB           Patched (hypermedia branch)
-  ─────────────────────          ──────────────────────────────
-
-  WebSocket reducers     ✓       WebSocket reducers            ✓
-  Client subscriptions   ✓       Client subscriptions          ✓
-  Row-level security     ✓       Row-level security            ✓
-                                 #[get], #[post], ... routes   ✓  ◄── new
-                                 Html, Json response types     ✓  ◄── new
-                                 HttpRequest (headers, etc.)   ✓  ◄── new
-                                 Static file serving           ✓  ◄── new
-```
-
-Without this patch, `GET /` couldn't return server-rendered HTML from inside the module, and you'd need Rocket or Axum sitting in front, breaking the single-runtime model.
+Runs on stock **SpacetimeDB 2.4** using its native in-module HTTP handlers (the `unstable` feature). `GET /` returns the server-rendered page straight from the module:
 
 ```rust
-// This is what the patch enables:
-#[get("/")]
-fn index(ctx: &mut ProcedureContext, _req: HttpRequest) -> Html {
-    ctx.with_tx(|tx| Html(render::render_page(&tx.db, None)))
+#[spacetimedb::http::handler]
+fn index(ctx: &mut HandlerContext, _req: Request) -> Response {
+    let html = ctx.with_tx(|tx| render::render_page(&tx.db, None));
+    Response::builder()
+        .header("content-type", "text/html; charset=utf-8")
+        .body(Body::from_bytes(html))
+        .unwrap()
+}
+
+#[spacetimedb::http::router]
+fn router() -> Router {
+    Router::new().get("/", index)
 }
 ```
 
+Stock 2.4 exposes module routes under `/v1/database/<name>/route/...` and serves no static files. A Caddy reverse proxy closes both gaps: it rewrites `/` to the module route and serves `/static` from disk. Locally Caddy runs as a container; in production the homelab Caddy does it.
+
 ## Running
 
-Requires the patched SpacetimeDB built locally as a sibling directory (`../SpacetimeDB` on the `hypermedia` branch).
+Everything is Docker. The server is the official `clockworklabs/spacetime` image; a one-shot `publisher` container builds the wasm and publishes it.
 
 ```bash
-just up      # start SpacetimeDB, publish module
-just down    # stop
-just test    # Playwright E2E
-just check   # clippy + fmt
+just up        # server + publisher + caddy + tailwind (foreground)
+just down      # stop
+just publish   # rebuild wasm + republish after Rust changes
+just test      # Playwright E2E against the running stack
+just check     # clippy + fmt
 ```
 
-Open `http://localhost:3000` in multiple tabs.
+Open `http://localhost:3000` in multiple tabs. `COMPOSE_FILE` in `.env` selects local vs production (defaults to local).
+
+## Deployment
+
+Production is one container (the SpacetimeDB server); the global homelab Caddy fronts it. Add this block to the homelab Caddyfile:
+
+```
+hyperspace.christiantanul.com {
+	import cf-tls
+	@stdb path /v1/* /internal/*
+	handle @stdb { reverse_proxy spacetimedb:3000 }
+	handle /static/* {
+		root * /srv/hyperspace
+		file_server
+	}
+	handle {
+		rewrite * /v1/database/hyperspace/route{uri}
+		reverse_proxy spacetimedb:3000
+	}
+	encode gzip
+}
+```
+
+Serve `/static` by bind-mounting the (Syncthing-synced) static dir into the caddy container:
+
+```
+- /home/chris/Projects/hyperspace/static:/srv/hyperspace/static:ro
+```

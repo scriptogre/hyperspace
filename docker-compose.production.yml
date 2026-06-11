@@ -1,14 +1,35 @@
 services:
   spacetimedb:
-    build: .
+    image: clockworklabs/spacetime:v2.4.1
     container_name: spacetimedb
+    user: "0:0"                       # write the root-owned named volume at /stdb
+    command: ["start", "--data-dir=/stdb/data"]
     expose:
       - "3000"
-    environment:
-      - SPACETIMEDB_DEFAULT_MODULE=hyperspace
     volumes:
       - hyperspace_stdb:/stdb
     restart: unless-stopped
 
+  # One-shot: builds the wasm and publishes it to the server, then exits.
+  # The server above stays the only long-running container.
+  publisher:
+    image: rust:1
+    working_dir: /module
+    volumes:
+      - .:/module
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/module/target
+      - stdb_cli:/opt/stdb
+      - publisher_home:/root
+    command: ["bash", "scripts/publish.sh"]
+    depends_on:
+      spacetimedb:
+        condition: service_started
+    restart: "no"
+
 volumes:
   hyperspace_stdb:
+  cargo_cache:
+  target_cache:
+  stdb_cli:
+  publisher_home:

@@ -1,11 +1,38 @@
 services:
   spacetimedb:
-    build: .
-    container_name: spacetimedb
+    image: clockworklabs/spacetime:v2.4.1
+    user: "0:0"                       # write the root-owned named volume at /stdb
+    command: ["start", "--data-dir=/stdb/data"]
+    volumes:
+      - hyperspace_stdb:/stdb
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  publisher:
+    image: rust:1
+    working_dir: /module
+    volumes:
+      - .:/module
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/module/target
+      - stdb_cli:/opt/stdb
+      - publisher_home:/root
+    command: ["bash", "scripts/publish.sh"]
+    depends_on:
+      spacetimedb:
+        condition: service_started
+    restart: "no"
+
+  caddy:
+    image: caddy:2-alpine
     ports:
       - "3000:3000"
     volumes:
-      - hyperspace_stdb:/stdb
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/static:ro
+    depends_on:
+      - spacetimedb
     restart: unless-stopped
 
   tailwindcss:
@@ -19,3 +46,7 @@ services:
 
 volumes:
   hyperspace_stdb:
+  cargo_cache:
+  target_cache:
+  stdb_cli:
+  publisher_home:

@@ -1,28 +1,33 @@
-spacetime := justfile_directory() / ".." / "SpacetimeDB" / "target" / "release" / "spacetimedb-cli"
+default: up
 
-up:
+# Start the stack (server + publisher + caddy + tailwind)
+up *ARGS: init
+    docker compose up {{ ARGS }}
+
+down *ARGS:
+    docker compose down {{ ARGS }}
+
+# Create .env from .env.example if missing
+init:
     #!/usr/bin/env bash
     set -euo pipefail
-    pkill -f spacetimedb || true
-    sleep 1
-    rm -rf ~/.local/share/spacetime/data
-    SPACETIMEDB_STATIC_DIR="$(pwd)/static" "{{spacetime}}" start &
-        echo "Waiting for SpacetimeDB..."
-        for i in $(seq 1 30); do
-            if nc -z 127.0.0.1 3000 2>/dev/null; then break; fi
-            sleep 0.5
-        done
-    if ! nc -z 127.0.0.1 3000 2>/dev/null; then
-        echo "ERROR: SpacetimeDB failed to start on port 3000"
-        exit 1
-    fi
-    "{{spacetime}}" publish hyperspace --yes
+    test -f .env || cp .env.example .env
 
-down:
-    pkill -f spacetimedb || true
+# Rebuild the wasm module and republish it to the running server
+publish:
+    docker compose up publisher
 
-test:
-    npx playwright test
+# Run Playwright e2e against the running stack
+test *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker compose up -d
+    echo "Waiting for app on http://localhost:3000 ..."
+    for i in $(seq 1 180); do
+        if curl -fsS http://localhost:3000/ >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    bunx playwright test {{ ARGS }}
 
 check:
     cargo clippy -- -D warnings
