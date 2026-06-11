@@ -3,10 +3,102 @@
 @plugin "@iconify/tailwind4";
 
 @source '../../templates';
+@source inline("bg-brick-cyan bg-brick-pink bg-brick-purple bg-brick-yellow bg-brick-green bg-brick-orange");
 
 @theme {
-  --color-surface: #1a2332;
-  --color-surface-light: #243447;
-  --color-surface-lighter: #2d4055;
+  /* True-neutral palette (oklch chroma 0) borrowed from dromos */
+  --color-neutral-10:  oklch(99.8% 0 0);
+  --color-neutral-25:  oklch(99.5% 0 0);
+  --color-neutral-50:  oklch(98.5% 0 0);
+  --color-neutral-75:  oklch(97.8% 0 0);
+  --color-neutral-100: oklch(97.0% 0 0);
+  --color-neutral-150: oklch(95.6% 0 0);
+  --color-neutral-200: oklch(92.2% 0 0);
+  --color-neutral-300: oklch(87.0% 0 0);
+  --color-neutral-350: oklch(80.9% 0 0);
+  --color-neutral-400: oklch(70.8% 0 0);
+  --color-neutral-450: oklch(62.9% 0 0);
+  --color-neutral-500: oklch(55.6% 0 0);
+  --color-neutral-550: oklch(49.7% 0 0);
+  --color-neutral-600: oklch(43.9% 0 0);
+  --color-neutral-650: oklch(40.5% 0 0);
+  --color-neutral-700: oklch(37.1% 0 0);
+  --color-neutral-725: oklch(34.6% 0 0);
+  --color-neutral-750: oklch(32.0% 0 0);
+  --color-neutral-775: oklch(29.5% 0 0);
+  --color-neutral-800: oklch(26.9% 0 0);
+  --color-neutral-825: oklch(25.3% 0 0);
+  --color-neutral-850: oklch(23.7% 0 0);
+  --color-neutral-875: oklch(22.1% 0 0);
+  --color-neutral-900: oklch(20.5% 0 0);
+  --color-neutral-910: oklch(19.3% 0 0);
+  --color-neutral-920: oklch(18.1% 0 0);
+  --color-neutral-930: oklch(16.9% 0 0);
+  --color-neutral-940: oklch(15.7% 0 0);
+  --color-neutral-950: oklch(14.5% 0 0);
+
+  /* Semantic tokens.
+     `foreground` is set via @media below because Chromium drops the alpha
+     when light-dark() is nested inside color-mix() (used by `text-foreground/XX`).
+     The rest swap via light-dark() since they're used as solid colors. */
+  --color-foreground:        var(--color-neutral-900);
+  --color-background:        light-dark(var(--color-neutral-50),  var(--color-neutral-940));
+  --color-card:              light-dark(var(--color-neutral-10),  var(--color-neutral-910));
+  --color-muted:             light-dark(var(--color-neutral-100), var(--color-neutral-875));
+  --color-muted-foreground:  light-dark(var(--color-neutral-500), var(--color-neutral-400));
+  --color-border:            light-dark(var(--color-neutral-200), var(--color-neutral-825));
+  --color-primary:           light-dark(var(--color-neutral-900), var(--color-neutral-100));
+  --color-primary-foreground: light-dark(var(--color-neutral-50), var(--color-neutral-940));
+  --color-shadow:            light-dark(var(--color-neutral-200), oklch(10% 0 0));
+
+  /* Brick palette. Light mode uses Tailwind 500 shades (one step darker)
+     so vibrant bricks don't blow out against the near-white bg. */
+  --color-brick-cyan:   light-dark(#06b6d4, #22d3ee);
+  --color-brick-pink:   light-dark(#ec4899, #f472b6);
+  --color-brick-purple: light-dark(#8b5cf6, #a78bfa);
+  --color-brick-yellow: light-dark(#eab308, #facc15);
+  --color-brick-green:  light-dark(#22c55e, #4ade80);
+  --color-brick-orange: light-dark(#f97316, #fb923c);
+
   --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Space Grotesk', sans-serif;
+
+  /* Snappy default for any `transition-*` utility */
+  --default-transition-duration: 50ms;
+
+  /* Hard-edge isometric shadow (offset, no blur) */
+  --shadow-iso: 5px 5px 0 var(--color-shadow);
+  --shadow-iso-sm: 2px 2px 0 var(--color-shadow);
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-foreground: var(--color-neutral-50);
+    }
+  }
+}
+
+@layer base {
+  @media (hover: none) {
+    input { font-size: 16px; }
+  }
+}
+
+@layer components {
+  .is-selected {
+    transform: scale(1.15);
+    outline: 2px solid var(--color-foreground);
+    outline-offset: 2px;
+    box-shadow: 0 0 12px color-mix(in oklch, var(--color-foreground), transparent 70%);
+  }
+  .pick-check {
+    display: none;
+  }
+  .is-selected .pick-check {
+    display: flex;
+  }
 }

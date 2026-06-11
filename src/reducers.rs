@@ -1,6 +1,6 @@
 use crate::models::*;
 use crate::render;
-use spacetimedb::{reducer, ReducerContext, Table};
+use spacetimedb::{reducer, Identity, ReducerContext, Table};
 
 const MAX_EVENT_LOGS: usize = 40;
 
@@ -48,15 +48,15 @@ fn log_event(ctx: &ReducerContext, kind: EventKind, brick_id: Option<u64>) {
     trim_events(ctx);
 }
 
+fn send_to(ctx: &ReducerContext, identity: Identity) {
+    let html = render::render_body(&ctx.db, Some(&identity));
+    let _ = ctx.db.html_broadcast().identity().delete(identity);
+    ctx.db.html_broadcast().insert(HtmlBroadcast { identity, html });
+}
+
 fn broadcast(ctx: &ReducerContext) {
     for user in ctx.db.user().iter().filter(|u| u.online) {
-        let html = render::render_body(&ctx.db, Some(&user.identity));
-        // Upsert: delete old row if present, then insert new one
-        let _ = ctx.db.html_broadcast().identity().delete(user.identity);
-        ctx.db.html_broadcast().insert(HtmlBroadcast {
-            identity: user.identity,
-            html,
-        });
+        send_to(ctx, user.identity);
     }
 }
 
@@ -65,22 +65,44 @@ fn broadcast(ctx: &ReducerContext) {
 #[reducer(client_connected)]
 pub fn on_connect(ctx: &ReducerContext) {
     let identity = ctx.sender();
+    // Returning user: mark online and broadcast. New visitors wait for
+    // `complete_setup`, so send them just the setup modal individually.
     if let Some(existing) = ctx.db.user().identity().find(identity) {
         ctx.db.user().identity().update(User {
             online: true,
             ..existing
         });
+        log_event(ctx, EventKind::UserConnected, None);
+        broadcast(ctx);
     } else {
-        let name = format!("User {}", ctx.db.user().count() + 1);
+        send_to(ctx, identity);
+    }
+}
+
+#[reducer]
+pub fn complete_setup(ctx: &ReducerContext, name: String, color: Color) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Empty name".into());
+    }
+    let identity = ctx.sender();
+    if let Some(existing) = ctx.db.user().identity().find(identity) {
+        ctx.db.user().identity().update(User {
+            name,
+            color,
+            online: true,
+            ..existing
+        });
+    } else {
         ctx.db.user().insert(User {
             identity,
             name,
-            color: Color::random(ctx),
+            color,
             online: true,
         });
+        log_event(ctx, EventKind::UserConnected, None);
     }
-    log_event(ctx, EventKind::UserConnected, None);
     broadcast(ctx);
+    Ok(())
 }
 
 #[reducer(client_disconnected)]

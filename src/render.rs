@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use minijinja::{context, Environment, Value};
@@ -18,6 +19,10 @@ const MAX_RENDERED_LOGS: usize = 10;
 fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
     let mut brick_rows: Vec<_> = db.brick().iter().collect();
     brick_rows.sort_by_key(|b| b.id);
+    let pos_to_brick: HashMap<(i32, i32, i32), u64> = brick_rows
+        .iter()
+        .map(|b| ((b.position.x, b.position.y, b.position.z), b.id))
+        .collect();
     let blocks: Vec<_> = brick_rows
         .into_iter()
         .map(|b| {
@@ -26,7 +31,7 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
                 grid_x => b.position.x,
                 grid_y => b.position.y,
                 grid_z => b.position.z,
-                color => b.color.hex(),
+                color => b.color.name(),
                 is_being_dragged => b.dragged_by.is_some(),
             }
         })
@@ -34,12 +39,13 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
 
     let mut user_rows: Vec<_> = db.user().iter().collect();
     user_rows.sort_by(|a, b| a.name.cmp(&b.name));
+    let online_count = user_rows.iter().filter(|u| u.online).count();
     let users: Vec<_> = user_rows
         .into_iter()
         .map(|u| {
             context! {
                 name => u.name,
-                color => u.color.hex(),
+                color => u.color.name(),
                 online => u.online,
             }
         })
@@ -47,6 +53,31 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
 
     let mut cursor_rows: Vec<_> = db.cursor().iter().collect();
     cursor_rows.sort_by_key(|c| format!("{:?}", c.identity));
+
+    let mut hover_grid: Vec<Vec<Option<String>>> =
+        vec![vec![None; GRID_SIZE as usize]; GRID_SIZE as usize];
+    let mut hover_bricks: HashMap<String, String> = HashMap::new();
+    for c in &cursor_rows {
+        if viewer == Some(&c.identity) {
+            continue;
+        }
+        let (x, y, z) = (c.position.x, c.position.y, c.position.z);
+        if x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE {
+            continue;
+        }
+        let color = db
+            .user()
+            .identity()
+            .find(c.identity)
+            .map(|u| u.color.name().to_string())
+            .unwrap_or_else(|| "cyan".into());
+        if let Some(&brick_id) = pos_to_brick.get(&(x, y, z)) {
+            hover_bricks.insert(brick_id.to_string(), color);
+        } else if z == 0 {
+            hover_grid[y as usize][x as usize] = Some(color);
+        }
+    }
+
     let cursors: Vec<_> = cursor_rows
         .into_iter()
         .map(|c| {
@@ -55,7 +86,7 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
                 .as_ref()
                 .map(|u| u.name.clone())
                 .unwrap_or_else(|| "?".into());
-            let color = user.as_ref().map(|u| u.color.hex()).unwrap_or("#888");
+            let color = user.as_ref().map(|u| u.color.name()).unwrap_or("cyan");
             let session_id = format!("{:?}", c.identity);
             context! {
                 name,
@@ -78,7 +109,7 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
         .map(|e| {
             let user = db.user().identity().find(e.identity);
             let user_name = user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| "Someone".into());
-            let user_color = user.as_ref().map(|u| u.color.hex()).unwrap_or("#888");
+            let user_color = user.as_ref().map(|u| u.color.name()).unwrap_or("cyan");
             context! {
                 id => e.id,
                 user_name,
@@ -90,15 +121,20 @@ fn world_state(db: &Local, viewer: Option<&Identity>) -> minijinja::Value {
 
     let current_session_id = viewer.map(|id| format!("{:?}", id)).unwrap_or_default();
 
-    let show_player_setup = viewer
-        .and_then(|id| db.user().identity().find(id))
-        .map(|u| u.name.starts_with("User "))
-        .unwrap_or(true);
+    // Gate modal on identity being known. GET (viewer=None) skips it to avoid
+    // a flash on refresh; WS broadcast shows it only when no user record exists.
+    let show_player_setup = match viewer {
+        None => false,
+        Some(id) => db.user().identity().find(id).is_none(),
+    };
 
     context! {
         blocks,
         users,
+        online_count,
         cursors,
+        hover_grid,
+        hover_bricks,
         logs,
         grid_size => GRID_SIZE,
         current_session_id,

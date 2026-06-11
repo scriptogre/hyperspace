@@ -1,126 +1,167 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="htmx-config" content='{"morphIgnore":["data-htmx-powered","data-grabbing","data-pending-delete","data-pred-x","data-pred-y","data-pred-sx","data-pred-sy"]}'>
   <title>Hyperspace</title>
 
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link href="/static/css/output.css" rel="stylesheet">
+  <link href="/static/css/output.css?v=mobile5" rel="stylesheet">
 
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <script src="/static/js/vendor/idiomorph.min.js"></script>
   <script src="/static/js/vendor/htmx.min.js"></script>
-  <script src="/static/js/htmx-spacetimedb.js"></script>
+  <script src="/static/js/vendor/hx-ws.js"></script>
+  <script src="/static/js/vendor/hx-live.min.js"></script>
+  <script src="/static/js/vendor/hx-optimistic.min.js"></script>
+  <script src="/static/js/hx-ws-spacetimedb.js"></script>
 </head>
 
-<body class="group/body bg-surface text-gray-200 font-mono h-screen overflow-hidden"
-      hx-ext="spacetimedb"
-      ws-connect="/v1/database/hyperspace/subscribe"
-      hx-on:keydown="if(event.key==='Shift') document.body?.setAttribute('data-delete-mode','')"
-      hx-on:keyup="if(event.key==='Shift') document.body?.removeAttribute('data-delete-mode')"
-      hx-on:mousemove="
-        var vp = document.body;
-        if (!vp || !vp.dataset.dragBrick) return;
-        var dx = event.clientX - parseInt(vp.dataset.dragStartX);
-        var dy = event.clientY - parseInt(vp.dataset.dragStartY);
-        if (vp.dataset.dragMoved !== '1' && Math.abs(dx) + Math.abs(dy) > 8) {
-          vp.dataset.dragMoved = '1';
-          stdb.callReducer('start_drag', [parseInt(vp.dataset.dragBrick)]);
-        }
-        if (vp.dataset.dragMoved !== '1') return;
-        var el = document.getElementById('block-' + vp.dataset.dragBrick);
-        if (el) el.style.pointerEvents = 'none';
-        var under = document.elementFromPoint(event.clientX, event.clientY);
-        if (el) el.style.pointerEvents = '';
-        if (!under) return;
-        var cell = under.closest('[data-cell-x]');
-        if (!cell) return;
-        var cx = cell.dataset.cellX, cy = cell.dataset.cellY;
-        if (vp.dataset.dragLastX !== cx || vp.dataset.dragLastY !== cy) {
-          vp.dataset.dragLastX = cx; vp.dataset.dragLastY = cy;
-          stdb.callReducer('move_brick', [parseInt(vp.dataset.dragBrick), parseInt(cx), parseInt(cy)]);
-        }"
-      hx-on:mouseup="
-        var vp = document.body;
-        if (!vp || !vp.dataset.dragBrick) return;
-        if (vp.dataset.dragMoved === '1') {
-          stdb.callReducer('end_drag', []);
-        }
-        delete vp.dataset.dragBrick; delete vp.dataset.dragStartX; delete vp.dataset.dragStartY;
-        delete vp.dataset.dragMoved; delete vp.dataset.dragLastX; delete vp.dataset.dragLastY;">
+<body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
+      hx-ws:connect="/v1/database/hyperspace/subscribe" hx-ws-spacetimedb
+      hx-on="
+        keydown[event.key=='Shift'] -> data.deleteMode = true;
+        keyup[event.key=='Shift']   -> data.deleteMode = false;
+        pointermove -> {
+          if (!data.dragBrick) return;
+          var dx = event.clientX - parseInt(data.dragStartX);
+          var dy = event.clientY - parseInt(data.dragStartY);
+          if (data.dragMoved !== '1' && Math.abs(dx) + Math.abs(dy) > 8) {
+            data.dragMoved = '1';
+            stdb.callReducer('start_drag', [parseInt(data.dragBrick)]);
+          }
+          if (data.dragMoved !== '1') return;
+          var el = document.getElementById('block-' + data.dragBrick);
+          if (el) el.style.pointerEvents = 'none';
+          var under = document.elementFromPoint(event.clientX, event.clientY);
+          if (el) el.style.pointerEvents = '';
+          if (!under) return;
+          var target = under.closest('[data-brick-id]') || under.closest('button[data-cell-x]');
+          if (!target) return;
+          var cx = target.dataset.x ?? target.dataset.cellX;
+          var cy = target.dataset.y ?? target.dataset.cellY;
+          if (data.dragLastX !== cx || data.dragLastY !== cy) {
+            data.dragLastX = cx; data.dragLastY = cy;
+            if (el) { el.dataset.predX = cx; el.dataset.predY = cy; }
+            stdb.callReducer('move_brick', [parseInt(data.dragBrick), parseInt(cx), parseInt(cy)]);
+          }
+        };
+        pointerup -> {
+          if (!data.dragBrick) return;
+          if (data.dragMoved === '1') stdb.callReducer('end_drag', []);
+          attr('data-drag-brick', false);
+          attr('data-drag-start-x', false);
+          attr('data-drag-start-y', false);
+          attr('data-drag-moved', false);
+          attr('data-drag-last-x', false);
+          attr('data-drag-last-y', false);
+        }">
 
   <div id="app" class="relative w-full h-full">
   {% block grid %}
 
-    <div class="flex-1 relative overflow-hidden bg-surface select-none w-full h-full" id="grid-viewport">
-      <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2"
+    <div class="flex-1 relative overflow-hidden bg-background select-none w-full h-full" id="grid-viewport">
+      <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
            style="perspective: 1000px">
         <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
              style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
 
           {% for row in range(grid_size) %}
             {% for col in range(grid_size) %}
+            {% set hover = hover_grid[row][col] %}
             <button id="cell-{{ col }}-{{ row }}"
-                    class="size-16 border border-white/[0.04] bg-white/[0.015] cursor-pointer
-                           transition-colors duration-100 hover:bg-cyan-400/[0.08] hover:border-cyan-400/15
+                    class="size-16 border border-foreground/[0.08] bg-foreground/[0.02] dark:border-foreground/[0.05] dark:bg-foreground/[0.015] cursor-pointer
+                           transition-colors hover:bg-foreground/15 hover:border-foreground/40
                            focus:outline-none"
                     data-cell-x="{{ col }}" data-cell-y="{{ row }}"
-                    hx-on:mouseenter="stdb.callReducer('update_cursor',[{{ col }},{{ row }},0])"
-                    hx-on:click="stdb.callReducer('create_brick',[{{ col }},{{ row }}])"
-                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}">
+                    hx-on="
+                      mouseenter -> {
+                        stdb.callReducer('update_cursor', [{{ col }}, {{ row }}, 0]);
+                        var c = document.getElementById('self-cursor');
+                        if (c) {
+                          var half = {{ grid_size * 64 // 2 }};
+                          var px = {{ col }} * 64 + 32 - half;
+                          var py = {{ row }} * 64 + 32 - half;
+                          var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
+                          c.dataset.predSx = Math.round(707000 * sum / denom);
+                          c.dataset.predSy = Math.round(354000 * diff / denom);
+                        }
+                      };
+                      click      -> stdb.callReducer('create_brick',  [{{ col }}, {{ row }}])"
+                    style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}{% if hover %}; background: color-mix(in srgb, var(--color-brick-{{ hover }}), transparent 70%); border-color: color-mix(in srgb, var(--color-brick-{{ hover }}), transparent 40%){% endif %}">
             </button>
             {% endfor %}
           {% endfor %}
 
           {% set depth = 12 %}
           {% for block in blocks %}
+          {% set brick_hover_color = hover_bricks[block.id|string] %}
           <div id="block-{{ block.id }}"
-               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}"
-               data-cell-x="{{ block.grid_x }}" data-cell-y="{{ block.grid_y }}"
+               data-x="{{ block.grid_x }}" data-y="{{ block.grid_y }}" data-z="{{ block.grid_z }}"
                data-brick-id="{{ block.id }}"
-               {{ 'data-grabbing' if block.is_being_dragged else '' }}
-               class="group/brick relative cursor-grab
+               {{ 'data-server-grabbing' if block.is_being_dragged else '' }}
+               :data-grabbing="(data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing') ? '' : null"
+               :data-pred-x="data.predX != null && data.x === data.predX ? null : data.predX"
+               :data-pred-y="data.predY != null && data.y === data.predY ? null : data.predY"
+               :style="{
+                 gridColumn: (data.predX != null ? +data.predX : +data.x) + 1,
+                 gridRow:    (data.predY != null ? +data.predY : +data.y) + 1,
+                 zIndex: ((data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing'))
+                           ? 1000
+                           : ((+data.x + +data.y) * 10 + +data.z * 100 + 1)
+               }"
+               class="group/brick relative cursor-grab transition-[opacity,transform]
                       data-[grabbing]:cursor-grabbing
-                      group-data-[delete-mode]/body:cursor-crosshair"
-               hx-on:mousedown="
+                      group-data-[delete-mode=true]/body:cursor-crosshair
+                      data-[pending-delete]:opacity-0 data-[pending-delete]:scale-90"
+               hx-on="
+                 pointerenter -> stdb.callReducer('update_cursor', [{{ block.grid_x }}, {{ block.grid_y }}, {{ block.grid_z }}]);
+                 pointerdown -> {
                  event.preventDefault(); event.stopPropagation();
-                 var id = parseInt(this.dataset.brickId);
-                 if (event.shiftKey) { stdb.callReducer('delete_brick', [id]); return; }
-                 var vp = document.body;
-                 vp.dataset.dragBrick = id; vp.dataset.dragStartX = event.clientX;
-                 vp.dataset.dragStartY = event.clientY; vp.dataset.dragMoved = '0';"
-               style="grid-column: {{ block.grid_x + 1 }}; grid-row: {{ block.grid_y + 1 }};
-                      --color: {{ block.color }};
+                 var id = parseInt(data.brickId);
+                 if (event.shiftKey) { attr('data-pending-delete', ''); stdb.callReducer('delete_brick', [id]); return; }
+                 var b = document.body;
+                 b.dataset.dragBrick = id;
+                 b.dataset.dragStartX = event.clientX;
+                 b.dataset.dragStartY = event.clientY;
+                 b.dataset.dragMoved = '0';
+               }"
+               style="--color: var(--color-brick-{{ block.color }});
                       transform-style: preserve-3d;
-                      transform: translateZ({{ block.grid_z * depth }}px);
-                      z-index: {{ 1000 if block.is_being_dragged else (block.grid_x + block.grid_y) * 10 + block.grid_z * 100 + 1 }}">
+                      transform: translateZ({{ block.grid_z * depth }}px)">
             {# Top face #}
-            <div class="size-16 border-2 border-white/25
-                        transition-[opacity,border-color,background-color,box-shadow] duration-150
-                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
-                        group-hover/brick:border-cyan-400/80 group-hover/brick:shadow-[inset_0_0_16px_rgba(34,211,238,0.25)]
-                        group-data-[delete-mode]/body:group-hover/brick:border-red-500 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/20 group-data-[delete-mode]/body:group-hover/brick:shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]"
+            <div class="size-16 border-2 border-white/25 relative overflow-hidden
+                        transition-[opacity,border-color,background-color]
+                        group-data-[grabbing]/brick:opacity-40
+                        group-hover/brick:border-foreground/70
+                        group-data-[delete-mode=true]/body:group-hover/brick:border-red-500"
                  style="background: var(--color);
                         transform: translateZ({{ depth }}px)">
+              <div class="absolute inset-0 opacity-0 group-hover/brick:opacity-100 transition-opacity bg-foreground/40 group-data-[delete-mode=true]/body:group-hover/brick:bg-red-500/50"></div>
+              {% if brick_hover_color %}
+              <div class="absolute inset-0 pointer-events-none transition-opacity"
+                   style="background: color-mix(in srgb, var(--color-brick-{{ brick_hover_color }}), transparent 75%);"></div>
+              {% endif %}
             </div>
             {# South wall (bottom-left in iso) #}
             <div class="absolute bottom-0 left-0 border-2 border-white/15
-                        transition-[opacity,border-color,background-color] duration-150
-                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
-                        group-hover/brick:border-cyan-400/60
-                        group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
+                        transition-[opacity,border-color,background-color,box-shadow]
+                        group-data-[grabbing]/brick:opacity-40
+                        group-hover/brick:border-foreground/70
+                        group-data-[delete-mode=true]/body:group-hover/brick:border-red-500
+                        group-data-[delete-mode=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)]"
                  style="width: 64px; height: {{ depth }}px;
                         background: color-mix(in srgb, var(--color) 65%, black);
                         transform-origin: bottom; transform: rotateX(-90deg)">
             </div>
             {# West wall (bottom-right in iso) #}
             <div class="absolute top-0 left-0 border-2 border-white/15
-                        transition-[opacity,border-color,background-color] duration-150
-                        group-data-[grabbing]/brick:opacity-40 group-data-[grabbing]/brick:border-cyan-400/70
-                        group-hover/brick:border-cyan-400/60
-                        group-data-[delete-mode]/body:group-hover/brick:border-red-500/80 group-data-[delete-mode]/body:group-hover/brick:bg-red-500/15"
+                        transition-[opacity,border-color,background-color,box-shadow]
+                        group-data-[grabbing]/brick:opacity-40
+                        group-hover/brick:border-foreground/70
+                        group-data-[delete-mode=true]/body:group-hover/brick:border-red-500
+                        group-data-[delete-mode=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)]"
                  style="width: {{ depth }}px; height: 64px;
                         background: color-mix(in srgb, var(--color) 45%, black);
                         transform-origin: left; transform: rotateY(-90deg)">
@@ -129,54 +170,81 @@
           {% endfor %}
 
         </div>
-      </div>
 
-      {# Cursor overlay — renders empty until WS is wired up #}
-      {% for cursor in cursors %}
-      {% set is_self = cursor.session_id == current_session_id %}
-      {% set cell = 64 %}
-      {% set half = grid_size * cell // 2 %}
-      {% set px = cursor.grid_x * cell + cell // 2 - half %}
-      {% set py = cursor.grid_y * cell + cell // 2 - half %}
-      {% set diff = py - px %}
-      {% set sum = px + py %}
-      {% set denom = 1000000 - 612 * diff %}
-      {% set sx = 707000 * sum // denom %}
-      {% set sy = 354000 * diff // denom %}
-      <div id="cursor-{{ cursor.session_id }}" data-session="{{ cursor.session_id }}"
-           class="absolute pointer-events-none flex flex-col items-center -translate-x-1/2
-                  {{ 'opacity-100' if is_self else 'opacity-60' }}"
-           style="left: calc(50% + {{ sx }}px); top: calc(40% + {{ sy }}px - 40px); --color: {{ cursor.color }}">
-        <span class="whitespace-nowrap text-[11px] px-2 py-0.5 rounded font-mono mb-1
-                     {{ 'text-white border shadow-[0_2px_8px_rgba(0,0,0,0.6)]' if is_self else 'text-white/80 border border-white/10 shadow-[0_2px_6px_rgba(0,0,0,0.4)]' }}"
-              style="background: {{ 'color-mix(in srgb, var(--color) 70%, black)' if is_self else 'rgba(10,18,28,0.9)' }};
-                     {{ 'border-color: var(--color)' if is_self else '' }}">
+        {# Cursor overlay, inside grid-perspective so it scales with the grid #}
+        {% for cursor in cursors %}
+        {% set is_self = cursor.session_id == current_session_id %}
+        {% set cell = 64 %}
+        {% set half = grid_size * cell // 2 %}
+        {% set px = cursor.grid_x * cell + cell // 2 - half %}
+        {% set py = cursor.grid_y * cell + cell // 2 - half %}
+        {% set diff = py - px %}
+        {% set sum = px + py %}
+        {% set denom = 1000000 - 612 * diff %}
+        {% set sx = 707000 * sum // denom %}
+        {% set sy = 354000 * diff // denom %}
+        <div id="{{ 'self-cursor' if is_self else 'cursor-' ~ cursor.session_id }}"
+             data-session="{{ cursor.session_id }}"
+             data-sx="{{ sx }}" data-sy="{{ sy }}"
+             {% if is_self %}
+             :data-pred-sx="data.predSx != null && +data.sx === +data.predSx ? null : data.predSx"
+             :data-pred-sy="data.predSy != null && +data.sy === +data.predSy ? null : data.predSy"
+             :style="{
+               left: 'calc(50% + ' + (data.predSx != null ? +data.predSx : +data.sx) + 'px)',
+               top:  'calc(50% + ' + ((data.predSy != null ? +data.predSy : +data.sy) - 40) + 'px)'
+             }"
+             {% endif %}
+             class="absolute pointer-events-none flex flex-col items-center -translate-x-1/2
+                    {{ 'opacity-100' if is_self else 'opacity-60' }}"
+             style="left: calc(50% + {{ sx }}px); top: calc(50% + {{ sy }}px - 40px); --color: var(--color-brick-{{ cursor.color }})">
+        <span class="whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full mb-1
+                     font-semibold border"
+              style="background: var(--color);
+                     color: color-mix(in srgb, var(--color), black 75%);
+                     border-color: color-mix(in srgb, var(--color), white 30%)">
           {{ cursor.name }}
         </span>
-        <div class="rounded-full border-2 border-white
-                    {{ 'size-3.5' if is_self else 'size-2.5' }}"
+        <div class="rounded-full border size-2.5"
              style="background: var(--color);
-                    box-shadow: 0 0 {{ '14px' if is_self else '8px' }} var(--color), 0 2px 8px rgba(0,0,0,0.4)">
+                    border-color: color-mix(in srgb, var(--color), white 30%)">
         </div>
-      </div>
-      {% endfor %}
-    </div>
-
-    {# HUD overlay — top-left, minimal #}
-    <div id="hud-players" class="absolute top-4 left-5 pointer-events-none z-50 text-[10px] space-y-1 opacity-75">
-      <div class="flex items-center gap-2">
-        {% for user in users %}
-          {% if user.online %}
-          <div class="flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full" style="background: {{ user.color }}"></span>
-            <span class="text-gray-300">{{ user.name }}</span>
-          </div>
-          {% endif %}
+        </div>
         {% endfor %}
       </div>
     </div>
 
-    {# Console — top-right, HL2-style kill feed #}
+    {# HUD overlay, top-left #}
+    <button id="logout-btn"
+            hx-on="click -> { localStorage.removeItem('stdb_token'); location.reload(); }"
+            title="Log out"
+            class="absolute bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
+      <span class="icon-[lucide--log-out] size-4 block"></span>
+    </button>
+
+    {% if online_count > 0 %}
+    <div id="hud-players" class="absolute top-16 sm:top-4 left-4 pointer-events-none z-50 font-sans text-xs">
+      <div class="rounded-xl bg-card/80 backdrop-blur-md border border-border shadow-iso-sm px-3 py-2 space-y-1.5 min-w-[120px] max-w-[200px]">
+        <div class="text-[10px] uppercase tracking-widest font-medium text-muted-foreground">
+          Online · {{ online_count }}
+        </div>
+        <div class="space-y-1">
+          {% for user in users if user.online %}
+            {% if loop.index <= 5 %}
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full shrink-0" style="background: var(--color-brick-{{ user.color }})"></span>
+              <span class="text-foreground truncate">{{ user.name }}</span>
+            </div>
+            {% endif %}
+          {% endfor %}
+          {% if online_count > 5 %}
+          <div class="text-muted-foreground text-[10px] pl-4 pt-0.5">+ {{ online_count - 5 }} more</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Console, top-right, HL2-style kill feed #}
     {% set events = {
       'UserConnected':    'joined',
       'UserDisconnected': 'left',
@@ -186,36 +254,98 @@
       'DragEnded':        'stopped dragging',
     } %}
     <div id="console-log" class="absolute top-4 right-5 z-50 pointer-events-none
-                                  w-52 h-[200px] flex flex-col justify-end items-end gap-1.5 text-[10px] text-gray-400 overflow-hidden opacity-75">
+                                  w-52 h-[200px] hidden sm:flex flex-col justify-end items-end gap-1.5 font-sans text-xs text-muted-foreground overflow-hidden">
       {% for entry in logs %}
       <div id="log-{{ entry.id }}" class="flex items-center gap-1.5 whitespace-nowrap">
-        <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: {{ entry.user_color }}"></span>
+        <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: var(--color-brick-{{ entry.user_color }})"></span>
         <span>{{ entry.user_name }} {{ events[entry.kind] }}</span>
       </div>
       {% endfor %}
     </div>
 
-    {# Name + color — server-driven visibility #}
+    {# Welcome modal, server-gated. Two side-by-side cards: form (left) + controls (right). #}
     {% if show_player_setup %}
-    <div id="player-setup" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
-      <input name="set_name" placeholder="Set name..."
-             hx-on:keydown="if(event.key==='Enter') stdb.callReducer('set_name',[this.value])"
-             class="bg-surface/80 backdrop-blur-sm border border-white/10 rounded-full px-4 py-1.5 text-xs
-                    placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 w-40">
-      <div class="flex gap-1">
-        {% for c in ['Cyan','Pink','Purple','Yellow','Green','Orange'] %}
-        <button hx-on:click="stdb.callReducer('set_color',[{'{{ c }}': {}}])"
-                class="w-4 h-4 rounded-full border border-white/20 hover:border-white/60 transition"
-                style="background: {{ {'Cyan':'#22d3ee','Pink':'#f472b6','Purple':'#a78bfa','Yellow':'#facc15','Green':'#4ade80','Orange':'#fb923c'}[c] }}"></button>
-        {% endfor %}
+    <div id="welcome-modal" class="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md font-sans text-sm text-foreground overflow-y-auto p-4">
+      <div class="flex flex-col sm:flex-row items-stretch gap-4 my-auto">
+
+        {# Form card #}
+        <div class="w-full sm:w-[280px] rounded-2xl bg-card border border-border p-6 shadow-iso flex flex-col gap-5">
+          <div class="space-y-2">
+            <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Name</div>
+            <input name="set_name" autofocus
+                   hx-on="keydown[event.key=='Enter'] -> q('button[name=continue]').click()"
+                   class="w-full rounded-xl bg-card border border-border px-3 py-2 text-foreground outline-none focus:border-primary transition-colors font-sans text-base sm:text-sm">
+          </div>
+
+          <div class="space-y-2">
+            <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Color</div>
+            <div class="flex gap-2 justify-between">
+              {% for c in ['Cyan','Pink','Purple','Yellow','Green','Orange'] %}
+              <button type="button" data-color="{{ c }}"
+                      hx-on="click -> take('.is-selected', '.color-pick')"
+                      class="color-pick relative h-7 w-7 rounded-md cursor-pointer transition-transform hover:scale-110 bg-brick-{{ c|lower }}">
+                <span class="pick-check absolute inset-0 items-center justify-center">
+                  <span class="icon-[lucide--check] text-foreground size-5 [filter:drop-shadow(0_1px_2px_rgba(255,255,255,0.85))] dark:[filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.85))]"></span>
+                </span>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+
+          <button name="continue"
+                  :disabled="!q('input[name=set_name]').value.trim() || q('.color-pick.is-selected').count === 0"
+                  hx-on="click -> {
+                    var name = document.querySelector('input[name=set_name]').value.trim();
+                    var sel = document.querySelector('.color-pick.is-selected');
+                    stdb.callReducer('complete_setup', [name, { [sel.dataset.color.toLowerCase()]: {} }]);
+                  }"
+                  class="mt-auto w-full rounded-xl bg-primary text-primary-foreground font-semibold py-2 cursor-pointer transition-colors hover:bg-primary/90
+                         disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary">
+            Continue
+          </button>
+        </div>
+
+        {# Controls card #}
+        <div class="w-full sm:w-[260px] rounded-2xl bg-card border border-border p-6 shadow-iso flex flex-col gap-5">
+          <div class="text-xs uppercase tracking-widest font-medium text-muted-foreground">Controls</div>
+          <div class="flex-1 grid grid-cols-[auto_1fr] items-center gap-x-5 gap-y-4 py-2 text-sm">
+            <div class="flex items-center justify-end gap-1.5">
+              <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+                <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+              </kbd>
+            </div>
+            <span class="text-foreground">Place</span>
+
+            <div class="flex items-center justify-end gap-1.5">
+              <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+                <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+              </kbd>
+              <span class="text-muted-foreground">+</span>
+              <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+                <span class="icon-[lucide--move] size-3 text-muted-foreground"></span>DRAG
+              </kbd>
+            </div>
+            <span class="text-foreground">Move</span>
+
+            <div class="flex items-center justify-end gap-1.5">
+              <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+                <span class="icon-[lucide--arrow-big-up] size-3 text-muted-foreground"></span>SHIFT
+              </kbd>
+              <span class="text-muted-foreground">+</span>
+              <kbd class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted border border-border font-mono text-[10px] font-semibold text-foreground shadow-iso-sm">
+                <span class="icon-[lucide--mouse-pointer-click] size-3 text-muted-foreground"></span>CLICK
+              </kbd>
+            </div>
+            <span class="text-foreground">Erase</span>
+          </div>
+        </div>
+
       </div>
     </div>
     {% endif %}
 
   {% endblock %}
   </div>
-
-
 
 </body>
 </html>

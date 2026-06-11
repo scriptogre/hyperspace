@@ -24,14 +24,14 @@ impl Color {
         Color::Yellow,
     ];
 
-    pub fn hex(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
-            Color::Cyan => "#22d3ee",
-            Color::Purple => "#a78bfa",
-            Color::Orange => "#fb923c",
-            Color::Green => "#4ade80",
-            Color::Pink => "#f472b6",
-            Color::Yellow => "#facc15",
+            Color::Cyan => "cyan",
+            Color::Purple => "purple",
+            Color::Orange => "orange",
+            Color::Green => "green",
+            Color::Pink => "pink",
+            Color::Yellow => "yellow",
         }
     }
 
