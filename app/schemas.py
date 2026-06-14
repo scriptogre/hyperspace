@@ -1,8 +1,10 @@
-"""Typed shapes for the `.values()` rows handed to templates.
+"""Typed shapes for the dict rows handed to templates.
 
-These are plain dicts at runtime (Tortoise `.values()` never materializes ORM
-objects, which keeps reads cheap); the TypedDicts give the routes, the broadcast
-and the type checker a name for each row's shape.
+Brick and Player rows come straight from Tortoise `.values()` (1:1 with their
+columns); Event and Cursor rows are projections, joined to the actor and
+renamed for the template. All are plain dicts at runtime, never ORM objects,
+which keeps reads cheap. The TypedDicts give the routes, the broadcast and the
+type checker a name for each row's shape.
 """
 
 from typing import TypedDict
@@ -25,14 +27,14 @@ class PlayerRow(TypedDict):
     is_online: bool
 
 
-class EventView(TypedDict):
+class EventRow(TypedDict):
     id: int
     player_name: str
     player_color: str
     label: str
 
 
-class CursorView(TypedDict):
+class CursorRow(TypedDict):
     session_key: str
     grid_x: int
     grid_y: int

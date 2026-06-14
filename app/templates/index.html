@@ -21,6 +21,8 @@
 
 <body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
       data-session="{{ current_session_key }}"
+      hx-boost:inherited="true"
+      hx-swap:inherited="innerMorph"
       hx-on="
         keydown[event.key=='Shift'] -> data.deleteMode = true;
         keyup[event.key=='Shift']   -> data.deleteMode = false;
@@ -79,7 +81,7 @@
     </button>
   </div>
 
-  {% if show_player_form %}
+  {% if not current_player %}
     {% include "_player_form.html" %}
   {% endif %}
 

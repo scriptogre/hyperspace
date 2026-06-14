@@ -10,7 +10,7 @@ GRID_SIZE = 12
 _env = minijinja.Environment(
     loader=lambda name: (settings.TEMPLATES_DIR / name).read_text(),
     auto_escape_callback=lambda name: True,
-    globals={"Color": Color, "grid_size": GRID_SIZE},
+    globals={"colors": list(Color), "grid_size": GRID_SIZE},
 )
 
 

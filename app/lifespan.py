@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ):
         pg = await asyncpg.connect(settings.DATABASE_URL)
         await _install_triggers(pg)
-        await services.load_players()
+        await services.refresh_player_cache()
 
         async def on_notify(conn, pid, channel, payload):
             broadcast.notify(payload)

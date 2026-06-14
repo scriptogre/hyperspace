@@ -1,9 +1,11 @@
 """HTTP and WebSocket routes."""
 
 import json
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import RedirectResponse
+from pydantic import StringConstraints
 
 from app import broadcast, services
 from app.dependencies import (
@@ -11,12 +13,27 @@ from app.dependencies import (
     get_current_bricks,
     get_current_cursors,
     get_current_events,
+    get_current_player,
     get_current_players,
+    get_form_errors,
     get_session_key,
 )
 from app.enums import Color
+from app.exceptions import FormErrors
 from app.jinja import render
-from app.schemas import BrickRow, CursorView, EventView, PlayerRow
+from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
+from app.services import (
+    create_brick,
+    create_player,
+    delete_brick,
+    end_drag,
+    mark_player_as_offline,
+    mark_player_as_online,
+    move_brick,
+    refresh_player_cache,
+    start_drag,
+    update_cursor,
+)
 from app.signals import actor
 
 
@@ -24,12 +41,14 @@ router = APIRouter()
 
 
 @router.get("/")
-async def index(
+async def index_page(
     session_key: str = Depends(get_session_key),
     bricks: list[BrickRow] = Depends(get_current_bricks),
     players: list[PlayerRow] = Depends(get_current_players),
-    events: list[EventView] = Depends(get_current_events),
-    cursors: list[CursorView] = Depends(get_current_cursors),
+    events: list[EventRow] = Depends(get_current_events),
+    cursors: list[CursorRow] = Depends(get_current_cursors),
+    current_player: PlayerRow | None = Depends(get_current_player),
+    errors: FormErrors = Depends(get_form_errors),
 ):
     return render(
         "index.html",
@@ -39,27 +58,25 @@ async def index(
             "events": events,
             "cursors": cursors,
             "current_session_key": session_key,
-            "show_player_form": session_key not in services.players,
-            "colors": list(Color),
+            "current_player": current_player,
+            "errors": errors,
         },
     )
 
 
 @router.post("/join")
-async def join(
+async def player_join(
+    name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1), Form()
+    ],
+    color: Annotated[Color, Form()],
     session_key: str = Depends(get_session_key),
-    name: str = Form(""),
-    color: str = Form(""),
 ):
-    error = await services.join(session_key, name, color)
-    if error:
-        return render(
-            "_player_form.html", {"colors": list(Color), "name": name, "error": error}
-        )
+    await create_player(session_key, name, color)
     # Refresh the cache so the /ws join gate lets the new player act immediately.
-    await services.load_players()
-    # Empty body removes the overlay; its absence is the client's "joined" signal.
-    return HTMLResponse("")
+    await refresh_player_cache()
+    # Boosted POST follows the redirect and morphs the player-free page in.
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/health")
@@ -77,15 +94,15 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001)
         return
 
-    await services.mark_online(session_key)
+    await mark_player_as_online(session_key)
 
     actions = {  # message name -> service call; args arrive already typed
-        "create_brick": services.create_brick,
-        "delete_brick": services.delete_brick,
-        "update_cursor": services.update_cursor,
-        "start_drag": services.start_drag,
-        "end_drag": services.end_drag,
-        "move_brick": services.move_brick,
+        "create_brick": create_brick,
+        "delete_brick": delete_brick,
+        "update_cursor": update_cursor,
+        "start_drag": start_drag,
+        "end_drag": end_drag,
+        "move_brick": move_brick,
     }
     try:
         async with broadcast.client(session_key, websocket):
@@ -98,4 +115,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        await services.mark_offline(session_key)
+        await mark_player_as_offline(session_key)

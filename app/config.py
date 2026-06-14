@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["local", "production"] = "local"
     DEBUG: bool = True
     WEB_CONCURRENCY: int = 4
+    SECRET_KEY: str = "dev-insecure-change-me"  # signs the form-errors cookie
 
     # Directories
     # --------------------

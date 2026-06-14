@@ -196,7 +196,7 @@ async def run() -> None:
 
         started = time.monotonic()
         if "player" in changed:
-            await services.load_players()
+            await services.refresh_player_cache()
 
         htmls = []
         if "cursor" in changed:

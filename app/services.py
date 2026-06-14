@@ -4,48 +4,41 @@ from tortoise.transactions import in_transaction
 
 from app.enums import Color
 from app.models import Brick, Cursor, Player
+from app.schemas import PlayerRow
 
 MAX_STACK_HEIGHT = 5
 CURSOR_FLUSH_INTERVAL = 0.033
 
-# session_key -> {id, name, color, is_online}. Player rows change rarely; cache them
-# so renders skip the player table and a session can resolve to its player id.
-players: dict[str, dict] = {}
+# session_key -> player row. Player rows change rarely; cache them so renders skip
+# the player table and a session can resolve to its player id.
+players: dict[str, PlayerRow] = {}
 
 # session_key -> (x, y, z). Cursor moves are coalesced here and upserted in one
 # statement every CURSOR_FLUSH_INTERVAL.
 cursor_buffer: dict[str, tuple[int, int, int]] = {}
 
 
-async def load_players() -> None:
+async def refresh_player_cache() -> None:
     rows = await Player.all().values("id", "session_key", "name", "color", "is_online")
     players.clear()
     players.update({row["session_key"]: row for row in rows})
 
 
-async def join(session_key: str, name: str, color: str) -> str | None:
-    """Create or rename the player behind this session. Returns an error string on bad input."""
-    name = name.strip()
-    if not name:
-        return "Name cannot be empty"
-    try:
-        color = Color(color.lower())
-    except ValueError:
-        return f"Unknown color: {color}"
-
+async def create_player(session_key: str, name: str, color: Color) -> Player:
+    """Create or rename the player behind this session. Inputs are validated at the route."""
     player = await Player.get_or_none(session_key=session_key)
     if player:
         player.name = name
         player.color = color
         await player.save(update_fields=["name", "color"])
     else:
-        await Player.create(
+        player = await Player.create(
             session_key=session_key, name=name, color=color, is_online=True
         )
-    return None
+    return player
 
 
-async def mark_online(session_key: str) -> None:
+async def mark_player_as_online(session_key: str) -> None:
     """Flag a returning player online. First-time visitors have no row yet."""
     player = await Player.get_or_none(session_key=session_key)
     if player and not player.is_online:
@@ -53,7 +46,7 @@ async def mark_online(session_key: str) -> None:
         await player.save(update_fields=["is_online"])
 
 
-async def mark_offline(session_key: str) -> None:
+async def mark_player_as_offline(session_key: str) -> None:
     """Flag the player offline, drop their cursor, and release any bricks they were dragging."""
     cursor_buffer.pop(session_key, None)
 

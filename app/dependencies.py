@@ -8,15 +8,21 @@ acting player's name and color (a join the templates can't do).
 
 import uuid
 
-from fastapi import Request, Response
+from fastapi import Depends, Request, Response
 
 from app import services
 from app.enums import EventType
+from app.exceptions import FormErrors
 from app.models import Brick, Cursor, Event
-from app.schemas import BrickRow, CursorView, EventView, PlayerRow
+from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
 
 COOKIE_NAME = "hyperspace_id"
 RENDERED_EVENTS = 10
+
+
+def get_form_errors(request: Request, response: Response) -> FormErrors:
+    """Pop any validation errors a failed POST left in the signed cookie."""
+    return FormErrors.pop(request, response)
 
 
 async def get_session_key(request: Request, response: Response) -> str:
@@ -43,7 +49,14 @@ async def get_current_players() -> list[PlayerRow]:
     return list(services.players.values())
 
 
-async def get_current_events() -> list[EventView]:
+async def get_current_player(
+    session_key: str = Depends(get_session_key),
+) -> PlayerRow | None:
+    """The caller's player, or None if this session hasn't joined yet."""
+    return services.players.get(session_key)
+
+
+async def get_current_events() -> list[EventRow]:
     # The FK lets us pull the actor's name/color in one join, no cache lookup.
     rows = (
         await Event.all()
@@ -61,7 +74,7 @@ async def get_current_events() -> list[EventView]:
     ]
 
 
-async def get_current_cursors() -> list[CursorView]:
+async def get_current_cursors() -> list[CursorRow]:
     rows = (
         await Cursor.filter(is_active=True)
         .order_by("player_id")
