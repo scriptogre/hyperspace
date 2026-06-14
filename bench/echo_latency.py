@@ -39,7 +39,7 @@ async def _drain(ws) -> None:
 async def _setup_player(ws) -> None:
     """Drain the initial render, then register a name/color so renders are realistic."""
     await ws.recv()
-    await ws.send('{"fn":"complete_setup","args":["Bench","Cyan"]}')
+    await ws.send('{"fn":"join","args":["Bench","Cyan"]}')
     await ws.recv()
 
 
@@ -57,7 +57,9 @@ async def _load(session_id: str, stop: asyncio.Event, connected: list) -> None:
             connected.append(session_id)
             i = 0
             while not stop.is_set():
-                await ws.send(f'{{"fn":"update_cursor","args":[{i % 12},{(i * 5) % 12},0]}}')
+                await ws.send(
+                    f'{{"fn":"update_cursor","args":[{i % 12},{(i * 5) % 12},0]}}'
+                )
                 try:
                     await asyncio.wait_for(ws.recv(), timeout=0.01)
                 except asyncio.TimeoutError:
@@ -71,8 +73,10 @@ async def _load(session_id: str, stop: asyncio.Event, connected: list) -> None:
 async def _measure(n_load: int, n_samples: int = 80):
     stop = asyncio.Event()
     connected: list = []
-    loaders = [asyncio.create_task(_load(f"load-{i}-{uuid.uuid4()}", stop, connected))
-               for i in range(n_load)]
+    loaders = [
+        asyncio.create_task(_load(f"load-{i}-{uuid.uuid4()}", stop, connected))
+        for i in range(n_load)
+    ]
     await asyncio.sleep(1.0)  # let loaders connect
 
     latencies = []
@@ -99,14 +103,18 @@ async def main() -> None:
         await _seed_bricks(ws, 100)
     print("Seeded 100 bricks.\n")
 
-    print(f"{'target users':>13} {'connected':>10}   {'mean':>8} {'p50':>8} {'p99':>8}   room refresh")
+    print(
+        f"{'target users':>13} {'connected':>10}   {'mean':>8} {'p50':>8} {'p99':>8}   room refresh"
+    )
     for n_total in (1, 2, 5, 10, 20):
         lat, live = await _measure(n_load=n_total - 1)
         lat.sort()
         mean = statistics.mean(lat)
         p50 = lat[len(lat) // 2]
         p99 = lat[int(len(lat) * 0.99)]
-        print(f"{n_total:>13} {live + 1:>10}   {mean:7.1f}ms {p50:7.1f}ms {p99:7.1f}ms   ~{1000 / mean:.0f} Hz")
+        print(
+            f"{n_total:>13} {live + 1:>10}   {mean:7.1f}ms {p50:7.1f}ms {p99:7.1f}ms   ~{1000 / mean:.0f} Hz"
+        )
 
 
 if __name__ == "__main__":

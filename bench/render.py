@@ -19,8 +19,15 @@ from app.jinja import render
 
 def cursors(m: int) -> list[dict]:
     return [
-        {"session_id": f"u{i}", "grid_x": i % 12, "grid_y": (i * 2) % 12, "grid_z": 0,
-         "active": True, "name": f"P{i}", "color": "cyan"}
+        {
+            "session_id": f"u{i}",
+            "grid_x": i % 12,
+            "grid_y": (i * 2) % 12,
+            "grid_z": 0,
+            "active": True,
+            "name": f"P{i}",
+            "color": "cyan",
+        }
         for i in range(m)
     ]
 
@@ -33,7 +40,11 @@ def timeit(fn, rounds: int = 300):
         fn()
         samples.append((time.perf_counter() - t) * 1000)
     samples.sort()
-    return statistics.mean(samples), samples[len(samples) // 2], samples[int(len(samples) * 0.99)]
+    return (
+        statistics.mean(samples),
+        samples[len(samples) // 2],
+        samples[int(len(samples) * 0.99)],
+    )
 
 
 def main() -> None:

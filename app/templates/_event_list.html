@@ -1,0 +1,10 @@
+{# Activity feed, top-right. #}
+<div id="event-list" class="absolute top-4 right-5 z-50 pointer-events-none
+                            w-52 h-[200px] hidden sm:flex flex-col justify-end items-end gap-1.5 font-sans text-xs text-muted-foreground overflow-hidden">
+  {% for event in events %}
+  <div id="event-{{ event.id }}" class="flex items-center gap-1.5 whitespace-nowrap">
+    <span class="shrink-0 w-1.5 h-1.5 rounded-full" style="background: var(--color-brick-{{ event.player_color }})"></span>
+    <span>{{ event.player_name }} {{ event.label }}</span>
+  </div>
+  {% endfor %}
+</div>

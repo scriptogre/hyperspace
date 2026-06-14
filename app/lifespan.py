@@ -8,7 +8,7 @@ import asyncpg
 from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
-from app import routes, services
+from app import broadcast, services
 from app.config import settings
 
 _NOTIFY_FN = """
@@ -20,7 +20,7 @@ END;
 $$ LANGUAGE plpgsql;
 """
 
-_TABLES = ("brick", "user", "cursor", "event")
+_TABLES = ("brick", "player", "cursor", "event")
 _TRIGGER_LOCK = 0x68797073  # serialize trigger DDL across workers
 
 # Postgres stamps every cursor write with a monotonic version, so "what changed
@@ -72,17 +72,19 @@ async def _cursor_flusher() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    async with RegisterTortoise(app, config=settings.TORTOISE_ORM, generate_schemas=True):
+    async with RegisterTortoise(
+        app, config=settings.TORTOISE_ORM, generate_schemas=True
+    ):
         pg = await asyncpg.connect(settings.DATABASE_URL)
         await _install_triggers(pg)
         await services.load_players()
 
         async def on_notify(conn, pid, channel, payload):
-            routes.mark_dirty(payload)
+            broadcast.notify(payload)
 
         await pg.add_listener("hyperspace", on_notify)
 
-        task = asyncio.create_task(routes.broadcast_loop())
+        task = asyncio.create_task(broadcast.run())
         flush_task = asyncio.create_task(_cursor_flusher())
         yield
 

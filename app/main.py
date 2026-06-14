@@ -10,7 +10,9 @@ from app.routes import router
 
 
 # 1. Create application
-app = FastAPI(default_response_class=HTMLResponse, title="Hyperspace", lifespan=lifespan)
+app = FastAPI(
+    default_response_class=HTMLResponse, title="Hyperspace", lifespan=lifespan
+)
 
 # 2. Mount static files
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")

@@ -31,7 +31,7 @@
         } else if (existing) {
           Idiomorph.morph(existing, node, MORPH_OPTS);
         } else {
-          document.getElementById("cursors").appendChild(node);
+          document.getElementById("cursor-list").appendChild(node);
         }
         node = next;
       }
@@ -64,6 +64,7 @@
   window.hyperspace = {
     call: function (fn, args) {
       if (!ws || !ready) return;
+      if (document.getElementById("player-form")) return;  // not joined yet
       ws.send(JSON.stringify({ fn: fn, args: args }));
     },
   };

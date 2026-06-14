@@ -1,47 +1,30 @@
-set dotenv-load := true   # Load .env (COMPOSE_FILE picks local vs production)
-
 default: up
 
-# Start the stack. Local: app + postgres + tailwind watch. Production: app + postgres.
+# Start the stack
 up *args:
     docker compose up {{ args }}
 
 # Stop and remove containers
-down:
-    docker compose down --remove-orphans
+down *args:
+    docker compose down {{ args }}
 
 # Rebuild images
-build:
-    docker compose build
+build *args:
+    docker compose build {{ args }}
 
-# One-shot production CSS build (the local stack watches automatically)
-css:
-    bun install
-    bunx tailwindcss -i app/static/css/input.css -o app/static/css/output.css --minify
+makemigrations name="auto":
+    docker compose run --rm fastapi tortoise makemigrations --name {{ name }}
 
-# Install dependencies on the host (for editor tooling)
-install:
-    uv sync
+migrate:
+    docker compose run --rm fastapi tortoise migrate
 
-
-# Run the instrumented server on :8001 for load testing (uses the compose postgres on :5432)
-bench-serve:
-    HS_BCAST_LOG=1 POSTGRES_HOST=127.0.0.1 uv run uvicorn app.main:app --host 0.0.0.0 --port 8001 --ws-per-message-deflate false
-
-# Push N users at a running `bench-serve`: movers + slow readers (rest idle)
-crowd users="500" secs="30" movers="" slow="0":
-    HS_WS_URL=ws://127.0.0.1:8001/ws uv run python -m bench.crowd {{ users }} {{ secs }} {{ movers }} {{ slow }}
-
-# Latency ladder (mean/p50/p99) against a running `bench-serve`
-bench-latency:
+# Start bench server, run crowd load + latency ladder, then stop.
+bench users="500" secs="30" movers="" slow="0":
+    #!/usr/bin/env bash
+    HS_BCAST_LOG=1 POSTGRES_HOST=127.0.0.1 uv run uvicorn app.main:app \
+      --host 0.0.0.0 --port 8001 --ws-per-message-deflate false &
+    SRV=$!
+    trap "kill $SRV 2>/dev/null" EXIT
+    sleep 2
+    HS_WS_URL=ws://127.0.0.1:8001/ws uv run python -m bench.crowd {{users}} {{secs}} {{movers}} {{slow}}
     HS_WS_URL=ws://127.0.0.1:8001/ws uv run python -m bench.echo_latency
-
-# Run a bench tool through a netem-shaped container (real-ish RTT/loss/bandwidth).
-# Override with NETEM_DELAY/JITTER/LOSS/RATE env vars. Needs `bench-serve` running.
-loadgen tool="echo_latency" *args:
-    docker build -q -t hyperspace-loadgen bench/loadgen
-    docker run --rm --cap-add=NET_ADMIN --add-host=host.docker.internal:host-gateway \
-      -e HS_WS_URL=ws://host.docker.internal:8001/ws \
-      -e NETEM_DELAY -e NETEM_JITTER -e NETEM_LOSS -e NETEM_RATE \
-      -v {{ justfile_directory() }}:/app -w /app \
-      hyperspace-loadgen python -m bench.{{ tool }} {{ args }}

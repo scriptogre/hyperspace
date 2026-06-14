@@ -7,12 +7,8 @@ services:
         ENVIRONMENT: production
     expose: [8000]
     init: true
+    tty: true
     env_file: .env
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: ${POSTGRES_USER:-hyperspace}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyperspace}
-      POSTGRES_DB: ${POSTGRES_DB:-hyperspace}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-4} --ws-per-message-deflate false
     restart: always
     depends_on:
@@ -21,15 +17,15 @@ services:
 
   postgres:
     image: postgres:17
-    command: postgres -c synchronous_commit=off -c shared_buffers=512MB
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-hyperspace}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyperspace}
-      POSTGRES_DB: ${POSTGRES_DB:-hyperspace}
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: postgres -c synchronous_commit=off -c shared_buffers=512MB
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hyperspace} -d ${POSTGRES_DB:-hyperspace}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -38,11 +34,3 @@ services:
 
 volumes:
   postgres_data:
-
-# Docker's default address pools are exhausted on the ThinkCentre,
-# so the default network is pinned to a free subnet outside the defaults.
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 10.98.0.0/24

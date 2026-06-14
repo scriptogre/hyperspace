@@ -1,0 +1,87 @@
+<div class="flex-1 relative overflow-hidden bg-background select-none w-full h-full" id="brick-list">
+  <div id="grid-perspective" class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
+       style="perspective: 1000px">
+    <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+         data-grid-size="{{ grid_size }}"
+         style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)"
+         hx-on="
+           pointerover -> {
+             var cell = event.target.closest('[data-cell-x]');
+             if (!cell) return;
+             var cx = +cell.dataset.cellX, cy = +cell.dataset.cellY;
+             hyperspace.call('update_cursor', [cx, cy, 0]);
+             var c = document.getElementById('cursor-' + document.body.dataset.session);
+             if (!c) return;
+             var half = +this.dataset.gridSize * 32;
+             var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
+             var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
+             c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
+             c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
+           };
+           click -> {
+             var cell = event.target.closest('[data-cell-x]');
+             if (cell) hyperspace.call('create_brick', [+cell.dataset.cellX, +cell.dataset.cellY]);
+           };
+           pointerdown -> {
+             var brick = event.target.closest('[data-brick-id]');
+             if (!brick) return;
+             event.preventDefault(); event.stopPropagation();
+             var id = parseInt(brick.dataset.brickId);
+             if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); hyperspace.call('delete_brick', [id]); return; }
+             document.body.dataset.dragBrick = id;
+             document.body.dataset.dragStartX = event.clientX;
+             document.body.dataset.dragStartY = event.clientY;
+             document.body.dataset.dragMoved = '0';
+           }">
+
+      {% for row in range(grid_size) %}
+        {% for col in range(grid_size) %}
+        <button data-cell-x="{{ col }}" data-cell-y="{{ row }}" class="grid-cell"
+                style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}"></button>
+        {% endfor %}
+      {% endfor %}
+
+      {% set depth = 12 %}
+      {% for brick in bricks %}
+      <div id="block-{{ brick.id }}"
+           data-x="{{ brick.x }}" data-y="{{ brick.y }}" data-z="{{ brick.z }}"
+           data-brick-id="{{ brick.id }}"
+           {{ 'data-server-grabbing' if brick.dragged_by_id else '' }}
+           :data-grabbing="(data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing') ? '' : null"
+           :data-pred-x="data.predX != null && data.x === data.predX ? null : data.predX"
+           :data-pred-y="data.predY != null && data.y === data.predY ? null : data.predY"
+           :style="{
+             gridColumn: (data.predX != null ? +data.predX : +data.x) + 1,
+             gridRow:    (data.predY != null ? +data.predY : +data.y) + 1,
+             zIndex: ((data.dragBrick == data.brickId && data.dragMoved == '1') || this.hasAttribute('data-server-grabbing'))
+                       ? 1000
+                       : ((+data.x + +data.y) * 10 + +data.z * 100 + 1)
+           }"
+           class="group/brick brick"
+           style="--color: var(--color-brick-{{ brick.color }});
+                  transform-style: preserve-3d;
+                  transform: translateZ({{ brick.z * depth }}px)">
+        {# Top face #}
+        <div class="brick-top"
+             style="background: var(--color);
+                    transform: translateZ({{ depth }}px)">
+          <div class="brick-overlay"></div>
+        </div>
+        {# South wall (bottom-left in iso) #}
+        <div class="brick-wall bottom-0"
+             style="width: 64px; height: {{ depth }}px;
+                    background: color-mix(in srgb, var(--color) 65%, black);
+                    transform-origin: bottom; transform: rotateX(-90deg)">
+        </div>
+        {# West wall (bottom-right in iso) #}
+        <div class="brick-wall top-0"
+             style="width: {{ depth }}px; height: 64px;
+                    background: color-mix(in srgb, var(--color) 45%, black);
+                    transform-origin: left; transform: rotateY(-90deg)">
+        </div>
+      </div>
+      {% endfor %}
+
+    </div>
+  </div>
+</div>

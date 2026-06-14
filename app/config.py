@@ -3,13 +3,15 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import computed_field
+from pydantic import PostgresDsn, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", extra="ignore", env_ignore_empty=True
+        env_file=".env",
+        extra="ignore",
+        env_ignore_empty=True,
     )
 
     # Application
@@ -26,18 +28,24 @@ class Settings(BaseSettings):
 
     # Database
     # --------------------
-    POSTGRES_HOST: str = "127.0.0.1"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "hyperspace"
-    POSTGRES_PASSWORD: str = "hyperspace"
-    POSTGRES_DB: str = "hyperspace"
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
 
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
-        return (
-            f"postgres://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql",
+                username=self.POSTGRES_USER,
+                password=self.POSTGRES_PASSWORD,
+                host=self.POSTGRES_HOST,
+                port=self.POSTGRES_PORT,
+                path=self.POSTGRES_DB,
+            )
         )
 
     @computed_field
@@ -67,4 +75,6 @@ class Settings(BaseSettings):
         }
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]
+
+TORTOISE_ORM = settings.TORTOISE_ORM  # top-level alias for tortoise CLI

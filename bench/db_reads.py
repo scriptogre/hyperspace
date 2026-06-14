@@ -21,7 +21,9 @@ import time
 
 import asyncpg
 
-DSN = os.environ.get("HS_PG_DSN", "postgresql://hyperspace:hyperspace@127.0.0.1:5432/hyperspace")
+DSN = os.environ.get(
+    "HS_PG_DSN", "postgresql://hyperspace:hyperspace@127.0.0.1:5432/hyperspace"
+)
 COLORS = ["Cyan", "Purple", "Orange", "Green", "Pink", "Yellow"]
 CUR = "identity, x, y, z, active, version"
 
@@ -62,13 +64,18 @@ async def mark_moved(conn: asyncpg.Connection, m: int) -> int:
 
 
 async def read_cache(conn, wm, cache):
-    rows = await conn.fetch(f"SELECT {CUR} FROM cursor WHERE version > $1 ORDER BY version", wm)
-    return [(r["identity"], r["x"], r["y"], cache.get(r["identity"], ("?", "cyan"))) for r in rows]
+    rows = await conn.fetch(
+        f"SELECT {CUR} FROM cursor WHERE version > $1 ORDER BY version", wm
+    )
+    return [
+        (r["identity"], r["x"], r["y"], cache.get(r["identity"], ("?", "cyan")))
+        for r in rows
+    ]
 
 
 async def read_join(conn, wm, _cache):
     rows = await conn.fetch(
-        'SELECT c.identity, c.x, c.y, c.z, c.active, c.version, u.name, u.color '
+        "SELECT c.identity, c.x, c.y, c.z, c.active, c.version, u.name, u.color "
         'FROM cursor c LEFT JOIN "user" u ON u.identity = c.identity '
         "WHERE c.version > $1 ORDER BY c.version",
         wm,
@@ -77,18 +84,26 @@ async def read_join(conn, wm, _cache):
 
 
 async def read_per_row(conn, wm, _cache):
-    rows = await conn.fetch(f"SELECT {CUR} FROM cursor WHERE version > $1 ORDER BY version", wm)
+    rows = await conn.fetch(
+        f"SELECT {CUR} FROM cursor WHERE version > $1 ORDER BY version", wm
+    )
     out = []
     for r in rows:
-        u = await conn.fetchrow('SELECT name, color FROM "user" WHERE identity = $1', r["identity"])
+        u = await conn.fetchrow(
+            'SELECT name, color FROM "user" WHERE identity = $1', r["identity"]
+        )
         out.append((r["identity"], r["x"], r["y"], (u["name"], u["color"])))
     return out
 
 
 async def read_full(conn, _wm, _cache):
-    bricks = await conn.fetch("SELECT id, x, y, z, color, dragged_by FROM brick ORDER BY id")
+    bricks = await conn.fetch(
+        "SELECT id, x, y, z, color, dragged_by FROM brick ORDER BY id"
+    )
     users = await conn.fetch('SELECT identity, name, color, online FROM "user"')
-    cursors = await conn.fetch("SELECT identity, x, y, z FROM cursor WHERE active ORDER BY identity")
+    cursors = await conn.fetch(
+        "SELECT identity, x, y, z FROM cursor WHERE active ORDER BY identity"
+    )
     events = await conn.fetch("SELECT id, kind, identity FROM event ORDER BY id")
     return bricks, users, cursors, events
 
@@ -101,12 +116,18 @@ async def timeit(fn, conn, wm, cache, rounds: int):
         await fn(conn, wm, cache)
         samples.append((time.perf_counter() - t) * 1000)
     samples.sort()
-    return statistics.mean(samples), samples[len(samples) // 2], samples[int(len(samples) * 0.99)]
+    return (
+        statistics.mean(samples),
+        samples[len(samples) // 2],
+        samples[int(len(samples) * 0.99)],
+    )
 
 
 async def main() -> None:
     conn = await asyncpg.connect(DSN)
-    print(f"{'N':>5} {'moved':>6} {'strategy':>8} {'trips':>6} {'mean':>9} {'p50':>9} {'p99':>9}")
+    print(
+        f"{'N':>5} {'moved':>6} {'strategy':>8} {'trips':>6} {'mean':>9} {'p50':>9} {'p99':>9}"
+    )
     for n, m in [(100, 100), (600, 600), (1000, 1000), (1000, 250)]:
         await seed(conn, n)
         cache = await player_cache(conn)
@@ -119,7 +140,9 @@ async def main() -> None:
         ]:
             rounds = 30 if name == "per_row" and m > 300 else 200
             mean, p50, p99 = await timeit(fn, conn, wm, cache, rounds)
-            print(f"{n:>5} {m:>6} {name:>8} {trips:>6} {mean:>7.2f}ms {p50:>7.2f}ms {p99:>7.2f}ms")
+            print(
+                f"{n:>5} {m:>6} {name:>8} {trips:>6} {mean:>7.2f}ms {p50:>7.2f}ms {p99:>7.2f}ms"
+            )
         print()
     await conn.close()
 

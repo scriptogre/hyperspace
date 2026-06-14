@@ -1,6 +1,3 @@
-# Layer onto production for a public host that terminates TLS itself (a cloud
-# droplet, not the homelab where a shared Caddy already fronts things):
-#   COMPOSE_FILE=docker-compose.production.yml:docker-compose.caddy.yml
 services:
   caddy:
     image: caddy:2

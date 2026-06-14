@@ -27,7 +27,9 @@ from multiprocessing import Process
 import websockets
 
 URL = os.environ.get("HS_WS_URL", "ws://127.0.0.1:8001/ws")
-SLOW_READ = float(os.environ.get("HS_SLOW_READ", "0.25"))  # seconds between reads for slow clients
+SLOW_READ = float(
+    os.environ.get("HS_SLOW_READ", "0.25")
+)  # seconds between reads for slow clients
 COLORS = ["Cyan", "Pink", "Purple", "Yellow", "Green", "Orange"]
 PER_PROC = 250  # clients per worker process
 
@@ -36,15 +38,20 @@ async def client(label: str, duration: float, moves: bool, slow: bool) -> bool:
     sid = f"crowd-{uuid.uuid4().hex[:10]}"
     try:
         ws = await websockets.connect(
-            URL, additional_headers={"Cookie": f"hyperspace_id={sid}"},
-            max_size=None, compression=None, open_timeout=15,
+            URL,
+            additional_headers={"Cookie": f"hyperspace_id={sid}"},
+            max_size=None,
+            compression=None,
+            open_timeout=15,
             # Small inbound queue so a slow reader applies TCP backpressure to the
             # server instead of buffering everything in the client.
             max_queue=8 if slow else 32,
         )
         await ws.recv()  # initial stage frame
         await ws.recv()  # initial cursors frame
-        await ws.send(json.dumps({"fn": "complete_setup", "args": [label, random.choice(COLORS)]}))
+        await ws.send(
+            json.dumps({"fn": "join", "args": [label, random.choice(COLORS)]})
+        )
     except Exception:
         return False
 
@@ -61,7 +68,9 @@ async def client(label: str, duration: float, moves: bool, slow: bool) -> bool:
     x, y = random.randint(0, 10), random.randint(0, 10)
     loop = asyncio.get_event_loop()
     try:
-        await ws.send(json.dumps({"fn": "update_cursor", "args": [x, y, 0]}))  # park one cursor
+        await ws.send(
+            json.dumps({"fn": "update_cursor", "args": [x, y, 0]})
+        )  # park one cursor
         end = loop.time() + duration
         while loop.time() < end:
             if not moves:
@@ -82,12 +91,16 @@ async def client(label: str, duration: float, moves: bool, slow: bool) -> bool:
     return True
 
 
-async def run_chunk(count: int, movers: int, slow: int, duration: float, pid: int) -> None:
+async def run_chunk(
+    count: int, movers: int, slow: int, duration: float, pid: int
+) -> None:
     tasks = []
     for i in range(count):
         is_mover = i < movers
         is_slow = movers <= i < movers + slow
-        tasks.append(asyncio.create_task(client(f"C{pid}-{i}", duration, is_mover, is_slow)))
+        tasks.append(
+            asyncio.create_task(client(f"C{pid}-{i}", duration, is_mover, is_slow))
+        )
         if i % 25 == 0:
             await asyncio.sleep(0.05)  # stagger connects so the accept queue keeps up
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -115,9 +128,15 @@ def main() -> None:
     mover_counts = _split(movers, nproc)
     slow_counts = _split(slow, nproc)
 
-    print(f"{total} users ({movers} moving, {slow} slow) across {nproc} processes for {duration:.0f}s -> {URL}", flush=True)
+    print(
+        f"{total} users ({movers} moving, {slow} slow) across {nproc} processes for {duration:.0f}s -> {URL}",
+        flush=True,
+    )
     procs = [
-        Process(target=worker, args=(counts[i], mover_counts[i], slow_counts[i], duration, i))
+        Process(
+            target=worker,
+            args=(counts[i], mover_counts[i], slow_counts[i], duration, i),
+        )
         for i in range(nproc)
     ]
     for p in procs:

@@ -1,47 +1,42 @@
-"""Render context shapes passed to the templates.
+"""Typed shapes for the `.values()` rows handed to templates.
 
-Plain dicts at runtime (fast for minijinja), typed for the checker and IDE.
+These are plain dicts at runtime (Tortoise `.values()` never materializes ORM
+objects, which keeps reads cheap); the TypedDicts give the routes, the broadcast
+and the type checker a name for each row's shape.
 """
 
 from typing import TypedDict
 
 
-class Block(TypedDict):
+class BrickRow(TypedDict):
     id: int
+    x: int
+    y: int
+    z: int
+    color: str
+    dragged_by_id: int | None
+
+
+class PlayerRow(TypedDict):
+    id: int
+    session_key: str
+    name: str
+    color: str
+    is_online: bool
+
+
+class EventView(TypedDict):
+    id: int
+    player_name: str
+    player_color: str
+    label: str
+
+
+class CursorView(TypedDict):
+    session_key: str
     grid_x: int
     grid_y: int
     grid_z: int
-    color: str
-    is_being_dragged: bool
-
-
-class User(TypedDict):
+    is_active: bool
     name: str
     color: str
-    online: bool
-
-
-class Cursor(TypedDict):
-    name: str
-    color: str
-    session_id: str
-    grid_x: int
-    grid_y: int
-    grid_z: int
-
-
-class Log(TypedDict):
-    id: int
-    user_name: str
-    user_color: str
-    kind: str
-
-
-class World(TypedDict):
-    blocks: list[Block]
-    users: list[User]
-    online_count: int
-    cursors: list[Cursor]
-    logs: list[Log]
-    grid_size: int
-    known_ids: set[str]

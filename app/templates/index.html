@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="htmx-config" content='{"morphIgnore":["data-htmx-powered","data-grabbing","data-pending-delete","data-pred-x","data-pred-y","data-pred-sx","data-pred-sy"]}'>
+  <title>Hyperspace</title>
+
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link href="/static/css/output.css?v=mobile4" rel="stylesheet">
+
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="/static/js/vendor/htmx.min.js"></script>
+  <script src="/static/js/vendor/hx-live.min.js"></script>
+  <script src="/static/js/vendor/hx-optimistic.min.js"></script>
+  <script src="/static/js/vendor/idiomorph.min.js"></script>
+  <script src="/static/js/vendor/fzstd.min.js"></script>
+  <script src="/static/js/hyperspace.js"></script>
+</head>
+
+<body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
+      data-session="{{ current_session_key }}"
+      hx-on="
+        keydown[event.key=='Shift'] -> data.deleteMode = true;
+        keyup[event.key=='Shift']   -> data.deleteMode = false;
+        pointermove -> {
+          if (!data.dragBrick) return;
+          var dx = event.clientX - parseInt(data.dragStartX);
+          var dy = event.clientY - parseInt(data.dragStartY);
+          if (data.dragMoved !== '1' && Math.abs(dx) + Math.abs(dy) > 8) {
+            data.dragMoved = '1';
+            hyperspace.call('start_drag', [parseInt(data.dragBrick)]);
+          }
+          if (data.dragMoved !== '1') return;
+          var el = document.getElementById('block-' + data.dragBrick);
+          if (el) el.style.pointerEvents = 'none';
+          var under = document.elementFromPoint(event.clientX, event.clientY);
+          if (el) el.style.pointerEvents = '';
+          if (!under) return;
+          var target = under.closest('[data-brick-id]') || under.closest('button[data-cell-x]');
+          if (!target) return;
+          var cx = target.dataset.x ?? target.dataset.cellX;
+          var cy = target.dataset.y ?? target.dataset.cellY;
+          if (data.dragLastX !== cx || data.dragLastY !== cy) {
+            data.dragLastX = cx; data.dragLastY = cy;
+            if (el) { el.dataset.predX = cx; el.dataset.predY = cy; }
+            hyperspace.call('move_brick', [parseInt(data.dragBrick), parseInt(cx), parseInt(cy)]);
+          }
+        };
+        pointerup -> {
+          if (!data.dragBrick) return;
+          if (data.dragMoved === '1') hyperspace.call('end_drag', []);
+          attr('data-drag-brick', false);
+          attr('data-drag-start-x', false);
+          attr('data-drag-start-y', false);
+          attr('data-drag-moved', false);
+          attr('data-drag-last-x', false);
+          attr('data-drag-last-y', false);
+        }">
+
+  {# Each fragment has a stable root id; the broadcast morphs them in place. #}
+  <div id="app" class="relative w-full h-full">
+    {% include "_brick_list.html" %}
+    {% include "_player_list.html" %}
+    {% include "_event_list.html" %}
+
+    {# Stable container; cursor nodes morph/append/remove inside it. #}
+    <div id="cursor-list" class="absolute inset-0 pointer-events-none">
+      {% include "_cursor_list.html" %}
+    </div>
+
+    {# Static, never broadcast. #}
+    <button id="logout-btn"
+            hx-on="click -> { document.cookie = 'hyperspace_id=; Max-Age=0; Path=/; SameSite=Lax'; location.reload(); }"
+            title="Log out"
+            class="absolute bottom-12 sm:bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
+      <span class="icon-[lucide--log-out] size-4 block"></span>
+    </button>
+  </div>
+
+  {% if show_player_form %}
+    {% include "_player_form.html" %}
+  {% endif %}
+
+</body>
+</html>

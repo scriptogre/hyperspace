@@ -5,7 +5,6 @@ FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
 
-# Install the venv in /usr/local so it survives the runtime copy below.
 ENV UV_PROJECT_ENVIRONMENT=/usr/local
 
 WORKDIR /code
@@ -39,10 +38,8 @@ ENV PATH="/usr/local/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     ENVIRONMENT=${ENVIRONMENT}
 
-HEALTHCHECK --interval=5s --timeout=3s --retries=10 --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=3s --retries=10 --start-period=10s \
     CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8000/health')"
 
 USER non-root
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-per-message-deflate", "false"]
