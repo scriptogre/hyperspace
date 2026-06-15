@@ -12,6 +12,13 @@ down *args:
 build *args:
     docker compose build {{ args }}
 
+# Run the e2e tests in the test container against a healthy stack
+test *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker compose up -d --wait fastapi
+    docker compose run --rm tests {{ ARGS }}
+
 makemigrations name="auto":
     docker compose run --rm fastapi tortoise makemigrations --name {{ name }}
 

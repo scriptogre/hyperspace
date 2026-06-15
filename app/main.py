@@ -1,5 +1,7 @@
 """Hyperspace: real-time hypermedia on FastAPI + Tortoise ORM + Postgres."""
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse
@@ -9,6 +11,20 @@ from app.config import settings
 from app.exceptions import validation_error_handler
 from app.lifespan import lifespan
 from app.routes import router
+
+
+class _DropHealthAccessLog(logging.Filter):
+    """
+    Hide the periodic /health probe from uvicorn's access log.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.args and len(record.args) >= 3 and record.args[2] == "/health"
+        )
+
+
+logging.getLogger("uvicorn.access").addFilter(_DropHealthAccessLog())
 
 
 app = FastAPI(

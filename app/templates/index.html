@@ -61,8 +61,10 @@
           attr('data-drag-last-y', false);
         }">
 
-  {# Each fragment has a stable root id; the broadcast morphs them in place. #}
-  <div id="app" class="relative w-full h-full">
+  {# Each fragment has a stable root id; the broadcast morphs them in place.
+     hx-preserve keeps this WS-driven subtree untouched across boosted page
+     morphs (e.g. join), so htmx never rebinds its hx-on click handlers. #}
+  <div id="app" hx-preserve="true" class="relative w-full h-full">
     {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
     {% include "_event_list.html" %}

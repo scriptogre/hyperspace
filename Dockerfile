@@ -43,3 +43,27 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=10 --start-period=10s \
 
 USER non-root
 EXPOSE 8000
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# TESTS STAGE: full deps + Playwright (e2e against the running stack)
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm AS tests
+
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0 \
+    UV_PROJECT_ENVIRONMENT=/usr/local \
+    PATH="/usr/local/bin:${PATH}" \
+    PYTHONPATH="/code" \
+    PYTHONUNBUFFERED=1 \
+    ENVIRONMENT=testing
+
+WORKDIR /code
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked
+
+RUN playwright install --with-deps chromium
+
+ENTRYPOINT ["pytest"]

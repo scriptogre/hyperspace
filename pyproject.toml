@@ -22,8 +22,19 @@ package = false
 [tool.tortoise]
 tortoise_orm = "app.config.TORTOISE_ORM"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# base-url is the Docker service name: e2e tests run containerized via `just test`.
+addopts = "--base-url http://fastapi:8000"
+
 [tool.prehook]
 hooks = [
     "uvx ruff check",
     "uvx ruff format",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "pytest-playwright>=0.8.0",
 ]

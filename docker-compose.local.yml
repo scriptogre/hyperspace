@@ -15,7 +15,11 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --ws-per-message-deflate false
     restart: unless-stopped
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +51,22 @@ services:
     volumes:
       - .:/code
     command: sh -c "bun install --frozen-lockfile && bunx tailwindcss -i ./app/static/css/input.css -o ./app/static/css/output.css --watch"
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tests
+    volumes:
+      - .:/code
+    init: true
+    ipc: host
+    env_file: .env
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    profiles:
+      - test
 
 volumes:
   postgres_data:
