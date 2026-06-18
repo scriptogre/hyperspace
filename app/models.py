@@ -44,7 +44,7 @@ class Brick(Model):
         on_delete=SET_NULL,
         description="player currently dragging this brick",
     )
-    events: ReverseRelation[Event]
+    events: ReverseRelation["Event"]
 
     class Meta:
         table = "brick"
@@ -68,8 +68,8 @@ class Player(Model):
     # Relations
     bricks: ReverseRelation[Brick]
     dragged_brick: ReverseRelation[Brick]
-    cursor: ReverseRelation[Cursor]
-    events: ReverseRelation[Event]
+    cursor: ReverseRelation["Cursor"]
+    events: ReverseRelation["Event"]
 
     class Meta:
         table = "player"
