@@ -4,7 +4,9 @@ from enum import StrEnum
 
 
 class Color(StrEnum):
-    """Color for players and bricks."""
+    """
+    Color for players and bricks.
+    """
 
     CYAN = "cyan"
     PURPLE = "purple"
@@ -15,7 +17,9 @@ class Color(StrEnum):
 
 
 class EventType(StrEnum):
-    """An entry type in the activity feed."""
+    """
+    An entry type in the activity feed.
+    """
 
     PLAYER_JOINED = "player_joined"
     PLAYER_LEFT = "player_left"
@@ -26,7 +30,9 @@ class EventType(StrEnum):
 
     @property
     def label(self) -> str:
-        """Human phrasing shown in the activity feed."""
+        """
+        Human phrasing shown in the activity feed.
+        """
         return {
             EventType.PLAYER_JOINED: "joined",
             EventType.PLAYER_LEFT: "left",

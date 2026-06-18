@@ -326,7 +326,6 @@ dependencies = [
     { name = "python-multipart" },
     { name = "tortoise-orm" },
     { name = "uvicorn", extra = ["standard"] },
-    { name = "websockets" },
     { name = "zstandard" },
 ]
 
@@ -346,7 +345,6 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "tortoise-orm", specifier = ">=0.21" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.49.0" },
-    { name = "websockets", specifier = ">=16.0" },
     { name = "zstandard", specifier = ">=0.25.0" },
 ]
 

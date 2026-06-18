@@ -1,118 +1,163 @@
-"""HTTP and WebSocket routes."""
+"""HTTP and SSE routes."""
 
-import json
-from typing import Annotated
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    Request,
+    Response,
+)
+from fastapi.responses import RedirectResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
-from fastapi import APIRouter, Depends, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
-from pydantic import StringConstraints
-
-from app import broadcast, services
+from app import broadcast
 from app.dependencies import (
     COOKIE_NAME,
-    get_current_bricks,
-    get_current_cursors,
-    get_current_events,
-    get_current_player,
-    get_current_players,
-    get_form_errors,
-    get_session_key,
+    get_available_brick,
+    get_dragged_brick,
+    get_game_context,
+    require_coordinates_on_grid,
+    require_player,
 )
-from app.enums import Color
-from app.exceptions import FormErrors
 from app.jinja import render
-from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
+from app.models import Brick, Player
+from app.schemas import PlayerJoinForm
 from app.services import (
-    create_brick,
-    create_player,
+    continue_drag,
     delete_brick,
     end_drag,
+    create_player,
     mark_player_as_offline,
     mark_player_as_online,
-    move_brick,
-    refresh_player_cache,
+    create_brick,
     start_drag,
-    update_cursor,
+    move_cursor,
 )
-from app.signals import actor
+from app.signals import current_player
 
 
 router = APIRouter()
 
 
+# ── Pages ───────────────────────────────────────────────────────────────
+
+
 @router.get("/")
-async def index_page(
-    session_key: str = Depends(get_session_key),
-    bricks: list[BrickRow] = Depends(get_current_bricks),
-    players: list[PlayerRow] = Depends(get_current_players),
-    events: list[EventRow] = Depends(get_current_events),
-    cursors: list[CursorRow] = Depends(get_current_cursors),
-    current_player: PlayerRow | None = Depends(get_current_player),
-    errors: FormErrors = Depends(get_form_errors),
-):
-    return render(
-        "index.html",
-        {
-            "bricks": bricks,
-            "players": players,
-            "events": events,
-            "cursors": cursors,
-            "current_session_key": session_key,
-            "current_player": current_player,
-            "errors": errors,
-        },
-    )
+async def index_page(context: dict = Depends(get_game_context)):
+    return render("index.html", context)
 
 
 @router.post("/join")
-async def player_join(
-    name: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1), Form()
-    ],
-    color: Annotated[Color, Form()],
-    session_key: str = Depends(get_session_key),
-):
-    await create_player(session_key, name, color)
-    # Refresh the cache so the /ws join gate lets the new player act immediately.
-    await refresh_player_cache()
-    # Boosted POST follows the redirect and morphs the player-free page in.
-    return RedirectResponse("/", status_code=303)
+async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
+    player = await create_player(form.name, form.color)
+
+    # A boosted submit would innerMorph the next page in, which neither applies the
+    # <body> attributes nor fires load triggers, so the SSE stream never connects.
+    # HX-Redirect makes htmx do a real navigation; plain posts get a normal 303.
+    if request.headers.get("hx-request"):
+        response = Response(status_code=204, headers={"HX-Redirect": "/"})
+    else:
+        response = RedirectResponse("/", status_code=303)
+
+    response.set_cookie(
+        COOKIE_NAME,
+        player.token,
+        max_age=365 * 24 * 3600,
+        samesite="lax",
+        httponly=False,
+    )
+    return response
 
 
 @router.get("/health")
 async def health() -> str:
-    """Liveness probe for the container healthcheck."""
     return "ok"
 
 
-@router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+# ── SSE ─────────────────────────────────────────────────────────────────
 
-    session_key = websocket.cookies.get(COOKIE_NAME)
-    if not session_key:
-        await websocket.close(code=4001)
-        return
 
-    await mark_player_as_online(session_key)
+@router.get("/sse")
+async def sse_endpoint(request: Request):
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return Response(status_code=401)
 
-    actions = {  # message name -> service call; args arrive already typed
-        "create_brick": create_brick,
-        "delete_brick": delete_brick,
-        "update_cursor": update_cursor,
-        "start_drag": start_drag,
-        "end_drag": end_drag,
-        "move_brick": move_brick,
-    }
-    try:
-        async with broadcast.client(session_key, websocket):
-            while True:
-                message = json.loads(await websocket.receive_text())
-                action = actions.get(message["fn"])
-                if action and session_key in services.players:  # joined players only
-                    actor.set(services.players[session_key]["id"])
-                    await action(session_key, *message.get("args", []))
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await mark_player_as_offline(session_key)
+    player = await Player.filter(token=token).first()
+    if not player:
+        return Response(status_code=401)
+
+    current_player.set(player)
+    await mark_player_as_online(player)
+
+    return StreamingResponse(
+        broadcast.sse_stream(token),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Content-Encoding": "zstd",  # browser decodes; client drops fzstd + base64
+        },
+        background=BackgroundTask(mark_player_as_offline, player),
+    )
+
+
+# ── Actions ─────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/bricks", status_code=204, dependencies=[Depends(require_coordinates_on_grid)]
+)
+async def brick_create(
+    x: int = Form(...),
+    y: int = Form(...),
+    player: Player = Depends(require_player),
+):
+    await create_brick(player, x, y)
+
+
+@router.delete("/bricks/{brick_id}", status_code=204)
+async def brick_delete(
+    brick: Brick = Depends(get_available_brick),
+):
+    await delete_brick(brick)
+
+
+@router.patch(
+    "/cursors", status_code=204, dependencies=[Depends(require_coordinates_on_grid)]
+)
+async def cursor_move(
+    x: int = Form(...),
+    y: int = Form(...),
+    z: int = Form(...),
+    player: Player = Depends(require_player),
+):
+    await move_cursor(player, x, y, z)
+
+
+@router.post("/bricks/{brick_id}/drag/start", status_code=204)
+async def brick_start_drag(
+    player: Player = Depends(require_player),
+    brick: Brick = Depends(get_available_brick),
+):
+    await start_drag(player, brick)
+
+
+@router.patch(
+    "/bricks/{brick_id}/drag/continue",
+    status_code=204,
+    dependencies=[Depends(require_coordinates_on_grid)],
+)
+async def brick_continue_drag(
+    x: int = Form(...),
+    y: int = Form(...),
+    brick: Brick = Depends(get_dragged_brick),
+):
+    await continue_drag(brick, x, y)
+
+
+@router.post("/bricks/{brick_id}/drag/end", status_code=204)
+async def brick_end_drag(
+    brick: Brick = Depends(get_dragged_brick),
+):
+    await end_drag(brick)

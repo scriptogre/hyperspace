@@ -5,12 +5,18 @@ import minijinja
 from app.config import settings
 from app.enums import Color
 
-GRID_SIZE = 12
+
+def url_for(name: str, **params: str) -> str:
+    """Resolve a route name to its path. Deferred import breaks the cycle: routes imports jinja."""
+    from app.main import app
+
+    return minijinja.safe(str(app.url_path_for(name, **params)))
+
 
 _env = minijinja.Environment(
     loader=lambda name: (settings.TEMPLATES_DIR / name).read_text(),
     auto_escape_callback=lambda name: True,
-    globals={"colors": list(Color), "grid_size": GRID_SIZE},
+    globals={"colors": list(Color), "grid_size": settings.GRID_SIZE, "url_for": url_for},
 )
 
 

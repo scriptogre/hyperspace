@@ -10,6 +10,7 @@ from tortoise.contrib.fastapi import RegisterTortoise
 
 from app import broadcast, services
 from app.config import settings
+from app.models import Brick, Player
 
 _NOTIFY_FN = """
 CREATE OR REPLACE FUNCTION hyperspace_notify() RETURNS trigger AS $$
@@ -41,10 +42,8 @@ CREATE INDEX IF NOT EXISTS cursor_version_idx ON cursor (version);
 
 
 async def _install_triggers(pg: asyncpg.Connection) -> None:
-    """NOTIFY 'hyperspace' with the table name on every write statement.
-
-    Workers boot concurrently, so guard the DDL with an advisory lock to avoid
-    racing DROP/CREATE TRIGGER on the same tables.
+    """
+    Install the NOTIFY and cursor-version triggers under an advisory lock.
     """
     await pg.execute("SELECT pg_advisory_lock($1)", _TRIGGER_LOCK)
     try:
@@ -61,7 +60,9 @@ async def _install_triggers(pg: asyncpg.Connection) -> None:
 
 
 async def _cursor_flusher() -> None:
-    """Batch-upsert buffered cursor writes on a fixed interval."""
+    """
+    Batch-upsert buffered cursor writes on a fixed interval.
+    """
     while True:
         await asyncio.sleep(services.CURSOR_FLUSH_INTERVAL)
         try:
@@ -72,12 +73,18 @@ async def _cursor_flusher() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """
+    Start the DB, NOTIFY listener, and background loops for the app's lifetime.
+    """
     async with RegisterTortoise(
         app, config=settings.TORTOISE_ORM, generate_schemas=True
     ):
+        # Release drags and sessions orphaned by ungraceful shutdown
+        await Brick.all().update(dragged_by_id=None)
+        await Player.all().update(is_online=False)
+
         pg = await asyncpg.connect(settings.DATABASE_URL)
         await _install_triggers(pg)
-        await services.refresh_player_cache()
 
         async def on_notify(conn, pid, channel, payload):
             broadcast.notify(payload)

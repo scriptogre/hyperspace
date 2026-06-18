@@ -1,33 +1,49 @@
-"""Typed shapes for the dict rows handed to templates.
-
-Brick and Player rows come straight from Tortoise `.values()` (1:1 with their
-columns); Event and Cursor rows are projections, joined to the actor and
-renamed for the template. All are plain dicts at runtime, never ORM objects,
-which keeps reads cheap. The TypedDicts give the routes, the broadcast and the
-type checker a name for each row's shape.
+"""
+Typed shapes for the dict rows handed to templates.
 """
 
-from typing import TypedDict
+from typing import Annotated, TypedDict
+
+from pydantic import BaseModel, StringConstraints
+
+from app.enums import Color
+
+
+class PlayerJoinForm(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    color: Color
 
 
 class BrickRow(TypedDict):
+    """
+    A brick straight from Tortoise `.values()`, one key per column.
+    """
+
     id: int
     x: int
     y: int
     z: int
     color: str
+    created_by_id: int | None
     dragged_by_id: int | None
 
 
 class PlayerRow(TypedDict):
+    """
+    A player straight from Tortoise `.values()`, one key per column.
+    """
+
     id: int
-    session_key: str
     name: str
     color: str
     is_online: bool
 
 
 class EventRow(TypedDict):
+    """
+    One activity-feed row, joined to its player.
+    """
+
     id: int
     player_name: str
     player_color: str
@@ -35,7 +51,11 @@ class EventRow(TypedDict):
 
 
 class CursorRow(TypedDict):
-    session_key: str
+    """
+    A cursor joined to its owner's name and color.
+    """
+
+    token: str
     grid_x: int
     grid_y: int
     grid_z: int

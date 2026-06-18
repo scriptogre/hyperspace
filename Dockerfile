@@ -20,7 +20,7 @@ COPY . /code
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # RUNTIME STAGE
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-bookworm AS runtime
 
 ARG UID=1000
 ARG GID=1000

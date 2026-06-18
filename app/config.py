@@ -3,11 +3,15 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import PostgresDsn, computed_field
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """
+    Application settings loaded from the environment.
+    """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
@@ -20,6 +24,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     WEB_CONCURRENCY: int = 4
     SECRET_KEY: str = "dev-insecure-change-me"  # signs the form-errors cookie
+    GRID_SIZE: int = 12  # cells per side of the square world
 
     # Directories
     # --------------------
@@ -38,20 +43,14 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
-        return str(
-            PostgresDsn.build(
-                scheme="postgresql",
-                username=self.POSTGRES_USER,
-                password=self.POSTGRES_PASSWORD,
-                host=self.POSTGRES_HOST,
-                port=self.POSTGRES_PORT,
-                path=self.POSTGRES_DB,
-            )
-        )
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @computed_field
     @property
     def TORTOISE_ORM(self) -> dict:
+        """
+        Tortoise ORM config for the app's models and connection.
+        """
         return {
             "connections": {
                 "default": {

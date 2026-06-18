@@ -1,26 +1,18 @@
-"""Realtime broadcast pump: render the fragment whose table changed, fan it out.
-
-A Postgres trigger NOTIFYs on every write; the lifespan listener forwards the
-table name to `notify`, which wakes `run`. Each structural table maps to one
-fragment (see REGIONS); cursors broadcast a delta instead of a full re-render.
-Each client has its own writer draining its own queue, so one slow socket can
-never stall the loop.
+"""
+Render the fragment whose table changed and fan it out to every client.
 """
 
 import asyncio
 import os
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 import zstandard
-from fastapi import WebSocket
 
-from app import services
 from app.dependencies import (
     get_current_bricks,
     get_current_cursors,
-    get_current_events,
+    get_latest_events,
     get_current_players,
 )
 from app.jinja import render
@@ -29,117 +21,68 @@ from app.models import Brick, Cursor, Event, Player
 TICK = 0.02
 SEND_QUEUE_MAX = 64
 
-# A write to each table re-renders one fragment: (model, template, template var, provider).
 REGIONS = (
-    (Brick, "_brick_list.html", "bricks", get_current_bricks),
-    (Player, "_player_list.html", "players", get_current_players),
-    (Event, "_event_list.html", "events", get_current_events),
+    (Brick, "brick-list", "_brick_list.html", "bricks", get_current_bricks),
+    (Player, "player-list", "_player_list.html", "players", get_current_players),
+    (Event, "event-list", "_event_list.html", "events", get_latest_events),
+    (Cursor, "cursor-list", "_cursor_list.html", "cursors", get_current_cursors),
 )
 
-_ZSTD = zstandard.ZstdCompressor(level=3)
+zstd = zstandard.ZstdCompressor(level=3)
 
-# session_key -> send queue, drained by that client's writer task.
-clients: dict[str, asyncio.Queue] = {}
+sse_clients: dict[str, asyncio.Queue] = {}
 
-# Tables changed since the last render, plus the event that wakes the loop.
 _changed: set[str] = set()
 _wake = asyncio.Event()
 
 
 def notify(table: str) -> None:
-    """Record a changed table and wake the loop. Called by the Postgres listener."""
     _changed.add(table)
     _wake.set()
 
 
-def compress(html: str) -> bytes:
-    """Compress one fragment of HTML into a single WebSocket frame."""
-    return _ZSTD.compress(html.encode())
+def frame(element_id: str, html: str) -> bytes:
+    """Build one uncompressed <hx-partial> SSE event payload."""
+    html = f'<hx-partial id="{element_id}" hx-swap="outerMorph">{html}</hx-partial>'
+    body = "".join(f"data: {line}\n" for line in html.split("\n")) + "\n"
+    return body.encode()
 
 
-@asynccontextmanager
-async def client(session_key: str, websocket: WebSocket) -> AsyncIterator[None]:
-    """Serve one client for the duration of the `with` block.
+_KEEPALIVE = b": keepalive\n\n"
 
-    Sends the full current state, then joins the fan-out: a background writer
-    drains this client's queue to its socket until the block exits.
-    """
-    for template, var, provider in (
-        ("_brick_list.html", "bricks", get_current_bricks),
-        ("_player_list.html", "players", get_current_players),
-        ("_event_list.html", "events", get_current_events),
-        ("_cursor_list.html", "cursors", get_current_cursors),
-    ):
-        await websocket.send_bytes(compress(render(template, {var: await provider()})))
+
+async def sse_stream(token: str) -> AsyncIterator[bytes]:
+    # TODO: per-connection compression. The browser only decodes one continuous
+    # zstd frame, so each stream owns its compressor and recompresses identical
+    # broadcasts per client. Restore compress-once (shared bytes, client-side
+    # decode) once we find a clean way the browser still decodes natively.
+    # A shared zstd dictionary (trained on our fragment HTML) would cut the
+    # per-connection cost and shrink frames without giving up native decode.
+    cobj = zstd.compressobj()
+
+    def compress(payload: bytes) -> bytes:
+        return cobj.compress(payload) + cobj.flush(zstandard.COMPRESSOBJ_FLUSH_BLOCK)
+
+    for _, eid, template, var, provider in REGIONS:
+        yield compress(frame(eid, render(template, {var: await provider()})))
 
     queue: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
-    clients[session_key] = queue
-
-    async def drain() -> None:
-        try:
-            while True:
-                for blob in await queue.get():
-                    await websocket.send_bytes(blob)
-        except Exception:
-            clients.pop(session_key, None)
-
-    writer = asyncio.create_task(drain())
+    sse_clients[token] = queue
     try:
-        yield
+        while True:
+            try:
+                payloads = await asyncio.wait_for(queue.get(), timeout=30)
+                for payload in payloads:
+                    yield compress(payload)
+            except asyncio.TimeoutError:
+                yield compress(_KEEPALIVE)
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
     finally:
-        clients.pop(session_key, None)
-        writer.cancel()
-
-
-async def cursor_delta(after: int) -> tuple[list[dict], int]:
-    """Cursors changed since version `after`, plus the new high-water mark."""
-    rows = (
-        await Cursor.filter(version__gt=after)
-        .order_by("version")
-        .values(
-            "player__session_key",
-            "player__name",
-            "player__color",
-            "x",
-            "y",
-            "z",
-            "is_active",
-            "version",
-        )
-    )
-    cursors = [
-        {
-            "session_key": row["player__session_key"],
-            "grid_x": row["x"],
-            "grid_y": row["y"],
-            "grid_z": row["z"],
-            "is_active": row["is_active"],
-            "name": row["player__name"],
-            "color": row["player__color"],
-        }
-        for row in rows
-    ]
-    watermark = rows[-1]["version"] if rows else after
-    return cursors, watermark
-
-
-async def max_cursor_version() -> int:
-    rows = (
-        await Cursor.all()
-        .order_by("-version")
-        .limit(1)
-        .values_list("version", flat=True)
-    )
-    return rows[0] if rows else 0
+        sse_clients.pop(token, None)
 
 
 class Profiler:
-    """One `BCAST` stats line per second when HS_BCAST_LOG=1.
-
-    The load harness (bench/crowd.py) reads server capacity from this line, so
-    its format is a contract. A no-op when the env var is unset.
-    """
-
     def __init__(self) -> None:
         self.enabled = os.environ.get("HS_BCAST_LOG") == "1"
         self.window_start = time.monotonic()
@@ -184,8 +127,6 @@ class Profiler:
 
 
 async def run() -> None:
-    """Render and fan out changed fragments until cancelled."""
-    cursor_version = await max_cursor_version()
     profiler = Profiler()
 
     while True:
@@ -195,36 +136,28 @@ async def run() -> None:
         _changed.clear()
 
         started = time.monotonic()
-        if "player" in changed:
-            await services.refresh_player_cache()
-
-        htmls = []
-        if "cursor" in changed:
-            delta, cursor_version = await cursor_delta(cursor_version)
-            if delta:
-                htmls.append(render("_cursor_list.html", {"cursors": delta}))
-        for model, template, var, provider in REGIONS:
+        rendered = []
+        for model, eid, template, var, provider in REGIONS:
             if model._meta.db_table in changed:
-                htmls.append(render(template, {var: await provider()}))
+                rendered.append((eid, render(template, {var: await provider()})))
         built = time.monotonic()
 
-        blobs = [compress(html) for html in htmls]
-        compressed = time.monotonic()
+        payloads = [frame(eid, html) for eid, html in rendered]
 
-        for queue in list(clients.values()):
+        for queue in list(sse_clients.values()):
             if queue.full():
                 try:
                     queue.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
-            queue.put_nowait(blobs)
+            queue.put_nowait(payloads)
         sent = time.monotonic()
 
         profiler.record(
             build_ms=(built - started) * 1000,
-            compress_ms=(compressed - built) * 1000,
-            send_ms=(sent - compressed) * 1000,
-            blob_bytes=sum(len(blob) for blob in blobs),
-            client_count=len(clients),
+            compress_ms=0.0,  # compression moved per-connection (see sse_stream)
+            send_ms=(sent - built) * 1000,
+            blob_bytes=sum(len(p) for p in payloads),
+            client_count=len(sse_clients),
         )
         await asyncio.sleep(TICK)

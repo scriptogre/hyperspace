@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
       args:
         ENVIRONMENT: local
     ports:
@@ -12,11 +13,11 @@ services:
     init: true
     tty: true
     env_file: .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --ws-per-message-deflate false
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.html" --reload-include "*.css" --ws-per-message-deflate false --timeout-graceful-shutdown 1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')"]
-      interval: 3s
+      test: [ "CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')" ]
+      interval: 30s
       timeout: 5s
       retries: 10
       start_period: 5s
@@ -36,7 +37,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     command: postgres -c synchronous_commit=off
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 3s
       retries: 5

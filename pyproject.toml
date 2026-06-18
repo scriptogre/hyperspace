@@ -10,7 +10,6 @@ dependencies = [
     "asyncpg>=0.30",
     "minijinja>=2.20.0",
     "pydantic-settings>=2.0",
-    "websockets>=16.0",
     "zstandard>=0.25.0",
     "python-multipart>=0.0.32",
     "itsdangerous>=2.2.0",

@@ -1,8 +1,7 @@
-{# Flat cursor nodes (no wrapper; the #cursor-list container lives in index.html).
-   Active ones morph into place (appended if new); inactive ones carry data-remove
-   so the client drops them. Used for both the initial paint and live deltas. #}
+{# Full set of active cursors. Morphing #cursor-list reconciles children by id,
+   so cursors no longer present are removed automatically (no delta, no data-remove). #}
+<div id="cursor-list" class="absolute inset-0 pointer-events-none">
 {% for cursor in cursors %}
-{% if cursor.is_active %}
 {% set cell = 64 %}
 {% set half = grid_size * cell // 2 %}
 {% set px = cursor.grid_x * cell + cell // 2 - half %}
@@ -12,12 +11,10 @@
 {% set denom = 1000000 - 612 * diff %}
 {% set sx = 707000 * sum // denom %}
 {% set sy = 354000 * diff // denom %}
-<div id="cursor-{{ cursor.session_key }}" class="cursor"
+<div id="cursor-{{ cursor.token }}" class="cursor"
      style="--sx:{{ sx }}px; --sy:{{ sy }}px; --color:var(--color-brick-{{ cursor.color }})">
   <span class="cursor-name">{{ cursor.name }}</span>
   <span class="cursor-dot"></span>
 </div>
-{% else %}
-<div id="cursor-{{ cursor.session_key }}" data-remove></div>
-{% endif %}
 {% endfor %}
+</div>

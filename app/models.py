@@ -12,80 +12,114 @@ from tortoise.fields import (
     IntField,
     OneToOneField,
 )
+from tortoise.fields.relational import ReverseRelation
 from tortoise.models import Model
 
 from app.enums import Color, EventType
 
 
 class Brick(Model):
-    """A colored block placed on the isometric grid."""
+    """
+    A colored block placed on the isometric grid.
+    """
 
+    id = IntField(pk=True)
     x = IntField()
     y = IntField()
-    z = IntField(description="Stack height within the cell")
+    z = IntField()
     color = CharEnumField(Color, max_length=20)
+
+    # Relations
+    created_by = ForeignKeyField(
+        "models.Player",
+        related_name="bricks",
+        null=True,
+        on_delete=SET_NULL,
+        description="player who created this brick",
+    )
     dragged_by = ForeignKeyField(
         "models.Player",
-        related_name="dragging",
+        related_name="dragged_brick",
         null=True,
         on_delete=SET_NULL,
         description="player currently dragging this brick",
     )
+    events: ReverseRelation[Event]
 
     class Meta:
         table = "brick"
 
+    @property
+    def is_being_dragged(self) -> bool:
+        return self.dragged_by_id is not None
+
 
 class Player(Model):
-    """A player. The session_key persists across sessions via the session cookie."""
+    """
+    A player in the game.
+    """
 
-    session_key = CharField(
-        max_length=100, unique=True, description="UUID from the session cookie"
-    )
+    id = IntField(pk=True)
+    token = CharField(max_length=64, unique=True, description="UUID from the cookie")
     name = CharField(max_length=100)
     color = CharEnumField(Color, max_length=20)
     is_online = BooleanField(default=False)
+
+    # Relations
+    bricks: ReverseRelation[Brick]
+    dragged_brick: ReverseRelation[Brick]
+    cursor: ReverseRelation[Cursor]
+    events: ReverseRelation[Event]
 
     class Meta:
         table = "player"
 
 
 class Cursor(Model):
-    """Last known grid position for a player's cursor. `version` is stamped by a
-    Postgres trigger on every write, turning the table into a change feed."""
+    """
+    Last known grid position for a player's cursor.
+    """
 
-    player = OneToOneField(
-        "models.Player", pk=True, on_delete=CASCADE, related_name="cursor"
-    )
     x = IntField()
     y = IntField()
     z = IntField()
     is_active = BooleanField(default=True)
     version = BigIntField(default=0)
 
+    # Relations
+    player = OneToOneField(
+        "models.Player",
+        pk=True,
+        on_delete=CASCADE,
+        related_name="cursor",
+    )
+
     class Meta:
         table = "cursor"
 
 
 class Event(Model):
-    """An entry in the activity feed. Created and trimmed by app/signals.py."""
+    """
+    An entry in the activity feed.
+    """
 
+    id = IntField(pk=True)
     type = CharEnumField(EventType, max_length=50)
+    created_at = DatetimeField(auto_now_add=True)
+
+    # Relations
     player = ForeignKeyField(
         "models.Player",
         related_name="events",
         on_delete=CASCADE,
-        description="the player who triggered it",
     )
     brick = ForeignKeyField(
         "models.Brick",
         related_name="events",
         null=True,
         on_delete=SET_NULL,
-        description="brick this event is about, if any",
     )
-    created_at = DatetimeField(auto_now_add=True)
 
     class Meta:
         table = "event"
-        ordering = ["id"]
+        ordering = ["-id"]
