@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="htmx-config"
-          content='{"morphIgnore":["data-htmx-powered","data-dragging","data-pending-delete","data-is-predicting"]}'>
+          content='{"morphIgnore":["data-htmx-powered","data-dragging","data-pending-delete"],"morphSkip":"[data-is-predicting]"}'>
     <title>Hyperspace</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
@@ -16,14 +16,7 @@
     <script src="{{ url_for('static', path='js/hx-optimistic.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-sse.js') }}"></script>
     <script>
-        htmx.registerExtension("don't morph elements undergoing client-side prediction", {
-            htmx_before_morph_attr: (element) => {
-                if (element.hasAttribute("data-is-predicting")) return false;
-            },
-        })
-        // SSE frames are zstd-compressed once on the server and base64-encoded;
-        // inflate each before htmx swaps it.
-        htmx.registerExtension("inflate zstd SSE frames", {
+        htmx.registerExtension("hx-sse-zstd", {
             htmx_before_sse_message: (element, detail) => {
                 let bytes = Uint8Array.from(atob(detail.message.data), c => c.charCodeAt(0));
                 detail.message.data = new TextDecoder().decode(fzstd.decompress(bytes));
@@ -77,9 +70,6 @@
           attr('data-drag-last-y', false);
         }">
 
-{# Each fragment has a stable root id; the broadcast morphs them in place.
-     hx-preserve keeps this WS-driven subtree untouched across boosted page
-     morphs (e.g. join), so htmx never rebinds its hx-on click handlers. #}
 <div id="app" hx-preserve="true" class="relative w-full h-full">
     {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
