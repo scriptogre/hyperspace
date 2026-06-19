@@ -37,47 +37,36 @@
         keyup[event.key=='Shift']   -> data.isDeleting = false;
         pointermove -> {
           if (!data.dragBrick) return;
-          var dx = event.clientX - parseInt(data.dragStartX);
-          var dy = event.clientY - parseInt(data.dragStartY);
-          if (!data.isDragging && Math.abs(dx) + Math.abs(dy) > 8) {
-            data.isDragging = true;
-            htmx.ajax('POST', '/bricks/' + parseInt(data.dragBrick) + '/drag/start', {swap: 'none'});
-          }
-          if (!data.isDragging) return;
-          var el = document.getElementById('block-' + data.dragBrick);
-          if (el) el.style.pointerEvents = 'none';
+          var brick = document.getElementById('block-' + data.dragBrick);
+          if (!brick) return;
           var under = document.elementFromPoint(event.clientX, event.clientY);
-          if (el) el.style.pointerEvents = '';
-          if (!under) return;
-          var target = under.closest('[data-brick-id]') || under.closest('button[data-cell-x]');
-          if (!target) return;
-          var cx = target.dataset.x ?? target.dataset.cellX;
-          var cy = target.dataset.y ?? target.dataset.cellY;
-          if (data.dragLastX != cx || data.dragLastY != cy) {
-            data.dragLastX = cx; data.dragLastY = cy;
-            if (el) { el.dataset.x = cx; el.dataset.y = cy; }
-            htmx.ajax('PATCH', '/bricks/' + parseInt(data.dragBrick) + '/drag/continue', {values: {x: parseInt(cx), y: parseInt(cy)}, swap: 'none'});
+          var cell  = under && (under.closest('[data-brick-id]') || under.closest('button[data-cell-x]'));
+          if (!cell) return;
+          var cx = +(cell.dataset.x ?? cell.dataset.cellX), cy = +(cell.dataset.y ?? cell.dataset.cellY);
+          if (cx === +brick.dataset.x && cy === +brick.dataset.y) return;
+          if (!data.isDragging) {
+            data.isDragging = true;
+            brick.style.pointerEvents = 'none';
+            htmx.ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});
           }
+          brick.dataset.x = cx; brick.dataset.y = cy;
+          htmx.ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});
         };
         pointerup -> {
           if (!data.dragBrick) return;
-          if (data.isDragging) htmx.ajax('POST', '/bricks/' + parseInt(data.dragBrick) + '/drag/end', {swap: 'none'});
+          var brick = document.getElementById('block-' + data.dragBrick);
+          if (brick) brick.style.pointerEvents = '';
+          if (data.isDragging) htmx.ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});
           attr('data-drag-brick', false);
-          attr('data-drag-start-x', false);
-          attr('data-drag-start-y', false);
           attr('data-is-dragging', false);
-          attr('data-drag-last-x', false);
-          attr('data-drag-last-y', false);
         }">
 
 <div id="app" class="relative w-full h-full">
     {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
     {% include "_event_list.html" %}
-
     {% include "_cursor_list.html" %}
 
-    {# Static, never broadcast. #}
     <button id="logout-btn"
             hx-post="/logout"
             title="Log out"

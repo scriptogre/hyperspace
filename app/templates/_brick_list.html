@@ -32,8 +32,6 @@
              var id = parseInt(brick.dataset.brickId);
              if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); htmx.ajax('DELETE', '/bricks/' + id, {swap: 'none'}); return; }
              document.body.dataset.dragBrick = id;
-             document.body.dataset.dragStartX = event.clientX;
-             document.body.dataset.dragStartY = event.clientY;
              document.body.dataset.isDragging = 'false';
            }">
 
