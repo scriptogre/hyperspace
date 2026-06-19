@@ -113,6 +113,13 @@
   .brick {
     @apply relative cursor-grab transition-[opacity,transform] aria-[grabbed=true]:cursor-grabbing group-data-[is-deleting=true]/body:cursor-crosshair data-[pending-delete]:opacity-0 data-[pending-delete]:scale-90 data-[is-predicting]:pointer-events-none aria-[grabbed=true]:z-[1000];
   }
+  /* hx-optimistic forces `all: initial` on its wrapper, which collapses to
+     `display: inline` and steals grid placement from our template content.
+     `display: contents` makes the wrapper transparent so the inner div
+     becomes the grid item. */
+  .hx-optimistic {
+    display: contents !important;
+  }
   .brick-top {
     @apply size-16 border-2 border-white/25 relative overflow-hidden transition-[opacity,border-color,background-color] group-aria-[grabbed=true]/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500;
   }
