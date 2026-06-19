@@ -69,6 +69,12 @@ async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
     return response
 
 
+@router.post("/logout", status_code=204)
+async def logout(response: Response):
+    response.headers["HX-Redirect"] = "/"
+    response.delete_cookie(COOKIE_NAME, path="/", samesite="lax")
+
+
 @router.get("/health")
 async def health() -> str:
     return "ok"

@@ -70,7 +70,7 @@
           attr('data-drag-last-y', false);
         }">
 
-<div id="app" hx-preserve="true" class="relative w-full h-full">
+<div id="app" class="relative w-full h-full">
     {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
     {% include "_event_list.html" %}
@@ -79,7 +79,7 @@
 
     {# Static, never broadcast. #}
     <button id="logout-btn"
-            hx-on="click -> { document.cookie = 'hyperspace_id=; Max-Age=0; Path=/; SameSite=Lax'; location.reload(); }"
+            hx-post="/logout"
             title="Log out"
             class="absolute bottom-12 sm:bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
         <span class="icon-[lucide--log-out] size-4 block"></span>
