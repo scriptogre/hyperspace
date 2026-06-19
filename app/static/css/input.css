@@ -111,16 +111,16 @@
     @apply size-16 border border-foreground/[0.08] bg-foreground/[0.02] dark:border-foreground/[0.05] dark:bg-foreground/[0.015] cursor-pointer transition-colors hover:bg-foreground/15 hover:border-foreground/40 focus:outline-none;
   }
   .brick {
-    @apply relative cursor-grab transition-[opacity,transform] data-dragging:cursor-grabbing group-data-[is-deleting=true]/body:cursor-crosshair data-[pending-delete]:opacity-0 data-[pending-delete]:scale-90;
+    @apply relative cursor-grab transition-[opacity,transform] aria-[grabbed=true]:cursor-grabbing group-data-[is-deleting=true]/body:cursor-crosshair data-[pending-delete]:opacity-0 data-[pending-delete]:scale-90 data-[is-predicting]:pointer-events-none aria-[grabbed=true]:z-[1000];
   }
   .brick-top {
-    @apply size-16 border-2 border-white/25 relative overflow-hidden transition-[opacity,border-color,background-color] group-data-dragging/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500;
+    @apply size-16 border-2 border-white/25 relative overflow-hidden transition-[opacity,border-color,background-color] group-aria-[grabbed=true]/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500;
   }
   .brick-overlay {
     @apply absolute inset-0 opacity-0 group-hover/brick:opacity-100 transition-opacity bg-foreground/40 group-data-[is-deleting=true]/body:group-hover/brick:bg-red-500/50;
   }
   .brick-wall {
-    @apply absolute left-0 border-2 border-white/15 transition-[opacity,border-color,background-color,box-shadow] group-data-dragging/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500 group-data-[is-deleting=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)];
+    @apply absolute left-0 border-2 border-white/15 transition-[opacity,border-color,background-color,box-shadow] group-aria-[grabbed=true]/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500 group-data-[is-deleting=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)];
   }
 
   /* Cursors render 600+ times; keep each node tiny by holding styling here and

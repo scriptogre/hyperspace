@@ -355,9 +355,6 @@
   .hidden {
     display: none;
   }
-  .inline {
-    display: inline;
-  }
   .inline-flex {
     display: inline-flex;
   }
@@ -417,9 +414,6 @@
   }
   .flex-1 {
     flex: 1;
-  }
-  .shrink {
-    flex-shrink: 1;
   }
   .shrink-0 {
     flex-shrink: 0;
@@ -912,7 +906,10 @@
     &:is(:where(.group\/body)[data-is-deleting="true"] *) {
       cursor: crosshair;
     }
-    &[data-dragging] {
+    &[aria-grabbed="true"] {
+      z-index: 1000;
+    }
+    &[aria-grabbed="true"] {
       cursor: grabbing;
     }
     &[data-pending-delete] {
@@ -947,7 +944,7 @@
         }
       }
     }
-    &:is(:where(.group\/brick)[data-dragging] *) {
+    &:is(:where(.group\/brick)[aria-grabbed="true"] *) {
       opacity: 40%;
     }
     &:is(:where(.group\/body)[data-is-deleting="true"] *) {
@@ -1005,7 +1002,7 @@
         }
       }
     }
-    &:is(:where(.group\/brick)[data-dragging] *) {
+    &:is(:where(.group\/brick)[aria-grabbed="true"] *) {
       opacity: 40%;
     }
     &:is(:where(.group\/body)[data-is-deleting="true"] *) {

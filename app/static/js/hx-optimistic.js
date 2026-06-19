@@ -1,5 +1,3 @@
-// hx-optimistic extension: optimistic UI updates.
-// Source: htmx four-dev branch (src/ext/hx-optimistic.js), unpatched.
 (() => {
 
     function normalizeSwapStyle(style) {
@@ -27,6 +25,7 @@
         }
         if (!target) return;
 
+        // Create optimistic div with reset styling
         let optimisticDiv = document.createElement('div');
         optimisticDiv.style.cssText = 'all: initial';
         optimisticDiv.classList.add('hx-optimistic');
@@ -44,7 +43,8 @@
                 } catch (e) {
                     try {
                         optimisticDiv.setAttribute('data-' + k, val);
-                    } catch (e2) { /* truly invalid name, skip */ }
+                    } catch (e2) { /* truly invalid name, skip */
+                    }
                 }
             }
         }
@@ -53,6 +53,7 @@
         ctx.optHidden = [];
 
         if (swapStyle === 'innerHTML') {
+            // Hide children of target
             for (let child of target.children) {
                 child.style.display = 'none';
                 ctx.optHidden.push(child);
@@ -61,6 +62,7 @@
         } else if (['beforebegin', 'afterbegin', 'beforeend', 'afterend'].includes(swapStyle)) {
             target.insertAdjacentElement(swapStyle, optimisticDiv);
         } else {
+            // Assume outerHTML-like behavior, Hide target and insert div after it
             target.style.display = 'none';
             ctx.optHidden.push(target);
             target.after(optimisticDiv);
@@ -71,14 +73,20 @@
 
     function removeOptimisticContent(ctx) {
         if (!ctx.optimisticDiv) return;
+
+        // Remove optimistic div
         ctx.optimisticDiv.remove();
+
+        // Unhide any hidden elements
         for (let elt of ctx.optHidden) {
             elt.style.display = '';
         }
     }
 
     htmx.registerExtension('hx-optimistic', {
-        init: (internalAPI) => { api = internalAPI; },
+        init: (internalAPI) => {
+            api = internalAPI;
+        },
         htmx_config_request: (elt, detail) => {
             let body = detail.ctx.request.body;
             if (body?.entries) detail.ctx.optimisticBody = body;
@@ -86,10 +94,10 @@
         htmx_before_request: (elt, detail) => {
             insertOptimisticContent(detail.ctx);
         },
-        htmx_error : (elt, detail) => {
+        htmx_error: (elt, detail) => {
             removeOptimisticContent(detail.ctx)
         },
-        htmx_before_swap : (elt, detail) => {
+        htmx_before_swap: (elt, detail) => {
             removeOptimisticContent(detail.ctx)
         }
     });

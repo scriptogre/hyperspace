@@ -28,7 +28,7 @@ def test_single_click_places_one_brick(joined_page: Page):
     expect(page.locator(placed)).to_have_count(0)
 
     page.locator(
-        f'button.grid-cell[data-cell-x="{cell["x"]}"][data-cell-y="{cell["y"]}"]'
+        f'button.grid-cell[data-x="{cell["x"]}"][data-y="{cell["y"]}"]'
     ).dispatch_event("click")
 
     page.wait_for_timeout(1000)  # let any second broadcast land

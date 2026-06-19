@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="htmx-config"
-          content='{"morphIgnore":["data-htmx-powered","data-dragging","data-pending-delete"],"morphSkip":"[data-is-predicting]"}'>
+          content='{"morphIgnore":["data-htmx-powered","aria-grabbed","data-pending-delete"],"morphSkip":"[data-is-predicting]"}'>
     <title>Hyperspace</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
@@ -27,38 +27,38 @@
 
 <body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
       data-token="{{ player.token if player else '' }}"
+      data-drag-brick=""
+      data-is-dragging=""
+      data-is-deleting=""
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
         {% if player %}
       hx-sse:connect="/sse"
         {% endif %}
       hx-on="
-        keydown[event.key=='Shift'] -> data.isDeleting = true;
-        keyup[event.key=='Shift']   -> data.isDeleting = false;
+        keydown[key=='Shift'] -> data.isDeleting = true;
+        keyup[key=='Shift']   -> data.isDeleting = false;
         pointermove -> {
           if (!data.dragBrick) return;
-          var brick = document.getElementById('block-' + data.dragBrick);
-          if (!brick) return;
+          var brick = q('#brick-' + data.dragBrick);
+          if (!brick.count) return;
           var under = document.elementFromPoint(event.clientX, event.clientY);
-          var cell  = under && (under.closest('[data-brick-id]') || under.closest('button[data-cell-x]'));
+          var cell  = under && under.closest('[data-x]');
           if (!cell) return;
-          var cx = +(cell.dataset.x ?? cell.dataset.cellX), cy = +(cell.dataset.y ?? cell.dataset.cellY);
+          var cx = +cell.dataset.x, cy = +cell.dataset.y;
           if (cx === +brick.dataset.x && cy === +brick.dataset.y) return;
           if (!data.isDragging) {
             data.isDragging = true;
-            brick.style.pointerEvents = 'none';
-            htmx.ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});
+            ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});
           }
           brick.dataset.x = cx; brick.dataset.y = cy;
-          htmx.ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});
+          ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});
         };
         pointerup -> {
           if (!data.dragBrick) return;
-          var brick = document.getElementById('block-' + data.dragBrick);
-          if (brick) brick.style.pointerEvents = '';
-          if (data.isDragging) htmx.ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});
-          attr('data-drag-brick', false);
-          attr('data-is-dragging', false);
+          if (data.isDragging) ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});
+          data.dragBrick = '';
+          data.isDragging = '';
         }">
 
 <div id="app" class="relative w-full h-full">

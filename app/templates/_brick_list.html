@@ -6,38 +6,31 @@
              data-grid-size="{{ grid_size }}"
              style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)"
              hx-on="
-           pointerover -> {
-             var cell = event.target.closest('[data-cell-x]');
-             if (!cell) return;
-             var cx = +cell.dataset.cellX, cy = +cell.dataset.cellY;
-             htmx.ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});
-             var c = document.getElementById('cursor-' + document.body.dataset.token);
-             if (!c) return;
+           pointerover target:button[data-x] passive -> {
+             var cx = +event.target.dataset.x, cy = +event.target.dataset.y;
+             ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});
+             var c = q('#cursor-' + data.token);
+             if (!c.count) return;
              var half = +this.dataset.gridSize * 32;
              var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
              var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
-             window._csx = Math.round(707000 * sum / denom);
-             window._csy = Math.round(354000 * diff / denom);
-             c.style.setProperty('--sx', window._csx + 'px');
-             c.style.setProperty('--sy', window._csy + 'px');
-           };
-           click -> {
-             var cell = event.target.closest('[data-cell-x]');
-             if (cell) htmx.ajax('POST', '/bricks', {values: {x: +cell.dataset.cellX, y: +cell.dataset.cellY}, swap: 'none'});
+             c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
+             c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
            };
            pointerdown -> {
-             var brick = event.target.closest('[data-brick-id]');
+             var brick = event.target.closest('.brick');
              if (!brick) return;
              event.preventDefault(); event.stopPropagation();
              var id = parseInt(brick.dataset.brickId);
-             if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); htmx.ajax('DELETE', '/bricks/' + id, {swap: 'none'}); return; }
-             document.body.dataset.dragBrick = id;
-             document.body.dataset.isDragging = 'false';
+             if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); ajax('DELETE', '/bricks/' + id, {swap: 'none'}); return; }
+             data.dragBrick = id;
+             data.isDragging = false;
            }">
 
             {% for row in range(grid_size) %}
                 {% for col in range(grid_size) %}
-                    <button data-cell-x="{{ col }}" data-cell-y="{{ row }}" class="grid-cell"
+                    <button data-x="{{ col }}" data-y="{{ row }}" class="grid-cell"
+                            hx-post="/bricks" hx-vals='{"x": {{ col }}, "y": {{ row }}}'
                             style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}"></button>
                 {% endfor %}
             {% endfor %}
@@ -45,17 +38,20 @@
             {% set depth = 12 %}
             {% for brick in bricks %}
                 {# First-paint position mirrors :style below; hx-live takes over once it inits, so blocks don't flash from origin. #}
-                {% set z_index = 1000 if brick.dragged_by_id else (brick.x + brick.y) * 10 + brick.z * 100 + 1 %}
-                <div id="block-{{ brick.id }}"
-                     data-x="{{ brick.x }}" data-y="{{ brick.y }}" data-z="{{ brick.z }}"
+                {% set z_index = 1000 if brick.is_being_dragged else (brick.x + brick.y) * 10 + brick.z * 100 + 1 %}
+                <div id="brick-{{ brick.id }}"
+                     data-x="{{ brick.x }}"
+                     data-y="{{ brick.y }}"
+                     data-z="{{ brick.z }}"
                      data-brick-id="{{ brick.id }}"
-                        {{ 'data-server-dragging' if brick.dragged_by_id else '' }}
-                     :data-dragging="(data.dragBrick == data.brickId && data.isDragging) || this.hasAttribute('data-server-dragging') ? '' : null"
+                        {{ 'data-server-grabbed' if brick.is_being_dragged else '' }}
+                     aria-grabbed="{{ 'true' if brick.is_being_dragged else 'false' }}"
+                     :aria-grabbed="(data.dragBrick == data.brickId && data.isDragging) || this.hasAttribute('data-server-grabbed')"
                      :data-is-predicting="data.dragBrick == data.brickId && data.isDragging ? '' : null"
                      :style="{
                          gridColumn: (+data.x) + 1,
                          gridRow:    (+data.y) + 1,
-                         zIndex: this.hasAttribute('data-dragging') ? 1000 : ((+data.x + +data.y) * 10 + +data.z * 100 + 1)
+                         zIndex:     (+data.x + +data.y) * 10 + +data.z * 100 + 1
                        }"
                      class="group/brick brick"
                      style="--color: var(--color-brick-{{ brick.color }});
