@@ -38,6 +38,26 @@
       hx-on="
         keydown[key=='Shift'] -> data.isDeleting = true;
         keyup[key=='Shift']   -> data.isDeleting = false;
+        pointerover target:button[data-x] passive -> {
+          var cx = +event.target.dataset.x, cy = +event.target.dataset.y;
+          ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});
+          var c = q('#cursor-' + data.token);
+          if (!c.count) return;
+          var half = {{ grid_size * 32 }};
+          var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
+          var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
+          c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
+          c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
+        };
+        pointerdown -> {
+          var brick = event.target.closest('.brick');
+          if (!brick) return;
+          event.preventDefault();
+          var id = parseInt(brick.dataset.brickId);
+          if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); ajax('DELETE', '/bricks/' + id, {swap: 'none'}); return; }
+          data.dragBrick = id;
+          data.isDragging = false;
+        };
         pointermove -> {
           if (!data.dragBrick) return;
           var brick = q('#brick-' + data.dragBrick);
