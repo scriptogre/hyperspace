@@ -96,7 +96,6 @@ async def sse_endpoint(request: Request):
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
-            "Content-Encoding": "zstd",  # browser decodes; client drops fzstd + base64
         },
         background=BackgroundTask(mark_player_as_offline, player),
     )

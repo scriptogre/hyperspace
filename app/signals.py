@@ -28,7 +28,9 @@ async def on_brick_saved(
         await Event.create(type=EventType.BRICK_CREATED, player=player, brick=brick)
 
     elif set(update_fields or ()) == {"dragged_by_id"}:
-        event_type = EventType.DRAG_STARTED if brick.dragged_by_id else EventType.DRAG_ENDED
+        event_type = (
+            EventType.DRAG_STARTED if brick.dragged_by_id else EventType.DRAG_ENDED
+        )
         await Event.create(
             type=event_type,
             player=player,

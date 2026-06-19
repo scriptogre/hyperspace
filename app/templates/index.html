@@ -10,6 +10,7 @@
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
     <link href="{{ url_for('static', path='css/output.css') }}?v=mobile4" rel="stylesheet">
 
+    <script src="{{ url_for('static', path='js/fzstd.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-optimistic.js') }}"></script>
@@ -18,6 +19,14 @@
         htmx.registerExtension("don't morph elements undergoing client-side prediction", {
             htmx_before_morph_attr: (element) => {
                 if (element.hasAttribute("data-is-predicting")) return false;
+            },
+        })
+        // SSE frames are zstd-compressed once on the server and base64-encoded;
+        // inflate each before htmx swaps it.
+        htmx.registerExtension("inflate zstd SSE frames", {
+            htmx_before_sse_message: (element, detail) => {
+                let bytes = Uint8Array.from(atob(detail.message.data), c => c.charCodeAt(0));
+                detail.message.data = new TextDecoder().decode(fzstd.decompress(bytes));
             },
         })
     </script>

@@ -17,7 +17,9 @@ from app.lifespan import lifespan
 from app.routes import router
 
 app = FastAPI(
-    default_response_class=HTMLResponse, title="Hyperspace", lifespan=lifespan,
+    default_response_class=HTMLResponse,
+    title="Hyperspace",
+    lifespan=lifespan,
 )
 
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")

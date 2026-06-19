@@ -3,6 +3,7 @@ Render the fragment whose table changed and fan it out to every client.
 """
 
 import asyncio
+import base64
 import os
 import time
 from collections.abc import AsyncIterator
@@ -41,30 +42,19 @@ def notify(table: str) -> None:
     _wake.set()
 
 
-def frame(element_id: str, html: str) -> bytes:
-    """Build one uncompressed <hx-partial> SSE event payload."""
-    html = f'<hx-partial id="{element_id}" hx-swap="outerMorph">{html}</hx-partial>'
-    body = "".join(f"data: {line}\n" for line in html.split("\n")) + "\n"
-    return body.encode()
+def frame(element_id: str, html: str) -> str:
+    """Compress one <hx-partial> region once and base64-encode it as an SSE event."""
+    partial = f'<hx-partial id="{element_id}" hx-swap="outerMorph">{html}</hx-partial>'
+    blob = base64.b64encode(zstd.compress(partial.encode())).decode("ascii")
+    return f"data: {blob}\n\n"
 
 
-_KEEPALIVE = b": keepalive\n\n"
+_KEEPALIVE = ": keepalive\n\n"
 
 
-async def sse_stream(token: str) -> AsyncIterator[bytes]:
-    # TODO: per-connection compression. The browser only decodes one continuous
-    # zstd frame, so each stream owns its compressor and recompresses identical
-    # broadcasts per client. Restore compress-once (shared bytes, client-side
-    # decode) once we find a clean way the browser still decodes natively.
-    # A shared zstd dictionary (trained on our fragment HTML) would cut the
-    # per-connection cost and shrink frames without giving up native decode.
-    cobj = zstd.compressobj()
-
-    def compress(payload: bytes) -> bytes:
-        return cobj.compress(payload) + cobj.flush(zstandard.COMPRESSOBJ_FLUSH_BLOCK)
-
+async def sse_stream(token: str) -> AsyncIterator[str]:
     for _, eid, template, var, provider in REGIONS:
-        yield compress(frame(eid, render(template, {var: await provider()})))
+        yield frame(eid, render(template, {var: await provider()}))
 
     queue: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
     sse_clients[token] = queue
@@ -73,9 +63,9 @@ async def sse_stream(token: str) -> AsyncIterator[bytes]:
             try:
                 payloads = await asyncio.wait_for(queue.get(), timeout=30)
                 for payload in payloads:
-                    yield compress(payload)
+                    yield payload
             except asyncio.TimeoutError:
-                yield compress(_KEEPALIVE)
+                yield _KEEPALIVE
     except (asyncio.CancelledError, GeneratorExit):
         pass
     finally:
@@ -143,6 +133,7 @@ async def run() -> None:
         built = time.monotonic()
 
         payloads = [frame(eid, html) for eid, html in rendered]
+        compressed = time.monotonic()
 
         for queue in list(sse_clients.values()):
             if queue.full():
@@ -155,8 +146,8 @@ async def run() -> None:
 
         profiler.record(
             build_ms=(built - started) * 1000,
-            compress_ms=0.0,  # compression moved per-connection (see sse_stream)
-            send_ms=(sent - built) * 1000,
+            compress_ms=(compressed - built) * 1000,
+            send_ms=(sent - compressed) * 1000,
             blob_bytes=sum(len(p) for p in payloads),
             client_count=len(sse_clients),
         )

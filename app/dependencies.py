@@ -24,6 +24,7 @@ def require_coordinates_on_grid(x: int = Form(...), y: int = Form(...)):
     if x not in range(settings.GRID_SIZE) or y not in range(settings.GRID_SIZE):
         raise HTTPException(status_code=422, detail="cell off grid")
 
+
 def get_form_errors(request: Request, response: Response) -> FormErrors:
     """
     Pop any validation errors a failed POST left in the signed cookie.
