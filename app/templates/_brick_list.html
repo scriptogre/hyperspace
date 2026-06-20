@@ -1,70 +1,98 @@
-<template id="optimistic-brick">
-    <div :style="{ gridColumn: (+data.x) + 1, gridRow: (+data.y) + 1, zIndex: (+data.x + +data.y) * 10 + 1 }"
-         class="size-16 border-2 border-dashed border-foreground/60 bg-foreground/15 pointer-events-none"></div>
-</template>
+{#<template id="optimistic-brick">#}
+{#    <div :style="{ gridColumn: (+data.x) + 1, gridRow: (+data.y) + 1, zIndex: (+data.x + +data.y) * 10 + 1 }"#}
+{#         class="size-16 border-2 border-dashed border-foreground/60 bg-foreground/15 pointer-events-none"></div>#}
+{#</template>#}
 
-<div class="flex-1 relative overflow-hidden bg-background select-none w-full h-full" id="brick-list">
+<div id="brick-list" class="flex-1 relative overflow-hidden bg-background select-none w-full h-full">
     <div id="grid-perspective"
          class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
          style="perspective: 1000px">
-        <div id="grid-container" class="grid rotate-x-[60deg] -rotate-z-45 transform-3d"
+        <div id="grid-container" class="grid rotate-x-60 -rotate-z-45 transform-3d"
              style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
 
-            {% for row in range(grid_size) %}
-                {% for col in range(grid_size) %}
-                    <button data-x="{{ col }}" data-y="{{ row }}" class="grid-cell"
-                            hx-post="/bricks" hx-vals='{"x": {{ col }}, "y": {{ row }}}'
-                            hx-target="closest #grid-container" hx-swap="beforeend"
-                            hx-optimistic="#optimistic-brick"
-                            style="grid-column: {{ col + 1 }}; grid-row: {{ row + 1 }}"></button>
-                {% endfor %}
-            {% endfor %}
-
-            {% set depth = 12 %}
-            {% for brick in bricks %}
-                {# First-paint position mirrors :style below; hx-live takes over once it inits, so blocks don't flash from origin. #}
-                {% set z_index = 1000 if brick.is_being_dragged else (brick.x + brick.y) * 10 + brick.z * 100 + 1 %}
-                <div id="brick-{{ brick.id }}"
-                     data-x="{{ brick.x }}"
-                     data-y="{{ brick.y }}"
-                     data-z="{{ brick.z }}"
-                     data-brick-id="{{ brick.id }}"
-                        {{ 'data-server-grabbed' if brick.is_being_dragged else '' }}
-                     aria-grabbed="{{ 'true' if brick.is_being_dragged else 'false' }}"
-                     :aria-grabbed="(data.dragBrick == data.brickId && data.isDragging) || this.hasAttribute('data-server-grabbed')"
-                     :data-is-predicting="data.dragBrick == data.brickId && data.isDragging ? '' : null"
-                     :style="{
-                         gridColumn: (+data.x) + 1,
-                         gridRow:    (+data.y) + 1,
-                         zIndex:     (+data.x + +data.y) * 10 + +data.z * 100 + 1
-                       }"
-                     class="group/brick brick"
-                     style="--color: var(--color-brick-{{ brick.color }});
-                             grid-column: {{ brick.x + 1 }};
-                             grid-row: {{ brick.y + 1 }};
-                             z-index: {{ z_index }};
-                             transform-style: preserve-3d;
-                             transform: translateZ({{ brick.z * depth }}px)">
-                    {# Top face #}
-                    <div class="brick-top"
-                         style="background: var(--color);
-                                 transform: translateZ({{ depth }}px)">
-                        <div class="brick-overlay"></div>
-                    </div>
-                    {# South wall (bottom-left in iso) #}
-                    <div class="brick-wall bottom-0"
-                         style="width: 64px; height: {{ depth }}px;
-                                 background: color-mix(in srgb, var(--color) 65%, black);
-                                 transform-origin: bottom; transform: rotateX(-90deg)">
-                    </div>
-                    {# West wall (bottom-right in iso) #}
-                    <div class="brick-wall top-0"
-                         style="width: {{ depth }}px; height: 64px;
-                                 background: color-mix(in srgb, var(--color) 45%, black);
-                                 transform-origin: left; transform: rotateY(-90deg)">
-                    </div>
+            {% for (x, y) in grid_cells %}
+                <div id="grid-cell-{{ x }}-{{ y }}" class="grid-cell"
+                     hx-trigger="pointerover"
+                     hx-patch="/cursors"
+                     hx-trigger="click"
+                     hx-vals:inherited="js:{x: data.x, y: data.y}"
+                     data-x="{{ x }}"
+                     data-y="{{ y }}"
+                     data-z="0"
+                     style="--x: {{ x }}; --y: {{ y }}"
+                >
+                    {% if not brick_stacks[x][y] %}
+                        {# Press floor to create brick #}
+                        <button aria-label="Place brick" hx-post="/bricks"></button>
+                    {% else %}
+                        {% for brick in brick_stacks[x][y] %}
+                            <div id="brick-{{ brick.id }}" class="brick group/brick"
+                                 hx-trigger="pointerdown[shiftKey]"
+                                 hx-delete="/bricks/{{ brick.id }}"
+                                 data-z="{{ brick.z }}"
+                                 style="--z: {{ brick.z }}; --color: var(--color-brick-{{ brick.color }})"
+                            >
+                                <div class="brick-top"
+                                     {% if loop.last %}
+                                     hx-post="/bricks"
+                                     hx-vals:append="js:{z: data.z + 1}"
+                                     hx-trigger="pointerdown[ctrlKey] consume"
+                                     {% endif %}
+                                >
+                                    <div class="brick-overlay"></div>
+                                </div>
+                                <div class="brick-wall south"></div>
+                                <div class="brick-wall west"></div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
                 </div>
             {% endfor %}
+            {##}
+            {#            {% set depth = 12 %}#}
+            {#            {% for brick in bricks %}#}
+            {# First-paint position mirrors :style below; hx-live takes over once it inits, so blocks don't flash from origin. #}
+            {#                {% set z_index = 1000 if brick.is_being_dragged else (brick.x + brick.y) * 10 + brick.z * 100 + 1 %}#}
+            {#                <div id="brick-{{ brick.id }}"#}
+            {#                     data-x="{{ brick.x }}"#}
+            {#                     data-y="{{ brick.y }}"#}
+            {#                     data-z="{{ brick.z }}"#}
+            {#                     data-brick-id="{{ brick.id }}"#}
+            {#                        {{ 'data-server-grabbed' if brick.is_being_dragged else '' }}#}
+            {#                     aria-grabbed="{{ 'true' if brick.is_being_dragged else 'false' }}"#}
+            {#                     :data-is-predicting="data.dragBrick == data.brickId && data.isDragging ? '' : null"#}
+            {#                     :style="{#}
+            {#                         gridColumn: (+data.x) + 1,#}
+            {#                         gridRow:    (+data.y) + 1,#}
+            {#                         zIndex:     (+data.x + +data.y) * 10 + +data.z * 100 + 1#}
+            {#                       }"#}
+            {#                     class="group/brick brick"#}
+            {#                     style="--color: var(--color-brick-{{ brick.color }});#}
+            {#                             grid-column: {{ brick.x + 1 }};#}
+            {#                             grid-row: {{ brick.y + 1 }};#}
+            {#                             z-index: {{ z_index }};#}
+            {#                             transform-style: preserve-3d;#}
+            {#                             transform: translateZ({{ brick.z * depth }}px)">#}
+            {# Top face #}
+            {#                    <div class="brick-top"#}
+            {#                         style="background: var(--color);#}
+            {#                                 transform: translateZ({{ depth }}px)">#}
+            {#                        <div class="brick-overlay"></div>#}
+            {#                    </div>#}
+            {# South wall (bottom-left in iso) #}
+            {#                    <div class="brick-wall bottom-0"#}
+            {#                         style="width: 64px; height: {{ depth }}px;#}
+            {#                                 background: color-mix(in srgb, var(--color) 65%, black);#}
+            {#                                 transform-origin: bottom; transform: rotateX(-90deg)">#}
+            {#                    </div>#}
+            {# West wall (bottom-right in iso) #}
+            {#                    <div class="brick-wall top-0"#}
+            {#                         style="width: {{ depth }}px; height: 64px;#}
+            {#                                 background: color-mix(in srgb, var(--color) 45%, black);#}
+            {#                                 transform-origin: left; transform: rotateY(-90deg)">#}
+            {#                    </div>#}
+            {#                </div>#}
+            {#            {% endfor %}#}
 
         </div>
     </div>

@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 @font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url('../fonts/jetbrains-mono.woff2') format('woff2');
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/jetbrains-mono.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Space Grotesk';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url('../fonts/space-grotesk.woff2') format('woff2');
+    font-family: 'Space Grotesk';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/space-grotesk.woff2') format('woff2');
 }
 
 @plugin "@iconify/tailwind4";
@@ -22,143 +22,196 @@
 @source inline("bg-brick-cyan bg-brick-pink bg-brick-purple bg-brick-yellow bg-brick-green bg-brick-orange");
 
 @theme {
-  /* True-neutral palette (oklch chroma 0) borrowed from dromos */
-  --color-neutral-10:  oklch(99.8% 0 0);
-  --color-neutral-25:  oklch(99.5% 0 0);
-  --color-neutral-50:  oklch(98.5% 0 0);
-  --color-neutral-75:  oklch(97.8% 0 0);
-  --color-neutral-100: oklch(97.0% 0 0);
-  --color-neutral-150: oklch(95.6% 0 0);
-  --color-neutral-200: oklch(92.2% 0 0);
-  --color-neutral-300: oklch(87.0% 0 0);
-  --color-neutral-350: oklch(80.9% 0 0);
-  --color-neutral-400: oklch(70.8% 0 0);
-  --color-neutral-450: oklch(62.9% 0 0);
-  --color-neutral-500: oklch(55.6% 0 0);
-  --color-neutral-550: oklch(49.7% 0 0);
-  --color-neutral-600: oklch(43.9% 0 0);
-  --color-neutral-650: oklch(40.5% 0 0);
-  --color-neutral-700: oklch(37.1% 0 0);
-  --color-neutral-725: oklch(34.6% 0 0);
-  --color-neutral-750: oklch(32.0% 0 0);
-  --color-neutral-775: oklch(29.5% 0 0);
-  --color-neutral-800: oklch(26.9% 0 0);
-  --color-neutral-825: oklch(25.3% 0 0);
-  --color-neutral-850: oklch(23.7% 0 0);
-  --color-neutral-875: oklch(22.1% 0 0);
-  --color-neutral-900: oklch(20.5% 0 0);
-  --color-neutral-910: oklch(19.3% 0 0);
-  --color-neutral-920: oklch(18.1% 0 0);
-  --color-neutral-930: oklch(16.9% 0 0);
-  --color-neutral-940: oklch(15.7% 0 0);
-  --color-neutral-950: oklch(14.5% 0 0);
+    /* True-neutral palette (oklch chroma 0) borrowed from dromos */
+    --color-neutral-10: oklch(99.8% 0 0);
+    --color-neutral-25: oklch(99.5% 0 0);
+    --color-neutral-50: oklch(98.5% 0 0);
+    --color-neutral-75: oklch(97.8% 0 0);
+    --color-neutral-100: oklch(97.0% 0 0);
+    --color-neutral-150: oklch(95.6% 0 0);
+    --color-neutral-200: oklch(92.2% 0 0);
+    --color-neutral-300: oklch(87.0% 0 0);
+    --color-neutral-350: oklch(80.9% 0 0);
+    --color-neutral-400: oklch(70.8% 0 0);
+    --color-neutral-450: oklch(62.9% 0 0);
+    --color-neutral-500: oklch(55.6% 0 0);
+    --color-neutral-550: oklch(49.7% 0 0);
+    --color-neutral-600: oklch(43.9% 0 0);
+    --color-neutral-650: oklch(40.5% 0 0);
+    --color-neutral-700: oklch(37.1% 0 0);
+    --color-neutral-725: oklch(34.6% 0 0);
+    --color-neutral-750: oklch(32.0% 0 0);
+    --color-neutral-775: oklch(29.5% 0 0);
+    --color-neutral-800: oklch(26.9% 0 0);
+    --color-neutral-825: oklch(25.3% 0 0);
+    --color-neutral-850: oklch(23.7% 0 0);
+    --color-neutral-875: oklch(22.1% 0 0);
+    --color-neutral-900: oklch(20.5% 0 0);
+    --color-neutral-910: oklch(19.3% 0 0);
+    --color-neutral-920: oklch(18.1% 0 0);
+    --color-neutral-930: oklch(16.9% 0 0);
+    --color-neutral-940: oklch(15.7% 0 0);
+    --color-neutral-950: oklch(14.5% 0 0);
 
-  /* Semantic tokens.
-     `foreground` is set via @media below because Chromium drops the alpha
-     when light-dark() is nested inside color-mix() (used by `text-foreground/XX`).
-     The rest swap via light-dark() since they're used as solid colors. */
-  --color-foreground:        var(--color-neutral-900);
-  --color-background:        light-dark(var(--color-neutral-50),  var(--color-neutral-940));
-  --color-card:              light-dark(var(--color-neutral-10),  var(--color-neutral-910));
-  --color-muted:             light-dark(var(--color-neutral-100), var(--color-neutral-875));
-  --color-muted-foreground:  light-dark(var(--color-neutral-500), var(--color-neutral-400));
-  --color-border:            light-dark(var(--color-neutral-200), var(--color-neutral-825));
-  --color-primary:           light-dark(var(--color-neutral-900), var(--color-neutral-100));
-  --color-primary-foreground: light-dark(var(--color-neutral-50), var(--color-neutral-940));
-  --color-shadow:            light-dark(var(--color-neutral-200), oklch(10% 0 0));
+    --color-foreground: var(--color-neutral-900);
+    --color-background: light-dark(var(--color-neutral-50), var(--color-neutral-940));
+    --color-card: light-dark(var(--color-neutral-10), var(--color-neutral-910));
+    --color-muted: light-dark(var(--color-neutral-100), var(--color-neutral-875));
+    --color-muted-foreground: light-dark(var(--color-neutral-500), var(--color-neutral-400));
+    --color-border: light-dark(var(--color-neutral-200), var(--color-neutral-825));
+    --color-primary: light-dark(var(--color-neutral-900), var(--color-neutral-100));
+    --color-primary-foreground: light-dark(var(--color-neutral-50), var(--color-neutral-940));
+    --color-shadow: light-dark(var(--color-neutral-200), oklch(10% 0 0));
 
-  /* Brick palette. Light mode uses Tailwind 500 shades (one step darker)
-     so vibrant bricks don't blow out against the near-white bg. */
-  --color-brick-cyan:   light-dark(#06b6d4, #22d3ee);
-  --color-brick-pink:   light-dark(#ec4899, #f472b6);
-  --color-brick-purple: light-dark(#8b5cf6, #a78bfa);
-  --color-brick-yellow: light-dark(#eab308, #facc15);
-  --color-brick-green:  light-dark(#22c55e, #4ade80);
-  --color-brick-orange: light-dark(#f97316, #fb923c);
+    --color-brick-cyan: light-dark(#06b6d4, #22d3ee);
+    --color-brick-pink: light-dark(#ec4899, #f472b6);
+    --color-brick-purple: light-dark(#8b5cf6, #a78bfa);
+    --color-brick-yellow: light-dark(#eab308, #facc15);
+    --color-brick-green: light-dark(#22c55e, #4ade80);
+    --color-brick-orange: light-dark(#f97316, #fb923c);
 
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-sans: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Space Grotesk', sans-serif;
 
-  /* Snappy default for any `transition-*` utility */
-  --default-transition-duration: 50ms;
+    --default-transition-duration: 50ms;
 
-  /* Hard-edge isometric shadow (offset, no blur) */
-  --shadow-iso: 5px 5px 0 var(--color-shadow);
-  --shadow-iso-sm: 2px 2px 0 var(--color-shadow);
+    --shadow-iso: 5px 5px 0 var(--color-shadow);
+    --shadow-iso-sm: 2px 2px 0 var(--color-shadow);
 }
 
 @layer base {
-  :root {
-    color-scheme: light dark;
-  }
-  @media (prefers-color-scheme: dark) {
     :root {
-      --color-foreground: var(--color-neutral-50);
+        color-scheme: light dark;
+        --cell-size: 4rem;
+        --brick-height: 0.75rem;
     }
-  }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --color-foreground: var(--color-neutral-50);
+        }
+    }
 }
 
 @layer base {
-  @media (hover: none) {
-    input { font-size: 16px; }
-  }
+    @media (hover: none) {
+        input {
+            font-size: 16px;
+        }
+    }
 }
 
 @layer components {
-  /* Grid + brick markup repeats 144 cells and 100 bricks; these collapse the
-     repeated utility strings so the rendered HTML payload stays small. */
-  .grid-cell {
-    @apply size-16 border border-foreground/[0.08] bg-foreground/[0.02] dark:border-foreground/[0.05] dark:bg-foreground/[0.015] cursor-pointer transition-colors hover:bg-foreground/15 hover:border-foreground/40 focus:outline-none;
-  }
-  .brick {
-    @apply relative cursor-grab transition-[opacity,transform] aria-[grabbed=true]:cursor-grabbing group-data-[is-deleting=true]/body:cursor-crosshair data-[pending-delete]:opacity-0 data-[pending-delete]:scale-90 data-[is-predicting]:pointer-events-none aria-[grabbed=true]:z-[1000];
-  }
-  /* hx-optimistic forces `all: initial` on its wrapper, which collapses to
-     `display: inline` and steals grid placement from our template content.
-     `display: contents` makes the wrapper transparent so the inner div
-     becomes the grid item. */
-  .hx-optimistic {
-    display: contents !important;
-  }
-  .brick-top {
-    @apply size-16 border-2 border-white/25 relative overflow-hidden transition-[opacity,border-color,background-color] group-aria-[grabbed=true]/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500;
-  }
-  .brick-overlay {
-    @apply absolute inset-0 opacity-0 group-hover/brick:opacity-100 transition-opacity bg-foreground/40 group-data-[is-deleting=true]/body:group-hover/brick:bg-red-500/50;
-  }
-  .brick-wall {
-    @apply absolute left-0 border-2 border-white/15 transition-[opacity,border-color,background-color,box-shadow] group-aria-[grabbed=true]/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[is-deleting=true]/body:group-hover/brick:border-red-500 group-data-[is-deleting=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)];
-  }
+    .grid-cell {
+        grid-column: calc(var(--x) + 1);
+        grid-row: calc(var(--y) + 1);
 
-  /* Cursors render 600+ times; keep each node tiny by holding styling here and
-     passing only position (--sx/--sy) and color (--color) per element. */
-  .cursor {
-    @apply absolute pointer-events-none flex flex-col items-center -translate-x-1/2 opacity-70;
-    left: calc(50% + var(--sx));
-    top: calc(40% + var(--sy) - 40px);
-  }
-  .cursor-name {
-    @apply whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full mb-1 font-semibold border;
-    background: var(--color);
-    color: color-mix(in srgb, var(--color), black 75%);
-    border-color: color-mix(in srgb, var(--color), white 30%);
-  }
-  .cursor-dot {
-    @apply rounded-full border size-2.5;
-    background: var(--color);
-    border-color: color-mix(in srgb, var(--color), white 30%);
-  }
+        &:has(.brick) {
+            transform-style: preserve-3d;
+        }
 
-  .is-selected {
-    transform: scale(1.15);
-    outline: 2px solid var(--color-foreground);
-    outline-offset: 2px;
-    box-shadow: 0 0 12px color-mix(in oklch, var(--color-foreground), transparent 70%);
-  }
-  .pick-check {
-    display: none;
-  }
-  .is-selected .pick-check {
-    display: flex;
-  }
+        & > button {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            @apply border border-foreground/8 bg-foreground/2 dark:border-foreground/5 dark:bg-foreground/1.5 cursor-pointer transition-colors hover:bg-foreground/15 hover:border-foreground/40 focus:outline-none;
+        }
+    }
+
+    .brick {
+        @apply relative cursor-grab aria-grabbed:cursor-grabbing group-data-[shift-key=true]/body:cursor-crosshair data-pending-delete:opacity-0 data-pending-delete:scale-90 data-is-predicting:pointer-events-none aria-grabbed:z-1000;
+        z-index: calc(var(--z) * 100 + 1);
+        transform-style: preserve-3d;
+        transform: translateZ(calc((var(--z) + 1) * var(--brick-height)));
+        transition-property: opacity, transform;
+        transition-duration: var(--default-transition-duration);
+
+        & .brick-top {
+            @apply border-2 border-white/25 relative overflow-hidden group-aria-grabbed/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[shift-key=true]/body:group-hover/brick:border-red-500;
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background: var(--color);
+            transition-property: opacity, border-color, background-color;
+            transition-duration: var(--default-transition-duration);
+
+            &[hx-post] {
+                @apply group-data-[ctrl-key=true]/body:group-hover/brick:border-lime-400 group-data-[ctrl-key=true]/body:cursor-copy;
+            }
+        }
+
+        & .brick-overlay {
+            @apply absolute inset-0 opacity-0 group-hover/brick:opacity-100 transition-opacity bg-foreground/40 group-data-[shift-key=true]/body:group-hover/brick:bg-red-500/50;
+
+            .brick-top[hx-post] & {
+                @apply group-data-[ctrl-key=true]/body:group-hover/brick:bg-lime-400/50;
+            }
+        }
+
+        & .brick-wall {
+            @apply absolute left-0 border-2 border-white/15 group-aria-grabbed/brick:opacity-40 group-hover/brick:border-foreground/70 group-data-[shift-key=true]/body:group-hover/brick:border-red-500 group-data-[shift-key=true]/body:group-hover/brick:[box-shadow:inset_0_0_0_9999px_rgba(239,68,68,0.45)];
+            transition-property: opacity, border-color, background-color, box-shadow;
+            transition-duration: var(--default-transition-duration);
+
+            &.south {
+                width: var(--cell-size);
+                height: var(--brick-height);
+                background: color-mix(in srgb, var(--color) 65%, black);
+                bottom: 0;
+                transform-origin: bottom;
+                transform: rotateX(90deg);
+            }
+
+            &.west {
+                width: var(--brick-height);
+                height: var(--cell-size);
+                background: color-mix(in srgb, var(--color) 45%, black);
+                top: 0;
+                transform-origin: left;
+                transform: rotateY(90deg);
+            }
+        }
+    }
+
+    /* hx-optimistic forces `all: initial` on its wrapper, which collapses to
+       `display: inline` and steals grid placement from our template content.
+       `display: contents` makes the wrapper transparent so the inner div
+       becomes the grid item. */
+    .hx-optimistic {
+        display: contents !important;
+    }
+
+    /* Cursors render 600+ times; keep each node tiny by holding styling here and
+       passing only position (--sx/--sy) and color (--color) per element. */
+    .cursor {
+        @apply absolute pointer-events-none flex flex-col items-center -translate-x-1/2 opacity-70;
+        left: calc(50% + var(--sx));
+        top: calc(40% + var(--sy) - 40px);
+    }
+
+    .cursor-name {
+        @apply whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full mb-1 font-semibold border;
+        background: var(--color);
+        color: color-mix(in srgb, var(--color), black 75%);
+        border-color: color-mix(in srgb, var(--color), white 30%);
+    }
+
+    .cursor-dot {
+        @apply rounded-full border size-2.5;
+        background: var(--color);
+        border-color: color-mix(in srgb, var(--color), white 30%);
+    }
+
+    .is-selected {
+        transform: scale(1.15);
+        outline: 2px solid var(--color-foreground);
+        outline-offset: 2px;
+        box-shadow: 0 0 12px color-mix(in oklch, var(--color-foreground), transparent 70%);
+    }
+
+    .pick-check {
+        display: none;
+    }
+
+    .is-selected .pick-check {
+        display: flex;
+    }
 }

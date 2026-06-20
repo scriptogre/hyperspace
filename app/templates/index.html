@@ -8,7 +8,7 @@
     <title>Hyperspace</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
-    <link href="{{ url_for('static', path='css/output.css') }}?v=mobile4" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/output.css') }}" rel="stylesheet">
 
     <script src="{{ url_for('static', path='js/fzstd.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
@@ -27,61 +27,52 @@
 
 <body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
       data-token="{{ player.token if player else '' }}"
-      data-drag-brick=""
-      data-is-dragging=""
-      data-is-deleting=""
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
         {% if player %}
       hx-sse:connect="/sse"
         {% endif %}
       hx-on="
-        keydown[key=='Shift'] -> data.isDeleting = true;
-        keyup[key=='Shift']   -> data.isDeleting = false;
-        pointerover target:button[data-x] passive -> {
-          var cx = +event.target.dataset.x, cy = +event.target.dataset.y;
-          ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});
-          var c = q('#cursor-' + data.token);
-          if (!c.count) return;
-          var half = {{ grid_size * 32 }};
-          var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;
-          var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;
-          c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');
-          c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');
-        };
-        pointerdown -> {
-          var brick = event.target.closest('.brick');
-          if (!brick) return;
-          event.preventDefault();
-          var id = parseInt(brick.dataset.brickId);
-          if (event.shiftKey) { brick.setAttribute('data-pending-delete', ''); ajax('DELETE', '/bricks/' + id, {swap: 'none'}); return; }
-          data.dragBrick = id;
-          data.isDragging = false;
-        };
-        pointermove -> {
-          if (!data.dragBrick) return;
-          var brick = q('#brick-' + data.dragBrick);
-          if (!brick.count) return;
-          var under = document.elementFromPoint(event.clientX, event.clientY);
-          var cell  = under && under.closest('[data-x]');
-          if (!cell) return;
-          var cx = +cell.dataset.x, cy = +cell.dataset.y;
-          if (cx === +brick.dataset.x && cy === +brick.dataset.y) return;
-          if (!data.isDragging) {
-            data.isDragging = true;
-            ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});
-          }
-          brick.dataset.x = cx; brick.dataset.y = cy;
-          ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});
-        };
-        pointerup -> {
-          if (!data.dragBrick) return;
-          if (data.isDragging) ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});
-          data.dragBrick = '';
-          data.isDragging = '';
-        }">
+        keydown, keyup -> {
+            data.shiftKey = event.shiftKey;
+            data.ctrlKey = event.ctrlKey
+        }
+      ">
+{#        pointerover target:button[data-x] passive -> {#}
+{#          var cx = +event.target.dataset.x, cy = +event.target.dataset.y;#}
+{#          ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});#}
+{#          var c = q('#cursor-' + data.token);#}
+{#          if (!c.count) return;#}
+{#          var half = {{ grid_size * 32 }};#}
+{#          var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;#}
+{#          var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;#}
+{#          c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');#}
+{#          c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');#}
+{#        };#}
+{#        pointermove -> {#}
+{#          if (!data.dragBrick) return;#}
+{#          var brick = q('#brick-' + data.dragBrick);#}
+{#          if (!brick.count) return;#}
+{#          var under = document.elementFromPoint(event.clientX, event.clientY);#}
+{#          var cell  = under && under.closest('[data-x]');#}
+{#          if (!cell) return;#}
+{#          var cx = +cell.dataset.x, cy = +cell.dataset.y;#}
+{#          if (cx === +brick.dataset.x && cy === +brick.dataset.y) return;#}
+{#          if (!data.isDragging) {#}
+{#            data.isDragging = true;#}
+{#            ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});#}
+{#          }#}
+{#          brick.dataset.x = cx; brick.dataset.y = cy;#}
+{#          ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});#}
+{#        };#}
+{#        pointerup -> {#}
+{#          if (!data.dragBrick) return;#}
+{#          if (data.isDragging) ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});#}
+{#          data.dragBrick = '';#}
+{#          data.isDragging = '';#}
 
 <div id="app" class="relative w-full h-full">
+
     {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
     {% include "_event_list.html" %}
