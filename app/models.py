@@ -47,7 +47,9 @@ class Brick(Model):
     events: ReverseRelation["Event"]
 
     class Meta:
-        table = "brick"
+        table = "bricks"
+        ordering = ["x", "y", "z"]
+        indexes = [("x", "y", "z")]
 
     @property
     def is_being_dragged(self) -> bool:
@@ -72,7 +74,7 @@ class Player(Model):
     events: ReverseRelation["Event"]
 
     class Meta:
-        table = "player"
+        table = "players"
 
 
 class Cursor(Model):
@@ -83,7 +85,6 @@ class Cursor(Model):
     x = IntField()
     y = IntField()
     z = IntField()
-    is_active = BooleanField(default=True)
     version = BigIntField(default=0)
 
     # Relations
@@ -95,7 +96,7 @@ class Cursor(Model):
     )
 
     class Meta:
-        table = "cursor"
+        table = "cursors"
 
 
 class Event(Model):
@@ -121,5 +122,5 @@ class Event(Model):
     )
 
     class Meta:
-        table = "event"
+        table = "events"
         ordering = ["-id"]

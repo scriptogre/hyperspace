@@ -37,7 +37,7 @@ async def mark_player_as_offline(player: Player) -> None:
     cursor_buffer.pop(player.id, None)
     await Player.filter(id=player.id).update(is_online=False)
     await Brick.filter(dragged_by=player).update(dragged_by_id=None)
-    await Cursor.filter(player=player).update(is_active=False)
+    await Cursor.filter(player=player).delete()
 
 
 async def create_brick(player: Player, x: int, y: int) -> Brick | None:
@@ -114,11 +114,10 @@ async def flush_cursors() -> None:
     cursor_buffer.clear()
 
     rows = [
-        Cursor(player_id=player_id, x=x, y=y, z=z, is_active=True)
-        for player_id, (x, y, z) in pending
+        Cursor(player_id=player_id, x=x, y=y, z=z) for player_id, (x, y, z) in pending
     ]
     await Cursor.bulk_create(
         rows,
         on_conflict=["player_id"],
-        update_fields=["x", "y", "z", "is_active"],
+        update_fields=["x", "y", "z"],
     )

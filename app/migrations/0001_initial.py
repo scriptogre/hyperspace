@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
                 ("is_online", fields.BooleanField(default=False)),
             ],
             options={
-                "table": "player",
+                "table": "players",
                 "app": "models",
                 "pk_attr": "id",
                 "table_description": "A player in the game.",
@@ -91,20 +91,20 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "table": "brick",
+                "table": "bricks",
                 "app": "models",
                 "pk_attr": "id",
                 "table_description": "A colored block placed on the isometric grid.",
             },
             bases=["Model"],
         ),
+        ops.AddIndex("Brick", ops.Index(fields=["x", "y", "z"])),
         ops.CreateModel(
             name="Cursor",
             fields=[
                 ("x", fields.IntField()),
                 ("y", fields.IntField()),
                 ("z", fields.IntField()),
-                ("is_active", fields.BooleanField(default=True)),
                 ("version", fields.BigIntField(default=0)),
                 (
                     "player",
@@ -121,7 +121,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "table": "cursor",
+                "table": "cursors",
                 "app": "models",
                 "pk_attr": "player_id",
                 "table_description": "Last known grid position for a player's cursor.",
@@ -171,7 +171,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "table": "event",
+                "table": "events",
                 "app": "models",
                 "pk_attr": "id",
                 "table_description": "An entry in the activity feed.",

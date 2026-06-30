@@ -7,6 +7,7 @@ from fastapi import (
     Request,
     Response,
 )
+
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
@@ -134,7 +135,7 @@ async def brick_delete(
 async def cursor_move(
     x: int = Form(...),
     y: int = Form(...),
-    z: int = Form(...),
+    z: int = Form(0),
     player: Player = Depends(require_player),
 ):
     await move_cursor(player, x, y, z)

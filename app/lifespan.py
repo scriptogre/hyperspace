@@ -21,23 +21,23 @@ END;
 $$ LANGUAGE plpgsql;
 """
 
-_TABLES = ("brick", "player", "cursor", "event")
+_TABLES = ("bricks", "players", "cursors", "events")
 _TRIGGER_LOCK = 0x68797073  # serialize trigger DDL across workers
 
 # Postgres stamps every cursor write with a monotonic version, so "what changed
 # since X" is a single indexed WHERE clause. The database is the change feed.
 _CURSOR_VERSION = """
-CREATE SEQUENCE IF NOT EXISTS cursor_version_seq;
-CREATE OR REPLACE FUNCTION stamp_cursor_version() RETURNS trigger AS $$
+CREATE SEQUENCE IF NOT EXISTS cursors_version_seq;
+CREATE OR REPLACE FUNCTION stamp_cursors_version() RETURNS trigger AS $$
 BEGIN
-  NEW.version := nextval('cursor_version_seq');
+  NEW.version := nextval('cursors_version_seq');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS cursor_version ON cursor;
-CREATE TRIGGER cursor_version BEFORE INSERT OR UPDATE ON cursor
-  FOR EACH ROW EXECUTE FUNCTION stamp_cursor_version();
-CREATE INDEX IF NOT EXISTS cursor_version_idx ON cursor (version);
+DROP TRIGGER IF EXISTS cursors_version ON cursors;
+CREATE TRIGGER cursors_version BEFORE INSERT OR UPDATE ON cursors
+  FOR EACH ROW EXECUTE FUNCTION stamp_cursors_version();
+CREATE INDEX IF NOT EXISTS cursors_version_idx ON cursors (version);
 """
 
 

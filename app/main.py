@@ -1,7 +1,6 @@
 """Hyperspace: real-time hypermedia on FastAPI + Tortoise ORM + Postgres."""
 
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from tortoise.exceptions import DoesNotExist
@@ -11,7 +10,6 @@ from app.exceptions import (
     PlayerRequired,
     not_found_handler,
     player_required_handler,
-    validation_error_handler,
 )
 from app.lifespan import lifespan
 from app.routes import router
@@ -27,4 +25,4 @@ app.include_router(router)
 
 app.add_exception_handler(PlayerRequired, player_required_handler)
 app.add_exception_handler(DoesNotExist, not_found_handler)
-app.add_exception_handler(RequestValidationError, validation_error_handler)
+# app.add_exception_handler(RequestValidationError, validation_error_handler)

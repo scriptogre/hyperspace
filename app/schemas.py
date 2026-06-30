@@ -59,6 +59,5 @@ class CursorRow(TypedDict):
     grid_x: int
     grid_y: int
     grid_z: int
-    is_active: bool
     name: str
     color: str

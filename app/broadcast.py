@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 import zstandard
 
 from app.dependencies import (
-    get_current_bricks,
+    get_brick_stacks,
     get_current_cursors,
     get_latest_events,
     get_current_players,
@@ -23,7 +23,7 @@ TICK = 0.02
 SEND_QUEUE_MAX = 64
 
 REGIONS = (
-    (Brick, "brick-list", "_brick_list.html", "bricks", get_current_bricks),
+    (Brick, "brick-list", "_brick_list.html", "brick_stacks", get_brick_stacks),
     (Player, "player-list", "_player_list.html", "players", get_current_players),
     (Event, "event-list", "_event_list.html", "events", get_latest_events),
     (Cursor, "cursor-list", "_cursor_list.html", "cursors", get_current_cursors),

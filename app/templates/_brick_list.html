@@ -12,37 +12,38 @@
 
             {% for (x, y) in grid_cells %}
                 <div id="grid-cell-{{ x }}-{{ y }}" class="grid-cell"
-                     hx-trigger="pointerover"
+                        {% if not brick_stacks[x][y] %}
                      hx-patch="/cursors"
-                     hx-trigger="click"
-                     hx-vals:inherited="js:{x: data.x, y: data.y}"
+                     hx-trigger="pointerenter"
+                        {% endif %}
+                     hx-vals="js:{...data}"
                      data-x="{{ x }}"
                      data-y="{{ y }}"
                      data-z="0"
                      style="--x: {{ x }}; --y: {{ y }}"
                 >
                     {% if not brick_stacks[x][y] %}
-                        {# Press floor to create brick #}
-                        <button aria-label="Place brick" hx-post="/bricks"></button>
+                        <button hx-post="/bricks"
+                                hx-vals="js:{...data}"
+                                aria-label="Place brick"></button>
                     {% else %}
                         {% for brick in brick_stacks[x][y] %}
                             <div id="brick-{{ brick.id }}" class="brick group/brick"
-                                 hx-trigger="pointerdown[shiftKey]"
-                                 hx-delete="/bricks/{{ brick.id }}"
                                  data-z="{{ brick.z }}"
                                  style="--z: {{ brick.z }}; --color: var(--color-brick-{{ brick.color }})"
                             >
-                                <div class="brick-top"
-                                     {% if loop.last %}
-                                     hx-post="/bricks"
-                                     hx-vals:append="js:{z: data.z + 1}"
-                                     hx-trigger="pointerdown[ctrlKey] consume"
-                                     {% endif %}
-                                >
-                                    <div class="brick-overlay"></div>
-                                </div>
-                                <div class="brick-wall south"></div>
-                                <div class="brick-wall west"></div>
+                                <button class="brick-action action-drag" aria-label="Drag brick"
+                                        hx-post="/bricks/{{ brick.id }}/drag/start"
+                                        hx-trigger="pointerdown"></button>
+                                <button class="brick-action action-delete" aria-label="Delete brick"
+                                        hx-delete="/bricks/{{ brick.id }}"
+                                        hx-trigger="pointerdown[shiftKey]"></button>
+                                {% if loop.last %}
+                                    <button class="brick-action action-stack" aria-label="Stack brick"
+                                            hx-post="/bricks"
+                                            hx-vals="js:{x: data.x, y: data.y, z: data.z + 1}"
+                                            hx-trigger="pointerdown"></button>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% endif %}

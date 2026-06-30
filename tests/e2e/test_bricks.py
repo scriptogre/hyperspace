@@ -47,9 +47,9 @@ def test_click_shows_optimistic_placeholder(joined_page: Page):
         lambda route: page.wait_for_timeout(500) or route.continue_(),
     )
     try:
-        page.locator(
-            f'button.grid-cell[data-x="{cx}"][data-y="{cy}"]'
-        ).dispatch_event("click")
+        page.locator(f'button.grid-cell[data-x="{cx}"][data-y="{cy}"]').dispatch_event(
+            "click"
+        )
 
         inner = page.locator(".hx-optimistic > div")
         expect(inner).to_have_count(1)

@@ -78,7 +78,20 @@ async def get_dragged_brick(
 
 
 async def get_current_bricks() -> list[BrickRow]:
-    return cast(list[BrickRow], cast(object, await Brick.all().order_by("id").values()))
+    return cast(
+        list[BrickRow], cast(object, await Brick.all().order_by("x", "y", "z").values())
+    )
+
+
+async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
+    """Bricks bucketed by cell, each stack sorted by z. Every cell has a list (possibly empty)."""
+    bricks = await get_current_bricks()
+    brick_stacks: dict[int, dict[int, list[BrickRow]]] = {
+        x: {y: [] for y in range(settings.GRID_SIZE)} for x in range(settings.GRID_SIZE)
+    }
+    for brick in bricks:
+        brick_stacks[brick["x"]][brick["y"]].append(brick)
+    return brick_stacks
 
 
 async def get_current_players() -> list[PlayerRow]:
@@ -110,7 +123,7 @@ async def get_latest_events() -> list[EventRow]:
 async def get_current_cursors() -> list[CursorRow]:
     rows = cast(
         list[dict],
-        await Cursor.filter(is_active=True)
+        await Cursor.all()
         .order_by("player_id")
         .values("player__token", "player__name", "player__color", "x", "y", "z"),
     )
@@ -120,7 +133,6 @@ async def get_current_cursors() -> list[CursorRow]:
             "grid_x": row["x"],
             "grid_y": row["y"],
             "grid_z": row["z"],
-            "is_active": True,
             "name": row["player__name"],
             "color": row["player__color"],
         }
@@ -130,7 +142,7 @@ async def get_current_cursors() -> list[CursorRow]:
 
 async def get_game_context(
     player: Player | None = Depends(get_current_player),
-    bricks: list[BrickRow] = Depends(get_current_bricks),
+    brick_stacks: dict[int, dict[int, list[BrickRow]]] = Depends(get_brick_stacks),
     players: list[PlayerRow] = Depends(get_current_players),
     events: list[EventRow] = Depends(get_latest_events),
     cursors: list[CursorRow] = Depends(get_current_cursors),
@@ -139,7 +151,7 @@ async def get_game_context(
     """Full template context for the index page."""
     return {
         "player": player,
-        "bricks": bricks,
+        "brick_stacks": brick_stacks,
         "players": players,
         "events": events,
         "cursors": cursors,
