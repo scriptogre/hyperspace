@@ -2,11 +2,11 @@
 
 import uuid
 
-from tortoise.transactions import in_transaction
+from tortoise.transactions import atomic
 
+from app.config import settings
 from app.models import Brick, Cursor, Player
 
-MAX_STACK_HEIGHT = 5
 CURSOR_FLUSH_INTERVAL = 0.033
 
 # player_id -> (x, y, z). Cursor moves are coalesced here and upserted in one
@@ -14,6 +14,7 @@ CURSOR_FLUSH_INTERVAL = 0.033
 cursor_buffer: dict[int, tuple[int, int, int]] = {}
 
 
+@atomic()
 async def create_player(name: str, color: str) -> Player:
     """
     Create a new player with a fresh token.
@@ -30,6 +31,7 @@ async def mark_player_as_online(player: Player) -> None:
     await Player.filter(id=player.id, is_online=False).update(is_online=True)
 
 
+@atomic()
 async def mark_player_as_offline(player: Player) -> None:
     """
     Flag offline, drop cursor, release held bricks.
@@ -40,23 +42,31 @@ async def mark_player_as_offline(player: Player) -> None:
     await Cursor.filter(player=player).delete()
 
 
+@atomic()
 async def create_brick(player: Player, x: int, y: int) -> Brick | None:
-    """Stack a brick on cell (x, y) in the player's color."""
-    async with in_transaction():
-        height = await Brick.filter(x=x, y=y).count()
-        if height >= MAX_STACK_HEIGHT:
-            return None
-        return await player.bricks.create(x=x, y=y, z=height, color=player.color)
+    """
+    Add a brick at the top of (x, y) position.
+    """
+    height = await Brick.filter(x=x, y=y).count()
+
+    if height >= settings.GRID_SIZE:
+        return None
+
+    brick, created = await Brick.get_or_create(
+        x=x,
+        y=y,
+        z=height,
+        defaults={"created_by": player, "color": player.color},
+    )
+    return brick if created else None
 
 
-async def delete_brick(brick: Brick) -> Brick:
+async def delete_brick(brick: Brick) -> None:
     """
     Delete a brick and close the gap it leaves in its stack.
     """
-    x, y = brick.x, brick.y
     await brick.delete()
-    await restack(x, y)
-    return brick
+    await restack(brick.x, brick.y)
 
 
 async def restack(x: int, y: int) -> None:
@@ -64,41 +74,31 @@ async def restack(x: int, y: int) -> None:
     Close gaps in a cell's stack after a brick leaves it.
     """
     bricks = await Brick.filter(x=x, y=y).order_by("z")
+
     for height, brick in enumerate(bricks):
         if brick.z != height:
             await Brick.filter(id=brick.id).update(z=height)
 
 
-async def start_drag(player: Player, brick: Brick) -> Brick:
+async def grab_brick(player: Player, brick: Brick) -> None:
     """
-    Begin a drag: mark the brick as held by the caller.
+    Grab a brick.
     """
-    await Brick.filter(id=brick.id).update(dragged_by=player)
-    return brick
+    brick.dragged_by_id = player.id
+    await brick.save(update_fields=["dragged_by_id"])
 
 
-async def continue_drag(brick: Brick, x: int, y: int) -> Brick:
+async def release_brick(brick: Brick) -> None:
     """
-    Reposition the held brick to the top of cell (x, y). Fires repeatedly during a drag.
+    Release a brick.
     """
-    source_x, source_y = brick.x, brick.y
-    new_z = await Brick.filter(x=x, y=y).count()
-    await Brick.filter(id=brick.id).update(x=x, y=y, z=new_z)
-    await restack(source_x, source_y)
-    return brick
+    brick.dragged_by_id = None
+    await brick.save(update_fields=["dragged_by_id"])
 
 
-async def end_drag(brick: Brick) -> Brick:
+async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
     """
-    End the drag: release the brick, leaving it where the last reposition put it.
-    """
-    await Brick.filter(id=brick.id).update(dragged_by_id=None)
-    return brick
-
-
-async def move_cursor(player: Player, x: int, y: int, z: int) -> None:
-    """
-    Buffer a cursor move; flush_cursors upserts the batch.
+    Update cursor position.
     """
     cursor_buffer[player.id] = (x, y, z)
 

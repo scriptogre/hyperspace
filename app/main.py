@@ -7,7 +7,9 @@ from tortoise.exceptions import DoesNotExist
 
 from app.config import settings
 from app.exceptions import (
+    BrickUnavailable,
     PlayerRequired,
+    brick_unavailable_handler,
     not_found_handler,
     player_required_handler,
 )
@@ -24,5 +26,6 @@ app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 app.include_router(router)
 
 app.add_exception_handler(PlayerRequired, player_required_handler)
+app.add_exception_handler(BrickUnavailable, brick_unavailable_handler)
 app.add_exception_handler(DoesNotExist, not_found_handler)
 # app.add_exception_handler(RequestValidationError, validation_error_handler)

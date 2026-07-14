@@ -223,9 +223,6 @@
   .inset-0 {
     inset: calc(var(--spacing) * 0);
   }
-  .top-0 {
-    top: calc(var(--spacing) * 0);
-  }
   .top-4 {
     top: calc(var(--spacing) * 4);
   }
@@ -237,9 +234,6 @@
   }
   .right-5 {
     right: calc(var(--spacing) * 5);
-  }
-  .bottom-0 {
-    bottom: calc(var(--spacing) * 0);
   }
   .bottom-12 {
     bottom: calc(var(--spacing) * 12);
@@ -372,10 +366,6 @@
     width: calc(var(--spacing) * 5);
     height: calc(var(--spacing) * 5);
   }
-  .size-16 {
-    width: calc(var(--spacing) * 16);
-    height: calc(var(--spacing) * 16);
-  }
   .h-1\.5 {
     height: calc(var(--spacing) * 1.5);
   }
@@ -438,9 +428,6 @@
   }
   .-rotate-z-45 {
     --tw-rotate-z: rotateZ(calc(45deg * -1));
-    transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
-  }
-  .transform {
     transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
   }
   .cursor-pointer {
@@ -545,22 +532,8 @@
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
-  .border-2 {
-    border-style: var(--tw-border-style);
-    border-width: 2px;
-  }
-  .border-dashed {
-    --tw-border-style: dashed;
-    border-style: dashed;
-  }
   .border-border {
     border-color: var(--color-border);
-  }
-  .border-foreground\/60 {
-    border-color: color-mix(in srgb, oklch(20.5% 0 0) 60%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--color-foreground) 60%, transparent);
-    }
   }
   .bg-background {
     background-color: var(--color-background);
@@ -596,12 +569,6 @@
     background-color: color-mix(in srgb, light-dark(var(--color-neutral-10), var(--color-neutral-910)) 80%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-card) 80%, transparent);
-    }
-  }
-  .bg-foreground\/15 {
-    background-color: color-mix(in srgb, oklch(20.5% 0 0) 15%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--color-foreground) 15%, transparent);
     }
   }
   .bg-muted {
@@ -788,6 +755,11 @@
       }
     }
   }
+  .data-grabbed\:hidden {
+    &[data-grabbed] {
+      display: none;
+    }
+  }
   .sm\:top-4 {
     @media (width >= 40rem) {
       top: calc(var(--spacing) * 4);
@@ -881,13 +853,12 @@
     &:has(.brick) {
       transform-style: preserve-3d;
     }
-    & > * {
+    &::before {
+      content: "";
       grid-area: 1 / 1;
-    }
-    & > button {
       width: var(--cell-size);
       height: var(--cell-size);
-      cursor: pointer;
+      pointer-events: none;
       border-style: var(--tw-border-style);
       border-width: 1px;
       border-color: color-mix(in srgb, oklch(20.5% 0 0) 8%, transparent);
@@ -898,6 +869,30 @@
       @supports (color: color-mix(in lab, red, red)) {
         background-color: color-mix(in oklab, var(--color-foreground) 2%, transparent);
       }
+      @media (prefers-color-scheme: dark) {
+        border-color: color-mix(in srgb, oklch(20.5% 0 0) 5%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          border-color: color-mix(in oklab, var(--color-foreground) 5%, transparent);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        background-color: color-mix(in srgb, oklch(20.5% 0 0) 1.5%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-foreground) 1.5%, transparent);
+        }
+      }
+    }
+    & > * {
+      grid-area: 1 / 1;
+    }
+    & > button {
+      width: var(--cell-size);
+      height: var(--cell-size);
+      cursor: pointer;
+      border-style: var(--tw-border-style);
+      border-width: 1px;
+      border-color: transparent;
+      background-color: transparent;
       transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;
       transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
       transition-duration: var(--tw-duration, var(--default-transition-duration));
@@ -920,18 +915,6 @@
       &:focus {
         --tw-outline-style: none;
         outline-style: none;
-      }
-      @media (prefers-color-scheme: dark) {
-        border-color: color-mix(in srgb, oklch(20.5% 0 0) 5%, transparent);
-        @supports (color: color-mix(in lab, red, red)) {
-          border-color: color-mix(in oklab, var(--color-foreground) 5%, transparent);
-        }
-      }
-      @media (prefers-color-scheme: dark) {
-        background-color: color-mix(in srgb, oklch(20.5% 0 0) 1.5%, transparent);
-        @supports (color: color-mix(in lab, red, red)) {
-          background-color: color-mix(in oklab, var(--color-foreground) 1.5%, transparent);
-        }
       }
     }
   }
@@ -1025,6 +1008,37 @@
     }
     :where(.group\/body[data-shift-key="true"]) &:hover, :where(.group\/body[data-shift-key="true"]) &:hover::before, :where(.group\/body[data-shift-key="true"]) &:hover::after {
       box-shadow: inset 0 0 0 9999px rgba(239, 68, 68, 0.45);
+    }
+    & > button {
+      position: absolute;
+      inset: calc(var(--spacing) * 0);
+      cursor: inherit;
+      transform: translateZ(1px);
+      transform-style: preserve-3d;
+      &::before, &::after {
+        content: "";
+        position: absolute;
+        background: transparent;
+      }
+      &::before {
+        left: -2px;
+        bottom: -2px;
+        width: var(--cell-size);
+        height: var(--brick-height);
+        transform-origin: bottom;
+        transform: rotateX(90deg);
+      }
+      &::after {
+        top: -2px;
+        left: -2px;
+        width: var(--brick-height);
+        height: var(--cell-size);
+        transform-origin: left;
+        transform: rotateY(90deg);
+      }
+    }
+    :where(.group\/body[data-shift-key="true"]) & > button:not([hx-delete]) {
+      pointer-events: none;
     }
     & .brick-action {
       position: absolute;

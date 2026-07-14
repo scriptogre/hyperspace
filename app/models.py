@@ -49,7 +49,7 @@ class Brick(Model):
     class Meta:
         table = "bricks"
         ordering = ["x", "y", "z"]
-        indexes = [("x", "y", "z")]
+        unique_together = (("x", "y", "z"),)
 
     @property
     def is_being_dragged(self) -> bool:

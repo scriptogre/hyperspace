@@ -63,11 +63,21 @@ class PlayerRequired(Exception):
     """
 
 
+class BrickUnavailable(Exception):
+    """
+    Brick cannot be mutated in its current state.
+    """
+
+
 async def player_required_handler(request: Request, exception: Exception) -> Response:
     is_page_navigation = "text/html" in request.headers.get("accept", "")
     if is_page_navigation:
         return RedirectResponse("/", status_code=303)
     return Response(status_code=401)
+
+
+async def brick_unavailable_handler(request: Request, exception: Exception) -> Response:
+    return Response(status_code=409)
 
 
 async def not_found_handler(request: Request, exception: Exception) -> Response:

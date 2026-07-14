@@ -10,29 +10,33 @@ from fastapi import (
 
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.status import (
+    HTTP_204_NO_CONTENT,
+    HTTP_401_UNAUTHORIZED,
+    HTTP_303_SEE_OTHER,
+)
 
 from app import broadcast
 from app.dependencies import (
     COOKIE_NAME,
-    get_available_brick,
-    get_dragged_brick,
+    require_available_brick,
+    require_brick_dragged_by_current_player,
     get_game_context,
     require_coordinates_on_grid,
-    require_player,
+    require_current_player,
 )
 from app.jinja import render
 from app.models import Brick, Player
 from app.schemas import PlayerJoinForm
 from app.services import (
-    continue_drag,
     delete_brick,
-    end_drag,
+    release_brick,
     create_player,
     mark_player_as_offline,
     mark_player_as_online,
     create_brick,
-    start_drag,
-    move_cursor,
+    grab_brick,
+    update_cursor,
 )
 from app.signals import current_player
 
@@ -52,13 +56,16 @@ async def index_page(context: dict = Depends(get_game_context)):
 async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
     player = await create_player(form.name, form.color)
 
-    # A boosted submit would innerMorph the next page in, which neither applies the
-    # <body> attributes nor fires load triggers, so the SSE stream never connects.
-    # HX-Redirect makes htmx do a real navigation; plain posts get a normal 303.
     if request.headers.get("hx-request"):
-        response = Response(status_code=204, headers={"HX-Redirect": "/"})
+        response = Response(
+            status_code=HTTP_204_NO_CONTENT,
+            headers={"HX-Redirect": "/"},
+        )
     else:
-        response = RedirectResponse("/", status_code=303)
+        response = RedirectResponse(
+            "/",
+            status_code=HTTP_303_SEE_OTHER,
+        )
 
     response.set_cookie(
         COOKIE_NAME,
@@ -70,7 +77,10 @@ async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
     return response
 
 
-@router.post("/logout", status_code=204)
+@router.post(
+    "/logout",
+    status_code=HTTP_204_NO_CONTENT,
+)
 async def logout(response: RedirectResponse):
     response.headers["HX-Location"] = "/"
     response.delete_cookie(COOKIE_NAME, path="/", samesite="lax")
@@ -88,11 +98,11 @@ async def health() -> str:
 async def sse_endpoint(request: Request):
     token = request.cookies.get(COOKIE_NAME)
     if not token:
-        return Response(status_code=401)
+        return Response(status_code=HTTP_401_UNAUTHORIZED)
 
     player = await Player.filter(token=token).first()
     if not player:
-        return Response(status_code=401)
+        return Response(status_code=HTTP_401_UNAUTHORIZED)
 
     current_player.set(player)
     await mark_player_as_online(player)
@@ -112,58 +122,59 @@ async def sse_endpoint(request: Request):
 
 
 @router.post(
-    "/bricks", status_code=204, dependencies=[Depends(require_coordinates_on_grid)]
+    "/bricks",
+    status_code=HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_coordinates_on_grid)],
 )
 async def brick_create(
     x: int = Form(...),
     y: int = Form(...),
-    player: Player = Depends(require_player),
+    player: Player = Depends(require_current_player),
 ):
     await create_brick(player, x, y)
 
 
-@router.delete("/bricks/{brick_id}", status_code=204)
+@router.delete(
+    "/bricks/{brick_id}",
+    status_code=HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_current_player)],
+)
 async def brick_delete(
-    brick: Brick = Depends(get_available_brick),
+    brick: Brick = Depends(require_available_brick),
 ):
     await delete_brick(brick)
 
 
 @router.patch(
-    "/cursors", status_code=204, dependencies=[Depends(require_coordinates_on_grid)]
+    "/cursor",
+    status_code=HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_coordinates_on_grid)],
 )
-async def cursor_move(
+async def cursor_update(
     x: int = Form(...),
     y: int = Form(...),
     z: int = Form(0),
-    player: Player = Depends(require_player),
+    player: Player = Depends(require_current_player),
 ):
-    await move_cursor(player, x, y, z)
+    await update_cursor(player, x, y, z)
 
 
-@router.post("/bricks/{brick_id}/drag/start", status_code=204)
-async def brick_start_drag(
-    player: Player = Depends(require_player),
-    brick: Brick = Depends(get_available_brick),
-):
-    await start_drag(player, brick)
-
-
-@router.patch(
-    "/bricks/{brick_id}/drag/continue",
-    status_code=204,
-    dependencies=[Depends(require_coordinates_on_grid)],
+@router.post(
+    "/bricks/{brick_id}/grab",
+    status_code=HTTP_204_NO_CONTENT,
 )
-async def brick_continue_drag(
-    x: int = Form(...),
-    y: int = Form(...),
-    brick: Brick = Depends(get_dragged_brick),
+async def brick_grab(
+    player: Player = Depends(require_current_player),
+    brick: Brick = Depends(require_available_brick),
 ):
-    await continue_drag(brick, x, y)
+    await grab_brick(player, brick)
 
 
-@router.post("/bricks/{brick_id}/drag/end", status_code=204)
-async def brick_end_drag(
-    brick: Brick = Depends(get_dragged_brick),
+@router.post(
+    "/bricks/{brick_id}/release",
+    status_code=HTTP_204_NO_CONTENT,
+)
+async def brick_release(
+    brick: Brick = Depends(require_brick_dragged_by_current_player),
 ):
-    await end_drag(brick)
+    await release_brick(brick)

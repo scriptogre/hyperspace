@@ -2,13 +2,16 @@
 FastAPI dependencies for players, bricks, and game state.
 """
 
+from collections.abc import AsyncIterator
 from typing import cast
 
 from fastapi import Depends, Form, HTTPException, Request, Response
+from starlette.status import HTTP_404_NOT_FOUND, HTTP_422_UNPROCESSABLE_CONTENT
+from tortoise.transactions import in_transaction
 
 from app.config import settings
 from app.enums import EventType
-from app.exceptions import FormErrors, PlayerRequired
+from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
 from app.models import Brick, Cursor, Event, Player
 from app.signals import current_player
 from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
@@ -19,60 +22,77 @@ COOKIE_NAME = "hyperspace_id"
 
 def require_coordinates_on_grid(x: int = Form(...), y: int = Form(...)):
     """
-    Reject x, y, z coordinates that fall outside the grid.
+    Require x, y, z coordinates to be inside the grid.
     """
     if x not in range(settings.GRID_SIZE) or y not in range(settings.GRID_SIZE):
-        raise HTTPException(status_code=422, detail="cell off grid")
+        raise HTTPException(
+            HTTP_422_UNPROCESSABLE_CONTENT,
+            "Position is outside grid",
+        )
 
 
 def get_form_errors(request: Request, response: Response) -> FormErrors:
     """
-    Pop any validation errors a failed POST left in the signed cookie.
+    Get validation errors left in the signed cookie by a failed POST.
     """
     return FormErrors.pop(request, response)
 
 
 async def get_current_player(request: Request) -> Player | None:
     """
-    Player for this cookie, or None when not joined.
+    Get a player for this cookie, or None when not joined.
     """
     token = request.cookies.get(COOKIE_NAME)
     return await Player.filter(token=token).first() if token else None
 
 
-async def require_player(player: Player | None = Depends(get_current_player)) -> Player:
+async def require_current_player(
+    player: Player | None = Depends(get_current_player),
+) -> Player:
     """
-    Require a joined player. Raises for anonymous requests and records who is
-    acting so model signals can attribute the change.
+    Get a joined (required) player. Raises for anonymous requests.
     """
     if not player:
-        raise PlayerRequired()
+        raise PlayerRequired
 
     current_player.set(player)
     return player
 
 
-async def get_brick(brick_id: int) -> Brick:
-    # Prefetch dragged_by so ownership checks can compare Player instances directly.
-    return await Brick.get(id=brick_id).select_related("dragged_by")
+async def require_brick(brick_id: int) -> AsyncIterator[Brick]:
+    """
+    Lock a brick for the duration of the route or return 404.
+    """
+    async with in_transaction():
+        brick = await Brick.select_for_update().get_or_none(id=brick_id)
+
+        if brick is None:
+            raise HTTPException(HTTP_404_NOT_FOUND, "Brick not found")
+
+        yield brick
 
 
-async def get_available_brick(brick: Brick = Depends(get_brick)) -> Brick:
-    """Brick exists and nobody is dragging it."""
+async def require_available_brick(
+    brick: Brick = Depends(require_brick, scope="function"),
+) -> Brick:
+    """
+    Require a brick that nobody is dragging.
+    """
     if brick.is_being_dragged:
-        raise HTTPException(status_code=409)
+        raise BrickUnavailable
+
     return brick
 
 
-async def get_dragged_brick(
-    player: Player = Depends(require_player),
-    brick: Brick = Depends(get_brick),
+async def require_brick_dragged_by_current_player(
+    brick: Brick = Depends(require_brick, scope="function"),
+    player: Player = Depends(require_current_player),
 ) -> Brick:
     """
-    Brick exists and is being dragged by this player.
+    Require a brick currently dragged by the current player.
     """
-    if brick.dragged_by != player:
-        raise HTTPException(status_code=403)
+    if brick.dragged_by_id != player.id:
+        raise BrickUnavailable
 
     return brick
 

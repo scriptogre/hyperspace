@@ -70,6 +70,7 @@ class Settings(BaseSettings):
                 "models": {
                     "models": ["app.models"],
                     "default_connection": "default",
+                    "migrations": "app.migrations",
                 }
             },
         }

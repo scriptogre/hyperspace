@@ -113,6 +113,15 @@
             transform-style: preserve-3d;
         }
 
+        &::before {
+            content: "";
+            grid-area: 1 / 1;
+            width: var(--cell-size);
+            height: var(--cell-size);
+            pointer-events: none;
+            @apply border border-foreground/8 bg-foreground/2 dark:border-foreground/5 dark:bg-foreground/1.5;
+        }
+
         & > * {
             grid-area: 1 / 1;
         }
@@ -120,7 +129,7 @@
         & > button {
             width: var(--cell-size);
             height: var(--cell-size);
-            @apply border border-foreground/8 bg-foreground/2 dark:border-foreground/5 dark:bg-foreground/1.5 cursor-pointer transition-colors hover:bg-foreground/15 hover:border-foreground/40 focus:outline-none;
+            @apply border border-transparent bg-transparent cursor-pointer transition-colors hover:bg-foreground/15 hover:border-foreground/40 focus:outline-none;
         }
     }
 
@@ -177,6 +186,38 @@
         :where(.group\/body[data-shift-key="true"]) &:hover::before,
         :where(.group\/body[data-shift-key="true"]) &:hover::after {
             box-shadow: inset 0 0 0 9999px rgba(239, 68, 68, 0.45);
+        }
+
+        & > button {
+            @apply absolute inset-0;
+            cursor: inherit;
+            transform: translateZ(1px);
+            transform-style: preserve-3d;
+
+            &::before, &::after {
+                content: "";
+                position: absolute;
+                background: transparent;
+            }
+
+            &::before {
+                left: -2px; bottom: -2px;
+                width: var(--cell-size);
+                height: var(--brick-height);
+                transform-origin: bottom;
+                transform: rotateX(90deg);
+            }
+
+            &::after {
+                top: -2px; left: -2px;
+                width: var(--brick-height);
+                height: var(--cell-size);
+                transform-origin: left;
+                transform: rotateY(90deg);
+            }
+        }
+        :where(.group\/body[data-shift-key="true"]) & > button:not([hx-delete]) {
+            pointer-events: none;
         }
 
         & .brick-action {
