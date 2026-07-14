@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="1 1 22 22">
   <style>
-    path { stroke: #b8930f; }
+    path { stroke: oklch(20.5% 0 0); }
     @media (prefers-color-scheme: dark) {
-      path { stroke: #fbcb15; }
+      path { stroke: oklch(97% 0 0); }
     }
   </style>
   <g fill="none" stroke-width="1.5">
