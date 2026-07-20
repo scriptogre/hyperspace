@@ -18,7 +18,6 @@ def join_board(page: Page, name: str | None = None) -> None:
     form = page.locator("#player-form")
     expect(form).to_be_visible(timeout=10_000)
     form.locator("input[name=name]").fill(name or f"e2e_{uuid.uuid4().hex[:6]}")
-    form.locator(".color-pick").first.click()
     form.locator("button[type=submit]").click()
     expect(form).to_have_count(0, timeout=10_000)
 

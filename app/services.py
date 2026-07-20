@@ -7,22 +7,16 @@ from tortoise.transactions import atomic
 from app.config import settings
 from app.models import Brick, Cursor, Player
 
-CURSOR_FLUSH_INTERVAL = 0.033
-
-# player_id -> (x, y, z). Cursor moves are coalesced here and upserted in one
-# statement every CURSOR_FLUSH_INTERVAL.
-cursor_buffer: dict[int, tuple[int, int, int]] = {}
-
 
 @atomic()
-async def create_player(name: str, color: str) -> Player:
+async def create_player(name: str, color_seed: int) -> Player:
     """
     Create a new player with a fresh token.
     """
     return await Player.create(
         token=str(uuid.uuid4()),
         name=name,
-        color=color,
+        color_seed=color_seed,
         is_online=True,
     )
 
@@ -36,7 +30,6 @@ async def mark_player_as_offline(player: Player) -> None:
     """
     Flag offline, drop cursor, release held bricks.
     """
-    cursor_buffer.pop(player.id, None)
     await Player.filter(id=player.id).update(is_online=False)
     await Brick.filter(dragged_by=player).update(dragged_by_id=None)
     await Cursor.filter(player=player).delete()
@@ -56,11 +49,12 @@ async def create_brick(player: Player, x: int, y: int) -> Brick | None:
         x=x,
         y=y,
         z=height,
-        defaults={"created_by": player, "color": player.color},
+        defaults={"created_by": player, "color_seed": player.id},
     )
     return brick if created else None
 
 
+@atomic()
 async def delete_brick(brick: Brick) -> None:
     """
     Delete a brick and close the gap it leaves in its stack.
@@ -98,26 +92,9 @@ async def release_brick(brick: Brick) -> None:
 
 async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
     """
-    Update cursor position.
+    Store the player's current cursor position.
     """
-    cursor_buffer[player.id] = (x, y, z)
-
-
-async def flush_cursors() -> None:
-    """
-    Upsert every buffered cursor in one statement.
-    """
-    if not cursor_buffer:
-        return
-
-    pending = list(cursor_buffer.items())
-    cursor_buffer.clear()
-
-    rows = [
-        Cursor(player_id=player_id, x=x, y=y, z=z) for player_id, (x, y, z) in pending
-    ]
-    await Cursor.bulk_create(
-        rows,
-        on_conflict=["player_id"],
-        update_fields=["x", "y", "z"],
+    await Cursor.update_or_create(
+        player_id=player.id,
+        defaults={"x": x, "y": y, "z": z},
     )

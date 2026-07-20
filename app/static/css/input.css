@@ -19,8 +19,6 @@
 @plugin "@iconify/tailwind4";
 
 @source '../../templates';
-@source inline("bg-brick-cyan bg-brick-pink bg-brick-purple bg-brick-yellow bg-brick-green bg-brick-orange");
-
 @theme {
     /* True-neutral palette (oklch chroma 0) borrowed from dromos */
     --color-neutral-10: oklch(99.8% 0 0);
@@ -63,13 +61,6 @@
     --color-primary-foreground: light-dark(var(--color-neutral-50), var(--color-neutral-940));
     --color-shadow: light-dark(var(--color-neutral-200), oklch(10% 0 0));
 
-    --color-brick-cyan: light-dark(#06b6d4, #22d3ee);
-    --color-brick-pink: light-dark(#ec4899, #f472b6);
-    --color-brick-purple: light-dark(#8b5cf6, #a78bfa);
-    --color-brick-yellow: light-dark(#eab308, #facc15);
-    --color-brick-green: light-dark(#22c55e, #4ade80);
-    --color-brick-orange: light-dark(#f97316, #fb923c);
-
     --font-mono: 'JetBrains Mono', monospace;
     --font-sans: 'Space Grotesk', sans-serif;
 
@@ -102,6 +93,36 @@
 }
 
 @layer components {
+    .brick,
+    .cursor,
+    .player-color {
+        --color: light-dark(
+            var(--base-color),
+            color-mix(in oklch, var(--base-color), white 15%)
+        );
+    }
+
+    .player-color {
+        background: var(--color);
+    }
+
+    #grid-container {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        display: grid;
+        grid-template-columns: repeat(var(--grid-size), var(--cell-size));
+        grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+        translate: -50% -50%;
+        scale: 0.4;
+        transform: perspective(1000px) rotateX(60deg) rotateZ(-45deg);
+        transform-style: preserve-3d;
+
+        @media (min-width: 40rem) {
+            scale: 1;
+        }
+    }
+
     .grid-cell {
         display: grid;
         grid-column: calc(var(--x) + 1);
@@ -240,25 +261,66 @@
         display: contents !important;
     }
 
-    /* Cursors render 600+ times; keep each node tiny by holding styling here and
-       passing only position (--sx/--sy) and color (--color) per element. */
     .cursor {
-        @apply absolute pointer-events-none flex flex-col items-center -translate-x-1/2 opacity-70;
-        left: calc(50% + var(--sx));
-        top: calc(40% + var(--sy) - 40px);
+        position: relative;
+        grid-column: calc(var(--x) + 1);
+        grid-row: calc(var(--y) + 1);
+        width: var(--cell-size);
+        height: var(--cell-size);
+        pointer-events: none;
+        z-index: 10000;
+        transform: translateZ(calc((var(--z) + 1) * var(--brick-height) + 2px));
+        transform-style: preserve-3d;
     }
 
     .cursor-name {
-        @apply whitespace-nowrap text-[10px] px-2 py-0.5 rounded-full mb-1 font-semibold border;
-        background: var(--color);
-        color: color-mix(in srgb, var(--color), black 75%);
-        border-color: color-mix(in srgb, var(--color), white 30%);
+        --cursor-background: var(--color-card);
+        position: absolute;
+        top: 0;
+        left: 50%;
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+        translate: 0.375rem calc(-100% - 0.875rem);
+        transform: rotateZ(45deg) rotateX(-60deg) translateZ(16px);
+        @apply whitespace-nowrap text-[9px] px-1.5 py-px rounded-md font-sans font-medium border border-border;
+        background: var(--cursor-background);
+        color: var(--color-foreground);
+        box-shadow: var(--shadow-iso-sm);
     }
 
-    .cursor-dot {
-        @apply rounded-full border size-2.5;
+    .cursor-name::before {
+        content: "";
+        width: 0.25rem;
+        height: 0.25rem;
+        flex: none;
+        border-radius: 9999px;
         background: var(--color);
-        border-color: color-mix(in srgb, var(--color), white 30%);
+    }
+
+    .cursor-name::after {
+        content: "";
+        position: absolute;
+        bottom: -0.2rem;
+        left: 0.5rem;
+        width: 0.375rem;
+        height: 0.375rem;
+        rotate: 45deg;
+        border-right: 1px solid var(--color-border);
+        border-bottom: 1px solid var(--color-border);
+        background: var(--cursor-background);
+    }
+
+    .cursor[data-current] .cursor-name {
+        opacity: 0.65;
+    }
+
+    .color-more.has-color {
+        background: var(--color);
+    }
+
+    .color-more.has-color > :first-child {
+        display: none;
     }
 
     .is-selected {
@@ -275,4 +337,5 @@
     .is-selected .pick-check {
         display: flex;
     }
+
 }

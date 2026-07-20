@@ -3,19 +3,6 @@
 from enum import StrEnum
 
 
-class Color(StrEnum):
-    """
-    Color for players and bricks.
-    """
-
-    CYAN = "cyan"
-    PURPLE = "purple"
-    ORANGE = "orange"
-    GREEN = "green"
-    PINK = "pink"
-    YELLOW = "yellow"
-
-
 class EventType(StrEnum):
     """
     An entry type in the activity feed.

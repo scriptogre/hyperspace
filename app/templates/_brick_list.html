@@ -1,69 +1,61 @@
-<div id="brick-list" class="flex-1 relative overflow-hidden bg-background select-none w-full h-full">
-    <div id="grid-perspective"
-         class="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.4] sm:scale-100"
-         style="perspective: 1000px">
-        <div id="grid-container" class="grid rotate-x-60 -rotate-z-45 transform-3d"
-             style="grid-template-columns: repeat({{ grid_size }}, 4rem); grid-template-rows: repeat({{ grid_size }}, 4rem)">
-
-            {% for (x, y) in grid_cells %}
-                <div id="grid-cell-{{ x }}-{{ y }}" class="grid-cell"
-                     data-x="{{ x }}"
-                     data-y="{{ y }}"
-                     data-z="0"
+<div id="brick-list" class="contents">
+    {% for (x, y) in grid_cells %}
+        <div id="grid-cell-{{ x }}-{{ y }}" class="grid-cell"
+             data-x="{{ x }}"
+             data-y="{{ y }}"
+             data-z="0"
+             hx-patch="/cursor"
+             hx-trigger="pointerenter"
+             hx-vals="js:{x:data.x,y:data.y,z:-1}"
+             style="--x: {{ x }}; --y: {{ y }}"
+        >
+            {% for brick in brick_stacks[x][y] %}
+                <div id="brick-{{ brick.id }}" class="brick data-grabbed:hidden"
+                     data-z="{{ brick.z }}"
+                     {% if brick.is_grabbed %}data-grabbed{% endif %}
                      hx-patch="/cursor"
                      hx-trigger="pointerenter"
                      hx-vals="js:{...data}"
-                     style="--x: {{ x }}; --y: {{ y }}"
+                     style="--z: {{ brick.z }}; --base-color: {{ brick.color.to_css() }}"
                 >
-                    {% for brick in brick_stacks[x][y] %}
-                        <div id="brick-{{ brick.id }}" class="brick data-grabbed:hidden"
-                             data-z="{{ brick.z }}"
-                             {% if brick.is_grabbed %}data-grabbed{% endif %}
-                             hx-patch="/cursor"
-                             hx-trigger="pointerenter"
-                             hx-vals="js:{...data}"
-                             style="--z: {{ brick.z }}; --color: var(--color-brick-{{ brick.color }})"
-                        >
-                            <button
-                                    aria-label="Add brick above"
-                                    hx-post="/bricks"
-                                    hx-vals="js:{
-                                             x: data.x,
-                                             y: data.y,
-                                             z: data.z + 1
-                                         }"
-                                    :hidden="data.shiftKey"
-                            ></button>
+                    <button
+                            aria-label="Add brick above"
+                            hx-post="/bricks"
+                            hx-vals="js:{
+                                 x: data.x,
+                                 y: data.y,
+                                 z: data.z + 1
+                             }"
+                            :hidden="data.shiftKey"
+                    ></button>
 
-                            <button
-                                    aria-label="Delete brick"
-                                    hx-delete="/bricks/{{ brick.id }}"
-                                    :hidden="!data.shiftKey"
-                            ></button>
+                    <button
+                            aria-label="Delete brick"
+                            hx-delete="/bricks/{{ brick.id }}"
+                            :hidden="!data.shiftKey"
+                    ></button>
 
-                            <button
-                                    :aria-label="!data.grabbed ?
-                                                 'Grab brick' :
-                                                 'Release brick'"
-                                    :hx-post="!data.grabbed ?
-                                              '/bricks/{{ brick.id }}/grab' :
-                                              '/bricks/{{ brick.id }}/release'"
-                                    :hx-trigger="!data.grabbed ?
-                                                 'pointerdown' :
-                                                 'pointerup from:outside'"
-                                    hx-on:pointerdown="data.grabbed = true"
-                            ></button>
-                        </div>
-                    {% else %}
-                        <button
-                                aria-label="Add brick"
-                                hx-post="/bricks"
-                                hx-vals="js:{...data}"
-                                :hidden="data.shiftKey"
-                        ></button>
-                    {% endfor %}
+                    <button
+                            :aria-label="!data.grabbed ?
+                                         'Grab brick' :
+                                         'Release brick'"
+                            :hx-post="!data.grabbed ?
+                                      '/bricks/{{ brick.id }}/grab' :
+                                      '/bricks/{{ brick.id }}/release'"
+                            :hx-trigger="!data.grabbed ?
+                                         'pointerdown' :
+                                         'pointerup from:outside'"
+                            hx-on:pointerdown="data.grabbed = true"
+                    ></button>
                 </div>
+            {% else %}
+                <button
+                        aria-label="Add brick"
+                        hx-post="/bricks"
+                        hx-vals="js:{...data}"
+                        :hidden="data.shiftKey"
+                ></button>
             {% endfor %}
         </div>
-    </div>
+    {% endfor %}
 </div>

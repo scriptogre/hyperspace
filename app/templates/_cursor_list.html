@@ -1,20 +1,17 @@
-{# Full set of active cursors. Morphing #cursor-list reconciles children by id,
-   so cursors no longer present are removed automatically (no delta, no data-remove). #}
-<div id="cursor-list" class="absolute inset-0 pointer-events-none">
-{% for cursor in cursors %}
-{% set cell = 64 %}
-{% set half = grid_size * cell // 2 %}
-{% set px = cursor.grid_x * cell + cell // 2 - half %}
-{% set py = cursor.grid_y * cell + cell // 2 - half %}
-{% set diff = py - px %}
-{% set sum = px + py %}
-{% set denom = 1000000 - 612 * diff %}
-{% set sx = 707000 * sum // denom %}
-{% set sy = 354000 * diff // denom %}
-<div id="cursor-{{ cursor.token }}" class="cursor"
-     style="--sx:{{ sx }}px; --sy:{{ sy }}px; --color:var(--color-brick-{{ cursor.color }})">
-  <span class="cursor-name">{{ cursor.name }}</span>
-  <span class="cursor-dot"></span>
-</div>
-{% endfor %}
+<div id="cursor-list" class="contents">
+    {% for cursor in cursors %}
+        <div id="cursor-{{ cursor.token }}" class="cursor"
+                {% if player and cursor.token == player.token %}
+             data-current
+                {% endif %}
+             style="--x:{{ cursor.grid_x }}; --y:{{ cursor.grid_y }}; --z:{{ cursor.grid_z }}; --base-color:{{ cursor.color.to_css() }}">
+            <span class="cursor-name">
+                {% if player and cursor.token == player.token %}
+                    You
+                {% else %}
+                    {{ cursor.name }}
+                {% endif %}
+            </span>
+        </div>
+    {% endfor %}
 </div>

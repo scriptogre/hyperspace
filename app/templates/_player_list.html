@@ -11,7 +11,7 @@
       {% for player in online %}
         {% if loop.index <= 5 %}
         <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full shrink-0" style="background: var(--color-brick-{{ player.color }})"></span>
+          <span class="player-color w-2 h-2 rounded-full shrink-0" style="--base-color: {{ player.color.to_css() }}"></span>
           <span class="text-foreground truncate">{{ player.name }}</span>
         </div>
         {% endif %}

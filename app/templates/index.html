@@ -62,12 +62,14 @@
 {#          data.dragBrick = '';#}
 {#          data.isDragging = '';#}
 
-<div id="app" class="relative w-full h-full">
+<div id="app" class="relative overflow-hidden bg-background select-none w-full h-full">
+    <div id="grid-container" style="--grid-size: {{ grid_size }}">
+        {% include "_brick_list.html" %}
+        {% include "_cursor_list.html" %}
+    </div>
 
-    {% include "_brick_list.html" %}
     {% include "_player_list.html" %}
     {% include "_event_list.html" %}
-    {% include "_cursor_list.html" %}
 
     <button id="logout-btn"
             hx-post="/logout"

@@ -1,8 +1,20 @@
-from tortoise import migrations
-from tortoise.migrations import operations as ops
-from app.enums import Color, EventType
+from enum import StrEnum
+
+from tortoise import fields, migrations
 from tortoise.fields.base import OnDelete
-from tortoise import fields
+from tortoise.migrations import operations as ops
+
+from app.enums import EventType
+
+
+class Color(StrEnum):
+    CYAN = "cyan"
+    PURPLE = "purple"
+    ORANGE = "orange"
+    GREEN = "green"
+    PINK = "pink"
+    YELLOW = "yellow"
+
 
 class Migration(migrations.Migration):
     initial = True
@@ -40,7 +52,6 @@ class Migration(migrations.Migration):
                 ('x', fields.IntField()),
                 ('y', fields.IntField()),
                 ('z', fields.IntField()),
-                ('version', fields.BigIntField(default=0)),
                 ('player', fields.OneToOneField('models.Player', source_field='player_id', primary_key=True, db_index=True, db_constraint=True, to_field='id', related_name='cursor', on_delete=OnDelete.CASCADE)),
             ],
             options={'table': 'cursors', 'app': 'models', 'pk_attr': 'player_id', 'table_description': "Last known grid position for a player's cursor."},

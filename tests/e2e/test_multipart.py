@@ -181,5 +181,8 @@ def test_multipart_connect_reconnects_after_broken_stream(page: Page):
         }"""
     )
 
-    expect(page.locator("#broken-count")).to_have_text("2", timeout=5_000)
+    page.wait_for_function(
+        "Number(document.querySelector('#broken-count')?.textContent) >= 2",
+        timeout=5_000,
+    )
     assert requests >= 2

@@ -3,7 +3,6 @@
 from tortoise.fields import (
     CASCADE,
     SET_NULL,
-    BigIntField,
     BooleanField,
     CharEnumField,
     CharField,
@@ -15,7 +14,7 @@ from tortoise.fields import (
 from tortoise.fields.relational import ReverseRelation
 from tortoise.models import Model
 
-from app.enums import Color, EventType
+from app.enums import EventType
 
 
 class Brick(Model):
@@ -27,7 +26,7 @@ class Brick(Model):
     x = IntField()
     y = IntField()
     z = IntField()
-    color = CharEnumField(Color, max_length=20)
+    color_seed = IntField()
 
     # Relations
     created_by = ForeignKeyField(
@@ -64,7 +63,7 @@ class Player(Model):
     id = IntField(pk=True)
     token = CharField(max_length=64, unique=True, description="UUID from the cookie")
     name = CharField(max_length=100)
-    color = CharEnumField(Color, max_length=20)
+    color_seed = IntField()
     is_online = BooleanField(default=False)
 
     # Relations
@@ -85,7 +84,6 @@ class Cursor(Model):
     x = IntField()
     y = IntField()
     z = IntField()
-    version = BigIntField(default=0)
 
     # Relations
     player = OneToOneField(

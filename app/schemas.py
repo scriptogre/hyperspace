@@ -1,58 +1,56 @@
-"""
-Typed shapes for the dict rows handed to templates.
-"""
+"""Typed shapes for the dict rows handed to templates."""
 
 from typing import Annotated, TypedDict
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
-from app.enums import Color
+from app.colors import Oklch
 
 
 class PlayerJoinForm(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    color: Color
+    color_seed: Annotated[int, Field(ge=1, le=100)]
 
 
 class BrickRow(TypedDict):
     """
-    A brick straight from Tortoise `.values()`, one key per column.
+    A brick rendered on the grid.
     """
 
     id: int
     x: int
     y: int
     z: int
-    color: str
+    color: Oklch
     created_by_id: int | None
     dragged_by_id: int | None
 
 
 class PlayerRow(TypedDict):
     """
-    A player straight from Tortoise `.values()`, one key per column.
+    A player rendered in the online list.
     """
 
     id: int
     name: str
-    color: str
+    color: Oklch
     is_online: bool
 
 
 class EventRow(TypedDict):
     """
-    One activity-feed row, joined to its player.
+    One activity-feed row.
     """
 
     id: int
     player_name: str
-    player_color: str
+    player_color: Oklch
     label: str
 
 
 class CursorRow(TypedDict):
     """
-    A cursor joined to its owner's name and color.
+    A cursor joined to its player.
     """
 
     token: str
@@ -60,4 +58,4 @@ class CursorRow(TypedDict):
     grid_y: int
     grid_z: int
     name: str
-    color: str
+    color: Oklch

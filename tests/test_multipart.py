@@ -15,9 +15,9 @@ def test_updates_endpoint_emits_a_multipart_part(monkeypatch):
     monkeypatch.setattr(routes, "get_brick_stacks", get_brick_stacks)
 
     async def collect_part():
-        queue = asyncio.Queue()
-        queue.put_nowait("bricks")
-        stream = routes.updates_endpoint(queue)
+        update = asyncio.Event()
+        update.set()
+        stream = routes.updates_endpoint(update, None)
         part = await anext(stream)
         await stream.aclose()
         return part

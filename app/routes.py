@@ -22,6 +22,7 @@ from app.dependencies import (
     require_coordinates_on_grid,
     require_current_player,
     require_htmx_request,
+    require_online_player,
     subscribe_to_updates,
     get_brick_stacks,
     get_cursors,
@@ -61,7 +62,7 @@ async def player_join(
     response: Response,
     form: PlayerJoinForm = Form(...),
 ):
-    player = await create_player(form.name, form.color)
+    player = await create_player(form.name, form.color_seed)
 
     response.status_code = HTTP_204_NO_CONTENT
     response.headers["HX-Redirect"] = "/"
@@ -90,58 +91,60 @@ async def health() -> str:
 
 @router.get("/updates", response_class=MultipartResponse, status_code=200)
 async def updates_endpoint(
-    queue: asyncio.Queue[str] = Depends(subscribe_to_updates, scope="request"),
+    update: asyncio.Event = Depends(subscribe_to_updates, scope="request"),
+    player: Player = Depends(require_online_player, scope="request"),
 ):
     while True:
-        match await queue.get():
-            case "bricks":
-                yield Part(
-                    render(
-                        "_brick_list.html",
-                        {"brick_stacks": await get_brick_stacks()},
-                    ),
-                    headers={
-                        "HX-Swap": "outerMorph",
-                        "HX-Target": "#brick-list",
-                    },
-                    media_type="text/html",
-                )
-            case "players":
-                yield Part(
-                    render(
-                        "_player_list.html",
-                        {"players": await get_players()},
-                    ),
-                    headers={
-                        "HX-Swap": "outerMorph",
-                        "HX-Target": "#player-list",
-                    },
-                    media_type="text/html",
-                )
-            case "events":
-                yield Part(
-                    render(
-                        "_event_list.html",
-                        {"events": await get_latest_events()},
-                    ),
-                    headers={
-                        "HX-Swap": "outerMorph",
-                        "HX-Target": "#event-list",
-                    },
-                    media_type="text/html",
-                )
-            case "cursors":
-                yield Part(
-                    render(
-                        "_cursor_list.html",
-                        {"cursors": await get_cursors()},
-                    ),
-                    headers={
-                        "HX-Swap": "outerMorph",
-                        "HX-Target": "#cursor-list",
-                    },
-                    media_type="text/html",
-                )
+        await update.wait()
+        update.clear()
+
+        yield Part(
+            render(
+                "_brick_list.html",
+                {"brick_stacks": await get_brick_stacks()},
+            ),
+            headers={
+                "HX-Swap": "outerMorph",
+                "HX-Target": "#brick-list",
+            },
+            media_type="text/html",
+        )
+        yield Part(
+            render(
+                "_player_list.html",
+                {"players": await get_players()},
+            ),
+            headers={
+                "HX-Swap": "outerMorph",
+                "HX-Target": "#player-list",
+            },
+            media_type="text/html",
+        )
+        yield Part(
+            render(
+                "_event_list.html",
+                {"events": await get_latest_events()},
+            ),
+            headers={
+                "HX-Swap": "outerMorph",
+                "HX-Target": "#event-list",
+            },
+            media_type="text/html",
+        )
+        yield Part(
+            render(
+                "_cursor_list.html",
+                {
+                    "cursors": await get_cursors(),
+                    "player": player,
+                },
+            ),
+            headers={
+                "HX-Swap": "outerMorph",
+                "HX-Target": "#cursor-list",
+            },
+            media_type="text/html",
+        )
 
 
 # ── Actions ─────────────────────────────────────────────────────────────

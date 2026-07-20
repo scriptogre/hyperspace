@@ -1,12 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="1 1 22 22">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
   <style>
-    path { stroke: oklch(20.5% 0 0); }
+    .top { fill: oklch(43.9% 0 0); }
+    .left { fill: oklch(20.5% 0 0); }
+    .right { fill: oklch(32% 0 0); }
+
     @media (prefers-color-scheme: dark) {
-      path { stroke: oklch(97% 0 0); }
+      .top { fill: oklch(97% 0 0); }
+      .left { fill: oklch(70.8% 0 0); }
+      .right { fill: oklch(87% 0 0); }
     }
   </style>
-  <g fill="none" stroke-width="1.5">
-    <path d="M10.55 2.876L4.595 6.182a2.98 2.98 0 0 0-1.529 2.611v6.414a2.98 2.98 0 0 0 1.529 2.61l5.957 3.307a2.98 2.98 0 0 0 2.898 0l5.957-3.306a2.98 2.98 0 0 0 1.529-2.611V8.793a2.98 2.98 0 0 0-1.529-2.61L13.45 2.876a2.98 2.98 0 0 0-2.898 0Z"/>
-    <path d="M20.33 6.996L12 12L3.67 6.996M12 21.49V12"/>
-  </g>
+  <path class="top" d="M12 2 22 7.5 12 13 2 7.5Z"/>
+  <path class="left" d="M2 7.5 12 13v9L2 16.5Z"/>
+  <path class="right" d="M22 7.5 12 13v9l10-5.5Z"/>
 </svg>

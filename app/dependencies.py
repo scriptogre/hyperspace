@@ -4,7 +4,8 @@ FastAPI dependencies for players, bricks, and game state.
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Annotated, cast
+from random import randrange
+from typing import Annotated
 
 from fastapi import Depends, Form, Header, HTTPException, Request, Response
 from starlette.status import (
@@ -16,6 +17,7 @@ from starlette.status import (
 from tortoise.transactions import in_transaction
 
 from app import broadcast
+from app.colors import calculate_player_color
 from app.config import settings
 from app.enums import EventType
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
@@ -91,15 +93,13 @@ async def require_online_player(
 
 async def subscribe_to_updates(
     player: Player = Depends(require_online_player, scope="request"),
-) -> AsyncIterator[asyncio.Queue[str]]:
+) -> AsyncIterator[asyncio.Event]:
     """
-    Subscribe for the lifetime of an updates connection.
+    Wake updates for the lifetime of a connection.
     """
-    queue = broadcast.subscribe(player.token)
-    for table in ("bricks", "players", "events", "cursors"):
-        queue.put_nowait(table)
+    update = broadcast.subscribe(player.token)
     try:
-        yield queue
+        yield update
     finally:
         broadcast.unsubscribe(player.token)
 
@@ -143,9 +143,27 @@ async def require_brick_dragged_by_current_player(
 
 
 async def get_current_bricks() -> list[BrickRow]:
-    return cast(
-        list[BrickRow], cast(object, await Brick.all().order_by("x", "y", "z").values())
+    rows = await Brick.all().order_by("x", "y", "z").values(
+        "id",
+        "x",
+        "y",
+        "z",
+        "color_seed",
+        "created_by_id",
+        "dragged_by_id",
     )
+    return [
+        {
+            "id": row["id"],
+            "x": row["x"],
+            "y": row["y"],
+            "z": row["z"],
+            "color": calculate_player_color(row["color_seed"]),
+            "created_by_id": row["created_by_id"],
+            "dragged_by_id": row["dragged_by_id"],
+        }
+        for row in rows
+    ]
 
 
 async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
@@ -160,25 +178,30 @@ async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
 
 
 async def get_players() -> list[PlayerRow]:
-    return cast(
-        list[PlayerRow],
-        cast(object, await Player.all().values("id", "name", "color", "is_online")),
-    )
+    rows = await Player.all().values("id", "name", "color_seed", "is_online")
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "color": calculate_player_color(row["color_seed"]),
+            "is_online": row["is_online"],
+        }
+        for row in rows
+    ]
 
 
 async def get_latest_events() -> list[EventRow]:
-    rows = cast(
-        list[dict],
-        await Event.all()
-        .order_by("-id")
-        .limit(10)
-        .values("id", "type", "player__name", "player__color"),
+    rows = await Event.all().order_by("-id").limit(10).values(
+        "id",
+        "type",
+        "player__color_seed",
+        "player__name",
     )
     return [
         {
             "id": row["id"],
             "player_name": row["player__name"],
-            "player_color": row["player__color"],
+            "player_color": calculate_player_color(row["player__color_seed"]),
             "label": EventType(row["type"]).label,
         }
         for row in reversed(rows)
@@ -186,11 +209,13 @@ async def get_latest_events() -> list[EventRow]:
 
 
 async def get_cursors() -> list[CursorRow]:
-    rows = cast(
-        list[dict],
-        await Cursor.all()
-        .order_by("player_id")
-        .values("player__token", "player__name", "player__color", "x", "y", "z"),
+    rows = await Cursor.all().order_by("player_id").values(
+        "player__color_seed",
+        "player__token",
+        "player__name",
+        "x",
+        "y",
+        "z",
     )
     return [
         {
@@ -199,7 +224,7 @@ async def get_cursors() -> list[CursorRow]:
             "grid_y": row["y"],
             "grid_z": row["z"],
             "name": row["player__name"],
-            "color": row["player__color"],
+            "color": calculate_player_color(row["player__color_seed"]),
         }
         for row in rows
     ]
@@ -214,6 +239,23 @@ async def get_game_context(
     form_errors: FormErrors = Depends(get_form_errors),
 ) -> dict:
     """Full template context for the index page."""
+    first_color_seed = randrange(1, 101)
+    color_seeds = [((first_color_seed + offset - 1) % 100) + 1 for offset in range(5)]
+    try:
+        selected_color_seed = int(form_errors.data.get("color_seed", color_seeds[0]))
+    except ValueError:
+        selected_color_seed = color_seeds[0]
+    if selected_color_seed not in range(1, 101):
+        selected_color_seed = color_seeds[0]
+    elif selected_color_seed not in color_seeds:
+        color_seeds[0] = selected_color_seed
+
+    available_colors = [
+        {"seed": seed, "color": calculate_player_color(seed)}
+        for seed in range(1, 101)
+    ]
+    available_colors.sort(key=lambda option: option["color"].hue)
+
     return {
         "player": player,
         "brick_stacks": brick_stacks,
@@ -221,4 +263,10 @@ async def get_game_context(
         "events": events,
         "cursors": cursors,
         "form_errors": form_errors,
+        "selected_color_seed": selected_color_seed,
+        "suggested_colors": [
+            {"seed": seed, "color": calculate_player_color(seed)}
+            for seed in color_seeds
+        ],
+        "available_colors": available_colors,
     }
