@@ -19,12 +19,16 @@ from tortoise.transactions import in_transaction
 from app import broadcast
 from app.colors import calculate_player_color
 from app.config import settings
-from app.enums import EventType
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
-from app.models import Brick, Cursor, Event, Player
+from app.models import Brick, Cursor, Player
 from app.signals import current_player
 from app.services import mark_player_as_offline, mark_player_as_online
-from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
+from app.schemas import BrickRow, CursorRow, PlayerRow
+
+
+def player_initials(name: str) -> str:
+    words = name.split()
+    return "".join(word[0] for word in words[:2]).upper() if len(words) > 1 else name[:2].upper()
 
 
 def require_htmx_request(
@@ -177,12 +181,19 @@ async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
     return brick_stacks
 
 
+async def get_brick_count() -> int:
+    return await Brick.all().count()
+
+
 async def get_players() -> list[PlayerRow]:
-    rows = await Player.all().values("id", "name", "color_seed", "is_online")
+    rows = await Player.all().order_by("name").values(
+        "id", "name", "color_seed", "is_online"
+    )
     return [
         {
             "id": row["id"],
             "name": row["name"],
+            "initials": player_initials(row["name"]),
             "color": calculate_player_color(row["color_seed"]),
             "is_online": row["is_online"],
         }
@@ -190,25 +201,13 @@ async def get_players() -> list[PlayerRow]:
     ]
 
 
-async def get_latest_events() -> list[EventRow]:
-    rows = await Event.all().order_by("-id").limit(10).values(
-        "id",
-        "type",
-        "player__color_seed",
-        "player__name",
-    )
-    return [
-        {
-            "id": row["id"],
-            "player_name": row["player__name"],
-            "player_color": calculate_player_color(row["player__color_seed"]),
-            "label": EventType(row["type"]).label,
-        }
-        for row in reversed(rows)
-    ]
-
-
 async def get_cursors() -> list[CursorRow]:
+    brick_rows = await Brick.all().values("x", "y", "z")
+    stack_tops: dict[tuple[int, int], int] = {}
+    for brick in brick_rows:
+        position = (brick["x"], brick["y"])
+        stack_tops[position] = max(stack_tops.get(position, -1), brick["z"])
+
     rows = await Cursor.all().order_by("player_id").values(
         "player__color_seed",
         "player__token",
@@ -217,24 +216,37 @@ async def get_cursors() -> list[CursorRow]:
         "y",
         "z",
     )
-    return [
-        {
-            "token": row["player__token"],
-            "grid_x": row["x"],
-            "grid_y": row["y"],
-            "grid_z": row["z"],
-            "name": row["player__name"],
-            "color": calculate_player_color(row["player__color_seed"]),
-        }
-        for row in rows
-    ]
+    position_counts: dict[tuple[int, int, int], int] = {}
+    for row in rows:
+        position = (row["x"], row["y"], row["z"])
+        position_counts[position] = position_counts.get(position, 0) + 1
+
+    position_indexes: dict[tuple[int, int, int], int] = {}
+    cursors = []
+    for row in rows:
+        position = (row["x"], row["y"], row["z"])
+        index = position_indexes.get(position, 0)
+        position_indexes[position] = index + 1
+        cursors.append(
+            {
+                "token": row["player__token"],
+                "grid_x": row["x"],
+                "grid_y": row["y"],
+                "grid_z": max(row["z"], stack_tops.get((row["x"], row["y"]), -1)),
+                "offset": index - (position_counts[position] - 1) / 2,
+                "name": row["player__name"],
+                "initials": player_initials(row["player__name"]),
+                "color": calculate_player_color(row["player__color_seed"]),
+            }
+        )
+    return cursors
 
 
 async def get_game_context(
     player: Player | None = Depends(get_current_player),
     brick_stacks: dict[int, dict[int, list[BrickRow]]] = Depends(get_brick_stacks),
     players: list[PlayerRow] = Depends(get_players),
-    events: list[EventRow] = Depends(get_latest_events),
+    brick_count: int = Depends(get_brick_count),
     cursors: list[CursorRow] = Depends(get_cursors),
     form_errors: FormErrors = Depends(get_form_errors),
 ) -> dict:
@@ -260,7 +272,7 @@ async def get_game_context(
         "player": player,
         "brick_stacks": brick_stacks,
         "players": players,
-        "events": events,
+        "brick_count": brick_count,
         "cursors": cursors,
         "form_errors": form_errors,
         "selected_color_seed": selected_color_seed,

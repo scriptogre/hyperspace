@@ -1,25 +1,16 @@
-{# Online-players panel, top-left. Always rendered (empty when nobody's on) so
-   the broadcast can morph it by id. #}
 {% set online = players | selectattr("is_online") | list %}
-<div id="player-list" class="absolute top-16 sm:top-4 left-4 pointer-events-none z-50 font-sans text-xs">
-  {% if online %}
-  <div class="rounded-xl bg-card/80 backdrop-blur-md border border-border shadow-iso-sm px-3 py-2 space-y-1.5 min-w-[120px] max-w-[200px]">
-    <div class="text-[10px] uppercase tracking-widest font-medium text-muted-foreground">
-      Online · {{ online | length }}
-    </div>
-    <div class="space-y-1">
-      {% for player in online %}
-        {% if loop.index <= 5 %}
-        <div class="flex items-center gap-2">
-          <span class="player-color w-2 h-2 rounded-full shrink-0" style="--base-color: {{ player.color.to_css() }}"></span>
-          <span class="text-foreground truncate">{{ player.name }}</span>
-        </div>
-        {% endif %}
-      {% endfor %}
-      {% if (online | length) > 5 %}
-      <div class="text-muted-foreground text-[10px] pl-4 pt-0.5">+ {{ (online | length) - 5 }} more</div>
-      {% endif %}
-    </div>
+<summary class="flex list-none items-center gap-1.5 cursor-pointer text-xs font-normal text-foreground/60 hover:text-foreground transition-colors">
+  <span>{{ online | length }} online</span>
+  <span class="icon-[lucide--chevron-down] size-3 transition-transform group-open:rotate-180"></span>
+</summary>
+<div class="absolute top-full left-0 mt-3 w-48 max-h-60 overflow-y-auto rounded-xl border border-border bg-card/90 backdrop-blur-md p-2 shadow-iso-sm">
+  {% for player in online %}
+  <div class="flex items-center gap-2 rounded-lg px-2 py-1.5">
+    <span class="player-color player-badge flex size-6 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold ring-1 ring-background"
+          style="--base-color: {{ player.color.to_css() }}">
+      {{ player.initials }}
+    </span>
+    <span class="truncate text-xs text-foreground">{{ player.name }}</span>
   </div>
-  {% endif %}
+  {% endfor %}
 </div>

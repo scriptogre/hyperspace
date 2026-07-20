@@ -27,7 +27,7 @@ from app.dependencies import (
     get_brick_stacks,
     get_cursors,
     get_players,
-    get_latest_events,
+    get_brick_count,
 )
 from app.jinja import render
 from app.models import Brick, Player
@@ -76,8 +76,7 @@ async def player_join(
     status_code=HTTP_204_NO_CONTENT,
 )
 async def logout(response: RedirectResponse):
-
-    response.headers["HX-Location"] = "/"
+    response.headers["HX-Redirect"] = "/"
     response.delete_cookie("hyperspace")
 
 
@@ -115,19 +114,17 @@ async def updates_endpoint(
                 {"players": await get_players()},
             ),
             headers={
-                "HX-Swap": "outerMorph",
-                "HX-Target": "#player-list",
+                "HX-Swap": "innerHTML",
+                "HX-Target": "#player-panel",
             },
             media_type="text/html",
         )
+        brick_count = await get_brick_count()
         yield Part(
-            render(
-                "_event_list.html",
-                {"events": await get_latest_events()},
-            ),
+            str(brick_count),
             headers={
-                "HX-Swap": "outerMorph",
-                "HX-Target": "#event-list",
+                "HX-Swap": "textContent",
+                "HX-Target": "#brick-count",
             },
             media_type="text/html",
         )

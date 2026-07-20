@@ -49,7 +49,7 @@ async def create_brick(player: Player, x: int, y: int) -> Brick | None:
         x=x,
         y=y,
         z=height,
-        defaults={"created_by": player, "color_seed": player.id},
+        defaults={"created_by": player, "color_seed": player.color_seed},
     )
     return brick if created else None
 
@@ -94,7 +94,8 @@ async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
     """
     Store the player's current cursor position.
     """
-    await Cursor.update_or_create(
-        player_id=player.id,
-        defaults={"x": x, "y": y, "z": z},
+    await Cursor.bulk_create(
+        [Cursor(player_id=player.id, x=x, y=y, z=z)],
+        update_fields=("x", "y", "z"),
+        on_conflict=("player_id",),
     )

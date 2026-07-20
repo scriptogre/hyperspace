@@ -1,16 +1,14 @@
+{% set cursor_count = cursors | length %}
 <div id="cursor-list" class="contents">
     {% for cursor in cursors %}
-        <div id="cursor-{{ cursor.token }}" class="cursor"
+        <div id="cursor-{{ cursor.token }}"
+             class="cursor{% if cursor_count > 50 %} cursor-tiny{% elif cursor_count > 10 %} cursor-dot{% endif %}"
                 {% if player and cursor.token == player.token %}
              data-current
                 {% endif %}
-             style="--x:{{ cursor.grid_x }}; --y:{{ cursor.grid_y }}; --z:{{ cursor.grid_z }}; --base-color:{{ cursor.color.to_css() }}">
-            <span class="cursor-name">
-                {% if player and cursor.token == player.token %}
-                    You
-                {% else %}
-                    {{ cursor.name }}
-                {% endif %}
+             style="--x:{{ cursor.grid_x }}; --y:{{ cursor.grid_y }}; --z:{{ cursor.grid_z }}; --cursor-offset:{{ cursor.offset }}; --base-color:{{ cursor.color.to_css() }}">
+            <span class="cursor-marker" aria-label="{{ cursor.name }}">
+                {% if cursor_count <= 10 %}{{ cursor.initials }}{% endif %}
             </span>
         </div>
     {% endfor %}

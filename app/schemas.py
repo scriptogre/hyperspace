@@ -33,19 +33,9 @@ class PlayerRow(TypedDict):
 
     id: int
     name: str
+    initials: str
     color: Oklch
     is_online: bool
-
-
-class EventRow(TypedDict):
-    """
-    One activity-feed row.
-    """
-
-    id: int
-    player_name: str
-    player_color: Oklch
-    label: str
 
 
 class CursorRow(TypedDict):
@@ -57,5 +47,7 @@ class CursorRow(TypedDict):
     grid_x: int
     grid_y: int
     grid_z: int
+    offset: float
     name: str
+    initials: str
     color: Oklch

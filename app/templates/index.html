@@ -68,14 +68,20 @@
         {% include "_cursor_list.html" %}
     </div>
 
-    {% include "_player_list.html" %}
-    {% include "_event_list.html" %}
+    <details id="player-panel" class="group absolute top-6 left-6 z-50 font-sans">
+        {% include "_player_list.html" %}
+    </details>
+
+    <div class="hidden sm:block absolute top-6 right-6 z-50 pointer-events-none font-sans text-xs font-normal text-foreground/60 tabular-nums">
+        <span id="brick-count">{{ brick_count }}</span> bricks
+    </div>
 
     <button id="logout-btn"
             hx-post="/logout"
             title="Log out"
-            class="absolute bottom-12 sm:bottom-4 left-4 z-50 p-2 rounded-lg bg-card border border-border text-muted-foreground hover:text-foreground cursor-pointer font-sans">
-        <span class="icon-[lucide--log-out] size-4 block"></span>
+            class="absolute bottom-4 left-4 z-50 inline-flex items-center gap-2 px-1 py-2 text-xs font-medium font-sans text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+        <span class="icon-[lucide--log-out] size-3.5"></span>
+        <span>Log out</span>
     </button>
 </div>
 

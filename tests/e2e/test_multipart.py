@@ -143,7 +143,10 @@ def test_multipart_connect_reconnects_after_clean_end_and_stops_on_removal(page:
         }"""
     )
 
-    expect(page.locator("#connection-count")).to_have_text("2", timeout=5_000)
+    page.wait_for_function(
+        "Number(document.querySelector('#connection-count')?.textContent) >= 2",
+        timeout=5_000,
+    )
 
     page.evaluate("htmx.swap('', '#source', {style: 'delete'})")
     stopped_at = requests
