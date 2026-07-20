@@ -1,154 +1,24 @@
-"""
-Render the fragment whose table changed and fan it out to every client.
-"""
+"""Broadcast database changes to connected clients."""
 
 import asyncio
-import base64
-import os
-import time
-from collections.abc import AsyncIterator
 
-import zstandard
-
-from app.dependencies import (
-    get_brick_stacks,
-    get_current_cursors,
-    get_latest_events,
-    get_current_players,
-)
-from app.jinja import render
-from app.models import Brick, Cursor, Event, Player
-
-TICK = 0.02
 SEND_QUEUE_MAX = 64
 
-REGIONS = (
-    (Brick, "brick-list", "_brick_list.html", "brick_stacks", get_brick_stacks),
-    (Player, "player-list", "_player_list.html", "players", get_current_players),
-    (Event, "event-list", "_event_list.html", "events", get_latest_events),
-    (Cursor, "cursor-list", "_cursor_list.html", "cursors", get_current_cursors),
-)
+clients: dict[str, asyncio.Queue[str]] = {}
 
-zstd = zstandard.ZstdCompressor(level=3)
 
-sse_clients: dict[str, asyncio.Queue] = {}
+def subscribe(token: str) -> asyncio.Queue[str]:
+    queue: asyncio.Queue[str] = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
+    clients[token] = queue
+    return queue
 
-_changed: set[str] = set()
-_wake = asyncio.Event()
+
+def unsubscribe(token: str) -> None:
+    clients.pop(token, None)
 
 
 def notify(table: str) -> None:
-    _changed.add(table)
-    _wake.set()
-
-
-def frame(element_id: str, html: str) -> str:
-    """Compress one <hx-partial> region once and base64-encode it as an SSE event."""
-    partial = f'<hx-partial id="{element_id}" hx-swap="outerMorph">{html}</hx-partial>'
-    blob = base64.b64encode(zstd.compress(partial.encode())).decode("ascii")
-    return f"data: {blob}\n\n"
-
-
-_KEEPALIVE = ": keepalive\n\n"
-
-
-async def sse_stream(token: str) -> AsyncIterator[str]:
-    for _, eid, template, var, provider in REGIONS:
-        yield frame(eid, render(template, {var: await provider()}))
-
-    queue: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
-    sse_clients[token] = queue
-    try:
-        while True:
-            try:
-                payloads = await asyncio.wait_for(queue.get(), timeout=30)
-                for payload in payloads:
-                    yield payload
-            except asyncio.TimeoutError:
-                yield _KEEPALIVE
-    except (asyncio.CancelledError, GeneratorExit):
-        pass
-    finally:
-        sse_clients.pop(token, None)
-
-
-class Profiler:
-    def __init__(self) -> None:
-        self.enabled = os.environ.get("HS_BCAST_LOG") == "1"
-        self.window_start = time.monotonic()
-        self.rounds = 0
-        self.build_ms = 0.0
-        self.compress_ms = 0.0
-        self.send_ms = 0.0
-        self.blob_bytes = 0
-
-    def record(
-        self,
-        build_ms: float,
-        compress_ms: float,
-        send_ms: float,
-        blob_bytes: int,
-        client_count: int,
-    ) -> None:
-        if not self.enabled:
-            return
-
-        self.rounds += 1
-        self.build_ms += build_ms
-        self.compress_ms += compress_ms
-        self.send_ms += send_ms
-        self.blob_bytes = blob_bytes
-
-        now = time.monotonic()
-        if now - self.window_start < 1.0:
-            return
-
-        rounds = self.rounds
-        print(
-            f"BCAST n={client_count} rounds/s={rounds} build={self.build_ms / rounds:.1f} "
-            f"compress={self.compress_ms / rounds:.1f} send={self.send_ms / rounds:.1f} "
-            f"total={(self.build_ms + self.compress_ms + self.send_ms) / rounds:.1f} "
-            f"blob_bytes={self.blob_bytes}",
-            flush=True,
-        )
-        self.window_start = now
-        self.rounds = 0
-        self.build_ms = self.compress_ms = self.send_ms = 0.0
-
-
-async def run() -> None:
-    profiler = Profiler()
-
-    while True:
-        await _wake.wait()
-        _wake.clear()
-        changed = set(_changed)
-        _changed.clear()
-
-        started = time.monotonic()
-        rendered = []
-        for model, eid, template, var, provider in REGIONS:
-            if model._meta.db_table in changed:
-                rendered.append((eid, render(template, {var: await provider()})))
-        built = time.monotonic()
-
-        payloads = [frame(eid, html) for eid, html in rendered]
-        compressed = time.monotonic()
-
-        for queue in list(sse_clients.values()):
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            queue.put_nowait(payloads)
-        sent = time.monotonic()
-
-        profiler.record(
-            build_ms=(built - started) * 1000,
-            compress_ms=(compressed - built) * 1000,
-            send_ms=(sent - compressed) * 1000,
-            blob_bytes=sum(len(p) for p in payloads),
-            client_count=len(sse_clients),
-        )
-        await asyncio.sleep(TICK)
+    for queue in list(clients.values()):
+        if queue.full():
+            queue.get_nowait()
+        queue.put_nowait(table)

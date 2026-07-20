@@ -10,19 +10,10 @@
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
     <link href="{{ url_for('static', path='css/output.css') }}" rel="stylesheet">
 
-    <script src="{{ url_for('static', path='js/fzstd.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
+    <script src="{{ url_for('static', path='js/hx-multipart.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-optimistic.js') }}"></script>
-    <script src="{{ url_for('static', path='js/hx-sse.js') }}"></script>
-    <script>
-        htmx.registerExtension("hx-sse-zstd", {
-            htmx_before_sse_message: (element, detail) => {
-                let bytes = Uint8Array.from(atob(detail.message.data), c => c.charCodeAt(0));
-                detail.message.data = new TextDecoder().decode(fzstd.decompress(bytes));
-            },
-        })
-    </script>
 </head>
 
 <body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
@@ -30,7 +21,7 @@
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
         {% if player %}
-      hx-sse:connect="/sse"
+      hx-multipart:connect="/updates"
         {% endif %}
       hx-on="
         keydown, keyup -> {

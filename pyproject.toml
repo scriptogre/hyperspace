@@ -10,9 +10,9 @@ dependencies = [
     "asyncpg>=0.31.0",
     "minijinja>=2.21.0",
     "pydantic-settings>=2.14.2",
-    "zstandard>=0.25.0",
     "python-multipart>=0.0.32",
     "itsdangerous>=2.2.0",
+    "multipart-response[fastapi]>=0.1.0",
 ]
 
 [tool.uv]

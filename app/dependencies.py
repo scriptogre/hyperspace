@@ -2,22 +2,37 @@
 FastAPI dependencies for players, bricks, and game state.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import Depends, Form, HTTPException, Request, Response
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_422_UNPROCESSABLE_CONTENT
+from fastapi import Depends, Form, Header, HTTPException, Request, Response
+from starlette.status import (
+    HTTP_303_SEE_OTHER,
+    HTTP_401_UNAUTHORIZED,
+    HTTP_404_NOT_FOUND,
+    HTTP_422_UNPROCESSABLE_CONTENT,
+)
 from tortoise.transactions import in_transaction
 
+from app import broadcast
 from app.config import settings
 from app.enums import EventType
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
 from app.models import Brick, Cursor, Event, Player
 from app.signals import current_player
+from app.services import mark_player_as_offline, mark_player_as_online
 from app.schemas import BrickRow, CursorRow, EventRow, PlayerRow
 
 
-COOKIE_NAME = "hyperspace_id"
+def require_htmx_request(
+    hx_request: Annotated[bool, Header(alias="HX-Request")] = False,
+) -> None:
+    """
+    Require an htmx request or redirect a regular browser request.
+    """
+    if not hx_request:
+        raise HTTPException(HTTP_303_SEE_OTHER, headers={"Location": "/"})
 
 
 def require_coordinates_on_grid(x: int = Form(...), y: int = Form(...)):
@@ -42,7 +57,7 @@ async def get_current_player(request: Request) -> Player | None:
     """
     Get a player for this cookie, or None when not joined.
     """
-    token = request.cookies.get(COOKIE_NAME)
+    token = request.cookies.get("hyperspace")
     return await Player.filter(token=token).first() if token else None
 
 
@@ -57,6 +72,36 @@ async def require_current_player(
 
     current_player.set(player)
     return player
+
+
+async def require_online_player(
+    player: Player | None = Depends(get_current_player),
+) -> AsyncIterator[Player]:
+    """Authenticate a stream and track its online lifetime."""
+    if not player:
+        raise HTTPException(HTTP_401_UNAUTHORIZED)
+
+    current_player.set(player)
+    await mark_player_as_online(player)
+    try:
+        yield player
+    finally:
+        await mark_player_as_offline(player)
+
+
+async def subscribe_to_updates(
+    player: Player = Depends(require_online_player, scope="request"),
+) -> AsyncIterator[asyncio.Queue[str]]:
+    """
+    Subscribe for the lifetime of an updates connection.
+    """
+    queue = broadcast.subscribe(player.token)
+    for table in ("bricks", "players", "events", "cursors"):
+        queue.put_nowait(table)
+    try:
+        yield queue
+    finally:
+        broadcast.unsubscribe(player.token)
 
 
 async def require_brick(brick_id: int) -> AsyncIterator[Brick]:
@@ -114,7 +159,7 @@ async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
     return brick_stacks
 
 
-async def get_current_players() -> list[PlayerRow]:
+async def get_players() -> list[PlayerRow]:
     return cast(
         list[PlayerRow],
         cast(object, await Player.all().values("id", "name", "color", "is_online")),
@@ -140,7 +185,7 @@ async def get_latest_events() -> list[EventRow]:
     ]
 
 
-async def get_current_cursors() -> list[CursorRow]:
+async def get_cursors() -> list[CursorRow]:
     rows = cast(
         list[dict],
         await Cursor.all()
@@ -163,9 +208,9 @@ async def get_current_cursors() -> list[CursorRow]:
 async def get_game_context(
     player: Player | None = Depends(get_current_player),
     brick_stacks: dict[int, dict[int, list[BrickRow]]] = Depends(get_brick_stacks),
-    players: list[PlayerRow] = Depends(get_current_players),
+    players: list[PlayerRow] = Depends(get_players),
     events: list[EventRow] = Depends(get_latest_events),
-    cursors: list[CursorRow] = Depends(get_current_cursors),
+    cursors: list[CursorRow] = Depends(get_cursors),
     form_errors: FormErrors = Depends(get_form_errors),
 ) -> dict:
     """Full template context for the index page."""

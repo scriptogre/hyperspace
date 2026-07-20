@@ -1,29 +1,32 @@
-"""HTTP and SSE routes."""
+"""HTTP routes."""
+
+import asyncio
 
 from fastapi import (
     APIRouter,
     Depends,
     Form,
-    Request,
     Response,
 )
 
-from fastapi.responses import RedirectResponse, StreamingResponse
-from starlette.background import BackgroundTask
+from fastapi.responses import RedirectResponse
+from multipart_response.starlette import Part, MultipartResponse
 from starlette.status import (
     HTTP_204_NO_CONTENT,
-    HTTP_401_UNAUTHORIZED,
-    HTTP_303_SEE_OTHER,
 )
 
-from app import broadcast
 from app.dependencies import (
-    COOKIE_NAME,
     require_available_brick,
     require_brick_dragged_by_current_player,
     get_game_context,
     require_coordinates_on_grid,
     require_current_player,
+    require_htmx_request,
+    subscribe_to_updates,
+    get_brick_stacks,
+    get_cursors,
+    get_players,
+    get_latest_events,
 )
 from app.jinja import render
 from app.models import Brick, Player
@@ -32,13 +35,10 @@ from app.services import (
     delete_brick,
     release_brick,
     create_player,
-    mark_player_as_offline,
-    mark_player_as_online,
     create_brick,
     grab_brick,
     update_cursor,
 )
-from app.signals import current_player
 
 
 router = APIRouter()
@@ -52,28 +52,21 @@ async def index_page(context: dict = Depends(get_game_context)):
     return render("index.html", context)
 
 
-@router.post("/join")
-async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
+@router.post(
+    "/join",
+    status_code=HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_htmx_request)],
+)
+async def player_join(
+    response: Response,
+    form: PlayerJoinForm = Form(...),
+):
     player = await create_player(form.name, form.color)
 
-    if request.headers.get("hx-request"):
-        response = Response(
-            status_code=HTTP_204_NO_CONTENT,
-            headers={"HX-Redirect": "/"},
-        )
-    else:
-        response = RedirectResponse(
-            "/",
-            status_code=HTTP_303_SEE_OTHER,
-        )
+    response.status_code = HTTP_204_NO_CONTENT
+    response.headers["HX-Redirect"] = "/"
+    response.set_cookie("hyperspace", player.token, max_age=365 * 24 * 3600)
 
-    response.set_cookie(
-        COOKIE_NAME,
-        player.token,
-        max_age=365 * 24 * 3600,
-        samesite="lax",
-        httponly=False,
-    )
     return response
 
 
@@ -82,8 +75,9 @@ async def player_join(request: Request, form: PlayerJoinForm = Form(...)):
     status_code=HTTP_204_NO_CONTENT,
 )
 async def logout(response: RedirectResponse):
+
     response.headers["HX-Location"] = "/"
-    response.delete_cookie(COOKIE_NAME, path="/", samesite="lax")
+    response.delete_cookie("hyperspace")
 
 
 @router.get("/health")
@@ -91,31 +85,63 @@ async def health() -> str:
     return "ok"
 
 
-# ── SSE ─────────────────────────────────────────────────────────────────
+# ── Streams ─────────────────────────────────────────────────────────────
 
 
-@router.get("/sse")
-async def sse_endpoint(request: Request):
-    token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        return Response(status_code=HTTP_401_UNAUTHORIZED)
-
-    player = await Player.filter(token=token).first()
-    if not player:
-        return Response(status_code=HTTP_401_UNAUTHORIZED)
-
-    current_player.set(player)
-    await mark_player_as_online(player)
-
-    return StreamingResponse(
-        broadcast.sse_stream(token),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-        background=BackgroundTask(mark_player_as_offline, player),
-    )
+@router.get("/updates", response_class=MultipartResponse, status_code=200)
+async def updates_endpoint(
+    queue: asyncio.Queue[str] = Depends(subscribe_to_updates, scope="request"),
+):
+    while True:
+        match await queue.get():
+            case "bricks":
+                yield Part(
+                    render(
+                        "_brick_list.html",
+                        {"brick_stacks": await get_brick_stacks()},
+                    ),
+                    headers={
+                        "HX-Swap": "outerMorph",
+                        "HX-Target": "#brick-list",
+                    },
+                    media_type="text/html",
+                )
+            case "players":
+                yield Part(
+                    render(
+                        "_player_list.html",
+                        {"players": await get_players()},
+                    ),
+                    headers={
+                        "HX-Swap": "outerMorph",
+                        "HX-Target": "#player-list",
+                    },
+                    media_type="text/html",
+                )
+            case "events":
+                yield Part(
+                    render(
+                        "_event_list.html",
+                        {"events": await get_latest_events()},
+                    ),
+                    headers={
+                        "HX-Swap": "outerMorph",
+                        "HX-Target": "#event-list",
+                    },
+                    media_type="text/html",
+                )
+            case "cursors":
+                yield Part(
+                    render(
+                        "_cursor_list.html",
+                        {"cursors": await get_cursors()},
+                    ),
+                    headers={
+                        "HX-Swap": "outerMorph",
+                        "HX-Target": "#cursor-list",
+                    },
+                    media_type="text/html",
+                )
 
 
 # ── Actions ─────────────────────────────────────────────────────────────

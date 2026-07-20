@@ -1,4 +1,4 @@
-"""Application lifespan: DB init, NOTIFY listener, broadcast + cursor-flush loops."""
+"""Application lifespan: DB init, NOTIFY listener, and cursor flushing."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -74,7 +74,7 @@ async def _cursor_flusher() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
-    Start the DB, NOTIFY listener, and background loops for the app's lifetime.
+    Start the DB, NOTIFY listener, and cursor flusher for the app's lifetime.
     """
     async with RegisterTortoise(
         app, config=settings.TORTOISE_ORM, generate_schemas=True
@@ -91,11 +91,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         await pg.add_listener("hyperspace", on_notify)
 
-        task = asyncio.create_task(broadcast.run())
         flush_task = asyncio.create_task(_cursor_flusher())
         yield
 
-        for running in (task, flush_task):
+        for running in (flush_task,):
             running.cancel()
             try:
                 await running

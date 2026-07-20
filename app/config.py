@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Application
     # --------------------
-    ENVIRONMENT: Literal["local", "production"] = "local"
+    ENVIRONMENT: Literal["local", "production", "testing"] = "local"
     DEBUG: bool = True
     WEB_CONCURRENCY: int = 4
     SECRET_KEY: str = "dev-insecure-change-me"  # signs the form-errors cookie

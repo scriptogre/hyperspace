@@ -2,7 +2,7 @@
 // Hooks:
 //   htmx:after:process  find new [hx-live] elements and register them
 //   htmx:before:swap    increment swap depth (defer recomputes)
-//   htmx:swap:finally   decrement, fire one consolidated recompute
+//   htmx:finally:swap   decrement, fire one consolidated recompute
 //   htmx:scope          inject q, wait, trigger, debounce into JS expression scopes
 (() => {
     let api;
@@ -11,17 +11,22 @@
     let dbSym = Symbol();
     let observer = null;
     let recomputeBound = null;
+    let inputBound = null;
     let swaps = 0;
     let i = 0;
     let start = 0;
     let warned = false;
 
-    const OBSERVE_OPTIONS = {childList: true, subtree: true, attributes: true, characterData: true};
+    const OBSERVE_OPTIONS = { childList: true, subtree: true, attributes: true, characterData: true };
+
+    let inputDebounceId = null;
+    const INPUT_DEBOUNCE_MS = htmx.config.live?.inputDebounceMs ?? 100;
 
     function ensureActive() {
         if (observer) return;
         recomputeBound = () => schedule();
-        document.addEventListener('input', recomputeBound, true);
+        inputBound = () => { clearTimeout(inputDebounceId); inputDebounceId = setTimeout(schedule, INPUT_DEBOUNCE_MS); };
+        document.addEventListener('input', inputBound, true);
         document.addEventListener('change', recomputeBound, true);
         observer = new MutationObserver(recomputeBound);
         observer.observe(document.documentElement, OBSERVE_OPTIONS);
@@ -29,7 +34,10 @@
 
     function deactivate() {
         if (!observer) return;
-        document.removeEventListener('input', recomputeBound, true);
+        clearTimeout(inputDebounceId);
+        inputDebounceId = null;
+        document.removeEventListener('input', inputBound, true);
+        inputBound = null;
         document.removeEventListener('change', recomputeBound, true);
         observer.disconnect();
         observer = null;
@@ -64,14 +72,14 @@
     }
 
     let BOOLEAN_ATTRS = new Set([
-        'disabled', 'hidden', 'required', 'readonly', 'open', 'inert',
-        'multiple', 'autofocus', 'novalidate', 'default', 'reversed',
-        'loop', 'muted', 'controls', 'autoplay', 'playsinline',
-        'formnovalidate', 'async', 'defer', 'ismap', 'typemustmatch',
-        'allowfullscreen', 'itemscope', 'nomodule'
+        'disabled','hidden','required','readonly','open','inert',
+        'multiple','autofocus','novalidate','default','reversed',
+        'loop','muted','controls','autoplay','playsinline',
+        'formnovalidate','async','defer','ismap','typemustmatch',
+        'allowfullscreen','itemscope','nomodule'
     ]);
-    let PROPERTY_ATTRS = new Set(['checked', 'value', 'selected']);
-    let STRINGY_BOOLEAN_ATTRS = new Set(['contenteditable', 'draggable', 'spellcheck']);
+    let PROPERTY_ATTRS = new Set(['checked','value','selected']);
+    let STRINGY_BOOLEAN_ATTRS = new Set(['contenteditable','draggable','spellcheck']);
 
     /**
      * Get or set an attribute, class, or property-backed value on one or more elements.
@@ -195,11 +203,7 @@
                 let ancestor = elt.closest('[data-' + kebab + ']');
                 if (!ancestor) return undefined;
                 let raw = ancestor.dataset[prop];
-                try {
-                    return JSON.parse(raw);
-                } catch {
-                    return raw;
-                }
+                try { return JSON.parse(raw); } catch { return raw; }
             },
             set: (_, prop, val) => {
                 if (typeof prop !== 'string') return false;
@@ -229,7 +233,7 @@
             getOwnPropertyDescriptor: (_, prop) => {
                 if (typeof prop !== 'string' || prop === 'htmxPowered') return;
                 let kebab = camelToKebab(prop);
-                if (elt.closest('[data-' + kebab + ']')) return {enumerable: true, configurable: true};
+                if (elt.closest('[data-' + kebab + ']')) return { enumerable: true, configurable: true };
             }
         });
     }
@@ -291,12 +295,7 @@
         for (let a of args) if (a?.nodeType) target = a;
         return new Promise(resolve => {
             let cleanups = [], done = false;
-            let fire = v => {
-                if (done) return;
-                done = true;
-                for (let c of cleanups) c();
-                resolve(v);
-            };
+            let fire = v => { if (done) return; done = true; for (let c of cleanups) c(); resolve(v); };
             for (let a of args) {
                 if (a == null || a?.nodeType) continue;
                 let ms = typeof a === 'number' ? a
@@ -306,7 +305,7 @@
                     cleanups.push(() => clearTimeout(id));
                 } else if (typeof a === 'string') {
                     let h = evt => fire(evt);
-                    target.addEventListener(a, h, {once: true});
+                    target.addEventListener(a, h, { once: true });
                     cleanups.push(() => target.removeEventListener(a, h));
                 }
             }
@@ -363,7 +362,7 @@
     function makeDebounce() {
         // Closure form keyed by fn.toString() (no async context to abort); promise form keyed null.
         let channels = new Map();
-        let chan = key => channels.get(key) || (channels.set(key, {last: 0, reject: null}), channels.get(key));
+        let chan = key => channels.get(key) || (channels.set(key, { last: 0, reject: null }), channels.get(key));
         return (ms, fn) => {
             let ch = chan(fn ? fn.toString() : null);
             ch.reject?.(dbSym);
@@ -412,10 +411,7 @@
                 if (roots.length === 1) return [...roots[0].querySelectorAll(s)];
                 let out = [], seen = new Set();
                 for (let r of roots) for (let e of r.querySelectorAll(s)) {
-                    if (!seen.has(e)) {
-                        seen.add(e);
-                        out.push(e);
-                    }
+                    if (!seen.has(e)) { seen.add(e); out.push(e); }
                 }
                 return out.sort((a, b) => a.compareDocumentPosition(b) & 4 ? -1 : 1);
             };
@@ -450,7 +446,7 @@
         'find', 'findIndex', 'findLast', 'findLastIndex', 'flatMap', 'flat',
         'slice', 'indexOf', 'lastIndexOf', 'includes', 'join', 'at']);
 
-    let positions = {before: 'beforebegin', after: 'afterend', start: 'afterbegin', end: 'beforeend'};
+    let positions = { before: 'beforebegin', after: 'afterend', start: 'afterbegin', end: 'beforeend' };
 
     function qProxy(elts) {
         let proxy = new Proxy({}, {
@@ -463,22 +459,10 @@
                     for (let e of elts) for (let r of makeQ(e, e)(s).arr()) out.add(r);
                     return qProxy([...out]);
                 };
-                if (p === 'trigger') return (t, d, b) => {
-                    elts.forEach(e => htmx.trigger(e, t, d, b));
-                    return proxy;
-                };
-                if (p === 'insert') return (pos, s) => {
-                    elts.forEach(e => e.insertAdjacentHTML(positions[pos], s));
-                    return proxy;
-                };
-                if (p === 'take') return (name, scope) => {
-                    applyTake(elts, name, scope);
-                    return proxy;
-                };
-                if (p === 'toggle') return (name, values) => {
-                    elts.forEach(e => applyToggle(name, values, e));
-                    return proxy;
-                };
+                if (p === 'trigger') return (t, d, b) => { elts.forEach(e => htmx.trigger(e, t, d, b)); return proxy; };
+                if (p === 'insert') return (pos, s) => { elts.forEach(e => e.insertAdjacentHTML(positions[pos], s)); return proxy; };
+                if (p === 'take') return (name, scope) => { applyTake(elts, name, scope); return proxy; };
+                if (p === 'toggle') return (name, values) => { elts.forEach(e => applyToggle(name, values, e)); return proxy; };
                 if (p === 'attr') return (name, ...rest) => {
                     if (rest.length === 0) return applyAttr(elts, name);
                     applyAttr(elts, name, ...rest);
@@ -555,9 +539,9 @@
                         return;
                     }
                     try {
-                        await api.executeJavaScript(elt, {debounce}, code, false);
+                        await api.executeJavaScript(elt, { debounce }, code, false);
                     } catch (e) {
-                        if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt});
+                        if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt });
                     }
                 };
                 fns.add(run);
@@ -593,11 +577,11 @@
                 return;
             }
             try {
-                let value = await api.executeJavaScript(elt, {debounce}, code, true);
+                let value = await api.executeJavaScript(elt, { debounce }, code, true);
                 writeAttrBinding(elt, attrName, value);
                 observer?.takeRecords();
             } catch (e) {
-                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt, attr: attrName});
+                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt, attr: attrName });
             }
         } : () => {
             if (!elt.isConnected) {
@@ -605,10 +589,10 @@
                 return;
             }
             try {
-                let value = api.executeJavaScript(elt, {debounce}, code, true, false);
+                let value = api.executeJavaScript(elt, { debounce }, code, true, false);
                 writeAttrBinding(elt, attrName, value);
             } catch (e) {
-                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt, attr: attrName});
+                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt, attr: attrName });
             }
         };
         fns.add(run);
@@ -620,25 +604,26 @@
 
     function writeAttrBinding(elt, attrName, value) {
         if (attrName === 'text') {
-            elt.textContent = value == null ? '' : String(value);
+            let s = value == null ? '' : String(value);
+            if (elt.textContent !== s) elt.textContent = s;
             return;
         }
         if (attrName === 'html') {
-            elt.innerHTML = value == null ? '' : String(value);
+            let s = value == null ? '' : String(value);
+            if (elt.innerHTML !== s) elt.innerHTML = s;
             return;
         }
-        if (attrName === 'style') {
-            applyStyleBinding(elt, value);
-            return;
-        }
-        // Everything else (class, .class, aria-*, boolean, property-sync, regular) → applyAttr.
+        if (attrName === 'style') { applyStyleBinding(elt, value); return; }
+        // Always write aria-* and property-backed attrs (getter type differs from setter).
+        // For everything else skip if unchanged.
+        if (!attrName.startsWith('aria-') && !PROPERTY_ATTRS.has(attrName) && applyAttr([elt], attrName) === value) return;
         applyAttr([elt], attrName, value);
     }
 
     let asTargets = t => t == null ? []
         : typeof t === 'string' ? document.querySelectorAll(t)
-            : t.nodeType ? [t]
-                : t;
+        : t.nodeType ? [t]
+        : t;
 
     htmx.live = {
         q: s => makeQ(document.documentElement)(s),
@@ -667,7 +652,7 @@
         htmx_before_swap: () => {
             swaps++;
         },
-        htmx_swap_finally: () => {
+        htmx_finally_swap: () => {
             if (--swaps === 0 && fns.size > 0) schedule();
         },
         htmx_scope: (elt, detail) => {
