@@ -1,0 +1,64 @@
+<div id="bricks">
+    {% for (x, y) in grid_cells %}
+        <div id="grid-cell-{{ x }}-{{ y }}" class="grid-cell"
+             data-x="{{ x }}"
+             data-y="{{ y }}"
+             data-z="0"
+             hx-patch="/cursor"
+             hx-trigger="pointerenter"
+             hx-vals="js:{
+                          x: data.x,
+                          y: data.y,
+                          z: -1
+                      }"
+             style="--x: {{ x }}; --y: {{ y }}; --stack-height: {{ brick_stacks[x][y] | length }}"
+        >
+            {% for brick in brick_stacks[x][y] %}
+                <div id="brick-{{ brick.id }}" class="brick"
+                     data-z="{{ brick.z }}"
+                     {% if brick.dragged_by_id %}data-dragging{% endif %}
+                     style="--z: {{ brick.z }}; --color: {{ brick.color }}"
+                     :draggable="!data.shiftKey"
+                     hx-patch="/cursor"
+                     hx-trigger="pointerenter"
+                     hx-vals="js:{
+                                 x: data.x,
+                                 y: data.y,
+                                 z: data.z
+                             }"
+                >
+
+                    <button aria-label="Stack brick"
+                            hx-post="/bricks"
+                            hx-vals="js:{
+                                       x: data.x,
+                                       y: data.y,
+                                       z: data.z + 1
+                                    }"
+                    ></button>
+
+                    <button aria-label="Delete brick"
+                            hx-delete="/bricks/{{ brick.id }}"
+                            hx-trigger="pointerdown, pointerenter[buttons]"
+                    ></button>
+
+                    <button hidden
+                            aria-label="Grab brick"
+                            hx-post="/bricks/{{ brick.id }}/grab"
+                            hx-trigger="dragstart from:<closest .brick/>"></button>
+
+                    <button hidden
+                            aria-label="Release brick"
+                            hx-post="/bricks/{{ brick.id }}/release"
+                            hx-trigger="dragend from:<closest .brick/>"></button>
+                </div>
+            {% else %}
+                <button aria-label="Add brick"
+                        hx-post="/bricks"
+                        hx-trigger="pointerdown, pointerenter[buttons && !q('.brick:active').count]"
+                        hx-vals="js:{...data}"
+                ></button>
+            {% endfor %}
+        </div>
+    {% endfor %}
+</div>

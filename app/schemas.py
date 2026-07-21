@@ -43,7 +43,7 @@ class CursorRow(TypedDict):
     A cursor joined to its player.
     """
 
-    token: str
+    player_id: int
     grid_x: int
     grid_y: int
     grid_z: int

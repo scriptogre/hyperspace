@@ -30,6 +30,6 @@ def test_updates_endpoint_emits_a_multipart_part(monkeypatch):
 
     assert b"content-type: text/html; charset=utf-8\r\n" in body
     assert b"content-length: 12\r\n" in body
-    assert b"hx-target: #brick-list\r\n" in body
+    assert b"hx-target: #bricks\r\n" in body
     assert b"hx-swap: outerMorph\r\n" in body
     assert b"\r\n<p>Ready</p>\r\n--test-boundary--\r\n" in body

@@ -23,10 +23,28 @@ def join_board(page: Page, name: str | None = None) -> None:
 
 
 @pytest.fixture
-def joined_page(page: Page) -> Page:
-    """
-    A page that has joined the board and can place bricks.
-    """
+def browser_errors():
+    errors = []
+
+    def watch(page: Page) -> None:
+        page.on("pageerror", lambda error: errors.append(f"page: {error}"))
+        page.on(
+            "console",
+            lambda message: (
+                errors.append(f"console: {message.text}")
+                if message.type in {"error", "warning"}
+                else None
+            ),
+        )
+
+    yield watch
+    assert errors == []
+
+
+@pytest.fixture
+def joined_page(page: Page, browser_errors) -> Page:
+    """Join the board with browser errors treated as test failures."""
     page.set_default_timeout(10_000)
+    browser_errors(page)
     join_board(page)
     return page

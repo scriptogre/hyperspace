@@ -11,7 +11,7 @@ class Oklch:
     chroma: float
     hue: float
 
-    def to_css(self) -> str:
+    def __str__(self) -> str:
         return f"oklch({self.lightness:.3f} {self.chroma:.3f} {self.hue:.2f}deg)"
 
 

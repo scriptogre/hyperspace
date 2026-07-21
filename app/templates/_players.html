@@ -1,0 +1,17 @@
+{% set online = players | selectattr("is_online") | list %}
+
+<summary>
+    {{ online | length }} online
+    <span class="icon-[lucide--chevron-down]" aria-hidden="true"></span>
+</summary>
+
+<ul id="player-list">
+    {% for player in online %}
+        <li>
+            <span style="--color: {{ player.color }}">
+                {{ player.initials }}
+            </span>
+            <span>{{ player.name }}</span>
+        </li>
+    {% endfor %}
+</ul>

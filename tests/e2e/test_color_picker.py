@@ -3,29 +3,29 @@ import re
 from playwright.sync_api import Page, expect
 
 
-def test_color_picker(page: Page):
+def test_color_picker(page: Page, browser_errors):
+    browser_errors(page)
     page.goto("/")
 
-    form = page.locator("#player-form form")
-    suggestions = form.locator(".suggested-color")
-    palette = form.locator("details .color-pick")
-    color_seed = form.locator("[name=color_seed]")
+    form = page.locator("#player-form")
+    suggestions = form.locator("#color-options > label")
+    palette = form.locator("#color-menu > label")
 
     expect(suggestions).to_have_count(5)
     expect(palette).to_have_count(100)
 
     suggestions.nth(1).click()
-    expect(color_seed).to_have_value(suggestions.nth(1).get_attribute("data-seed"))
+    expect(suggestions.nth(1).locator("input")).to_be_checked()
 
     form.locator("summary").click()
-    form.locator('details .color-pick[data-seed="100"]').click()
+    selected_option = form.locator('#color-menu label:has(input[value="100"])')
+    selected_option.click()
 
-    expect(color_seed).to_have_value("100")
+    expect(selected_option.locator("input")).to_be_checked()
     expect(form.locator("details")).not_to_have_attribute("open", "")
-    expect(form.locator("summary")).to_have_class(re.compile(r"\bhas-color\b"))
 
-    selected_color = form.locator('details [data-seed="100"]').evaluate(
-        "element => element.style.getPropertyValue('--base-color').trim()"
+    selected_color = selected_option.evaluate(
+        "element => element.style.getPropertyValue('--color').trim()"
     )
     form.locator("input[name=name]").fill("Color Test")
     form.locator("button[type=submit]").click()
@@ -37,5 +37,5 @@ def test_color_picker(page: Page):
 
     expect(cell.locator(".brick")).to_have_attribute(
         "style",
-        re.compile(rf"--base-color:\s*{re.escape(selected_color)}"),
+        re.compile(rf"--color:\s*{re.escape(selected_color)}"),
     )

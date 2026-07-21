@@ -21,6 +21,7 @@ from app.dependencies import (
     get_game_context,
     require_coordinates_on_grid,
     require_current_player,
+    require_available_brick_or_204,
     require_htmx_request,
     require_online_player,
     subscribe_to_updates,
@@ -99,29 +100,28 @@ async def updates_endpoint(
 
         yield Part(
             render(
-                "_brick_list.html",
+                "_bricks.html",
                 {"brick_stacks": await get_brick_stacks()},
             ),
             headers={
                 "HX-Swap": "outerMorph",
-                "HX-Target": "#brick-list",
+                "HX-Target": "#bricks",
             },
             media_type="text/html",
         )
         yield Part(
             render(
-                "_player_list.html",
+                "_players.html",
                 {"players": await get_players()},
             ),
             headers={
                 "HX-Swap": "innerHTML",
-                "HX-Target": "#player-panel",
+                "HX-Target": "#players",
             },
             media_type="text/html",
         )
-        brick_count = await get_brick_count()
         yield Part(
-            str(brick_count),
+            str(await get_brick_count()),
             headers={
                 "HX-Swap": "textContent",
                 "HX-Target": "#brick-count",
@@ -130,15 +130,12 @@ async def updates_endpoint(
         )
         yield Part(
             render(
-                "_cursor_list.html",
-                {
-                    "cursors": await get_cursors(),
-                    "player": player,
-                },
+                "_cursors.html",
+                {"cursors": await get_cursors()},
             ),
             headers={
                 "HX-Swap": "outerMorph",
-                "HX-Target": "#cursor-list",
+                "HX-Target": "#cursors",
             },
             media_type="text/html",
         )
@@ -166,7 +163,7 @@ async def brick_create(
     dependencies=[Depends(require_current_player)],
 )
 async def brick_delete(
-    brick: Brick = Depends(require_available_brick),
+    brick: Brick = Depends(require_available_brick_or_204),
 ):
     await delete_brick(brick)
 

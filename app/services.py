@@ -56,9 +56,7 @@ async def create_brick(player: Player, x: int, y: int) -> Brick | None:
 
 @atomic()
 async def delete_brick(brick: Brick) -> None:
-    """
-    Delete a brick and close the gap it leaves in its stack.
-    """
+    """Delete a brick and close the gap it leaves in its stack."""
     await brick.delete()
     await restack(brick.x, brick.y)
 
@@ -84,8 +82,19 @@ async def grab_brick(player: Player, brick: Brick) -> None:
 
 async def release_brick(brick: Brick) -> None:
     """
-    Release a brick.
+    Place a dragged brick at its player's cursor and release it.
     """
+    cursor = await Cursor.filter(player_id=brick.dragged_by_id).first()
+    if cursor and (brick.x, brick.y) != (cursor.x, cursor.y):
+        height = await Brick.filter(x=cursor.x, y=cursor.y).count()
+        if height < settings.GRID_SIZE:
+            previous_x, previous_y = brick.x, brick.y
+            brick.x = cursor.x
+            brick.y = cursor.y
+            brick.z = height
+            await brick.save(update_fields=["x", "y", "z"])
+            await restack(previous_x, previous_y)
+
     brick.dragged_by_id = None
     await brick.save(update_fields=["dragged_by_id"])
 

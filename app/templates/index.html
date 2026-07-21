@@ -3,90 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="htmx-config"
-          content='{"morphIgnore":["data-htmx-powered","aria-grabbed","data-pending-delete"],"morphSkip":"[data-is-predicting]"}'>
     <title>Hyperspace</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+
     <link href="{{ url_for('static', path='css/output.css') }}" rel="stylesheet">
 
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-multipart.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
-    <script src="{{ url_for('static', path='js/hx-optimistic.js') }}"></script>
+    <script src="{{ url_for('static', path='js/drag-and-drop-mobile-polyfill.js') }}"></script>
 </head>
 
-<body class="group/body bg-background text-foreground font-mono h-screen overflow-hidden touch-none"
-      data-token="{{ player.token if player else '' }}"
+<body data-shift-key="false"
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
-        {% if player %}
-      hx-multipart:connect="/updates"
-        {% endif %}
-      hx-on="
-        keydown, keyup -> {
-            data.shiftKey = event.shiftKey;
-            data.ctrlKey = event.ctrlKey
-        }
-      ">
-{#        pointerover target:button[data-x] passive -> {#}
-{#          var cx = +event.target.dataset.x, cy = +event.target.dataset.y;#}
-{#          ajax('PATCH', '/cursors', {values: {x: cx, y: cy, z: 0}, swap: 'none'});#}
-{#          var c = q('#cursor-' + data.token);#}
-{#          if (!c.count) return;#}
-{#          var half = {{ grid_size * 32 }};#}
-{#          var px = cx * 64 + 32 - half, py = cy * 64 + 32 - half;#}
-{#          var diff = py - px, sum = px + py, denom = 1000000 - 612 * diff;#}
-{#          c.style.setProperty('--sx', Math.round(707000 * sum / denom) + 'px');#}
-{#          c.style.setProperty('--sy', Math.round(354000 * diff / denom) + 'px');#}
-{#        };#}
-{#        pointermove -> {#}
-{#          if (!data.dragBrick) return;#}
-{#          var brick = q('#brick-' + data.dragBrick);#}
-{#          if (!brick.count) return;#}
-{#          var under = document.elementFromPoint(event.clientX, event.clientY);#}
-{#          var cell  = under && under.closest('[data-x]');#}
-{#          if (!cell) return;#}
-{#          var cx = +cell.dataset.x, cy = +cell.dataset.y;#}
-{#          if (cx === +brick.dataset.x && cy === +brick.dataset.y) return;#}
-{#          if (!data.isDragging) {#}
-{#            data.isDragging = true;#}
-{#            ajax('POST', '/bricks/' + data.dragBrick + '/drag/start', {swap: 'none'});#}
-{#          }#}
-{#          brick.dataset.x = cx; brick.dataset.y = cy;#}
-{#          ajax('PATCH', '/bricks/' + data.dragBrick + '/drag/continue', {values: {x: cx, y: cy}, swap: 'none'});#}
-{#        };#}
-{#        pointerup -> {#}
-{#          if (!data.dragBrick) return;#}
-{#          if (data.isDragging) ajax('POST', '/bricks/' + data.dragBrick + '/drag/end', {swap: 'none'});#}
-{#          data.dragBrick = '';#}
-{#          data.isDragging = '';#}
+      {% if player %}hx-multipart:connect="/updates"{% endif %}
+      hx-on="keydown, keyup -> data.shiftKey = event.shiftKey">
 
-<div id="app" class="relative overflow-hidden bg-background select-none w-full h-full">
-    <div id="grid-container" style="--grid-size: {{ grid_size }}">
-        {% include "_brick_list.html" %}
-        {% include "_cursor_list.html" %}
-    </div>
+{% if player %}
+    <main id="app"
+          data-player-id="{{ player.id }}"
+          style="--player-color: {{ player.color }}">
+        <details id="players">
+            {% include "_players.html" %}
+        </details>
 
-    <details id="player-panel" class="group absolute top-6 left-6 z-50 font-sans">
-        {% include "_player_list.html" %}
-    </details>
+        <aside id="stats" aria-label="Game statistics">
+            <output id="brick-count">{{ brick_count }}</output>
+            bricks
+        </aside>
 
-    <div class="hidden sm:block absolute top-6 right-6 z-50 pointer-events-none font-sans text-xs font-normal text-foreground/60 tabular-nums">
-        <span id="brick-count">{{ brick_count }}</span> bricks
-    </div>
+        <div id="board" style="--grid-size: {{ grid_size }}">
+            {% include "_bricks.html" %}
+            {% include "_cursors.html" %}
+        </div>
 
-    <button id="logout-btn"
-            hx-post="/logout"
-            title="Log out"
-            class="absolute bottom-4 left-4 z-50 inline-flex items-center gap-2 px-1 py-2 text-xs font-medium font-sans text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-        <span class="icon-[lucide--log-out] size-3.5"></span>
-        <span>Log out</span>
-    </button>
-</div>
+        <button id="logout-button" hx-post="/logout">
+            <span class="icon-[lucide--log-out]" aria-hidden="true"></span>
+            Log out
+        </button>
+    </main>
 
-{% if not player %}
+{% else %}
+
     {% include "_player_form.html" %}
+
 {% endif %}
 
 </body>

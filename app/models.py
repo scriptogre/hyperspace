@@ -14,6 +14,7 @@ from tortoise.fields import (
 from tortoise.fields.relational import ReverseRelation
 from tortoise.models import Model
 
+from app.colors import Oklch, calculate_player_color
 from app.enums import EventType
 
 
@@ -71,6 +72,10 @@ class Player(Model):
     dragged_brick: ReverseRelation[Brick]
     cursor: ReverseRelation["Cursor"]
     events: ReverseRelation["Event"]
+
+    @property
+    def color(self) -> Oklch:
+        return calculate_player_color(self.color_seed)
 
     class Meta:
         table = "players"

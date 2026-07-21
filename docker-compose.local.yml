@@ -13,7 +13,7 @@ services:
     init: true
     tty: true
     env_file: .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.html" --reload-include "*.css" --ws-per-message-deflate false --timeout-graceful-shutdown 1
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.html" --ws-per-message-deflate false --timeout-graceful-shutdown 1
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')" ]

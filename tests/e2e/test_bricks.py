@@ -21,7 +21,17 @@ def test_single_click_places_one_brick(joined_page: Page):
     placed = f"#grid-cell-{cell['x']}-{cell['y']} > .brick"
     expect(page.locator(placed)).to_have_count(0)
 
-    page.locator(f"#grid-cell-{cell['x']}-{cell['y']} > button").dispatch_event("click")
+    page.locator(f"#grid-cell-{cell['x']}-{cell['y']} > button").dispatch_event(
+        "pointerdown", {"buttons": 1}
+    )
 
     page.wait_for_timeout(1000)  # let any second broadcast land
     expect(page.locator(placed)).to_have_count(1)
+
+
+def test_deleting_an_absent_brick_succeeds(joined_page: Page):
+    status = joined_page.evaluate(
+        "async () => (await fetch('/bricks/2147483647', {method: 'DELETE'})).status"
+    )
+
+    assert status == 204

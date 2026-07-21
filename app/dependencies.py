@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import Depends, Form, Header, HTTPException, Request, Response
 from starlette.status import (
+    HTTP_204_NO_CONTENT,
     HTTP_303_SEE_OTHER,
     HTTP_401_UNAUTHORIZED,
     HTTP_404_NOT_FOUND,
@@ -28,7 +29,11 @@ from app.schemas import BrickRow, CursorRow, PlayerRow
 
 def player_initials(name: str) -> str:
     words = name.split()
-    return "".join(word[0] for word in words[:2]).upper() if len(words) > 1 else name[:2].upper()
+    return (
+        "".join(word[0] for word in words[:2]).upper()
+        if len(words) > 1
+        else name[:2].upper()
+    )
 
 
 def require_htmx_request(
@@ -108,28 +113,45 @@ async def subscribe_to_updates(
         broadcast.unsubscribe(player.token)
 
 
-async def require_brick(brick_id: int) -> AsyncIterator[Brick]:
-    """
-    Lock a brick for the duration of the route or return 404.
-    """
+async def lock_brick(brick_id: int) -> AsyncIterator[Brick | None]:
+    """Yield a row-locked brick, or None when absent."""
     async with in_transaction():
-        brick = await Brick.select_for_update().get_or_none(id=brick_id)
+        yield await Brick.select_for_update().get_or_none(id=brick_id)
 
-        if brick is None:
-            raise HTTPException(HTTP_404_NOT_FOUND, "Brick not found")
 
-        yield brick
+async def require_brick(
+    brick: Brick | None = Depends(lock_brick, scope="function"),
+) -> Brick:
+    """Return the locked brick, or respond with 404."""
+    if brick is None:
+        raise HTTPException(HTTP_404_NOT_FOUND, "Brick not found")
+    return brick
+
+
+async def get_available_brick(
+    brick: Brick | None = Depends(lock_brick, scope="function"),
+) -> Brick | None:
+    """Return the locked brick unless another player is dragging it."""
+    if brick is not None and brick.is_being_dragged:
+        raise BrickUnavailable
+    return brick
 
 
 async def require_available_brick(
-    brick: Brick = Depends(require_brick, scope="function"),
+    brick: Brick | None = Depends(get_available_brick, scope="function"),
 ) -> Brick:
-    """
-    Require a brick that nobody is dragging.
-    """
-    if brick.is_being_dragged:
-        raise BrickUnavailable
+    """Return an available brick, or respond with 404 when absent."""
+    if brick is None:
+        raise HTTPException(HTTP_404_NOT_FOUND, "Brick not found")
+    return brick
 
+
+async def require_available_brick_or_204(
+    brick: Brick | None = Depends(get_available_brick, scope="function"),
+) -> Brick:
+    """Return an available brick, or stop with 204 when absent."""
+    if brick is None:
+        raise HTTPException(HTTP_204_NO_CONTENT)
     return brick
 
 
@@ -137,9 +159,7 @@ async def require_brick_dragged_by_current_player(
     brick: Brick = Depends(require_brick, scope="function"),
     player: Player = Depends(require_current_player),
 ) -> Brick:
-    """
-    Require a brick currently dragged by the current player.
-    """
+    """Return the locked brick only when the current player is dragging it."""
     if brick.dragged_by_id != player.id:
         raise BrickUnavailable
 
@@ -147,14 +167,18 @@ async def require_brick_dragged_by_current_player(
 
 
 async def get_current_bricks() -> list[BrickRow]:
-    rows = await Brick.all().order_by("x", "y", "z").values(
-        "id",
-        "x",
-        "y",
-        "z",
-        "color_seed",
-        "created_by_id",
-        "dragged_by_id",
+    rows = (
+        await Brick.all()
+        .order_by("x", "y", "z")
+        .values(
+            "id",
+            "x",
+            "y",
+            "z",
+            "color_seed",
+            "created_by_id",
+            "dragged_by_id",
+        )
     )
     return [
         {
@@ -186,8 +210,10 @@ async def get_brick_count() -> int:
 
 
 async def get_players() -> list[PlayerRow]:
-    rows = await Player.all().order_by("name").values(
-        "id", "name", "color_seed", "is_online"
+    rows = (
+        await Player.all()
+        .order_by("name")
+        .values("id", "name", "color_seed", "is_online")
     )
     return [
         {
@@ -208,13 +234,17 @@ async def get_cursors() -> list[CursorRow]:
         position = (brick["x"], brick["y"])
         stack_tops[position] = max(stack_tops.get(position, -1), brick["z"])
 
-    rows = await Cursor.all().order_by("player_id").values(
-        "player__color_seed",
-        "player__token",
-        "player__name",
-        "x",
-        "y",
-        "z",
+    rows = (
+        await Cursor.all()
+        .order_by("player_id")
+        .values(
+            "player_id",
+            "player__color_seed",
+            "player__name",
+            "x",
+            "y",
+            "z",
+        )
     )
     position_counts: dict[tuple[int, int, int], int] = {}
     for row in rows:
@@ -229,7 +259,7 @@ async def get_cursors() -> list[CursorRow]:
         position_indexes[position] = index + 1
         cursors.append(
             {
-                "token": row["player__token"],
+                "player_id": row["player_id"],
                 "grid_x": row["x"],
                 "grid_y": row["y"],
                 "grid_z": max(row["z"], stack_tops.get((row["x"], row["y"]), -1)),
@@ -263,8 +293,7 @@ async def get_game_context(
         color_seeds[0] = selected_color_seed
 
     available_colors = [
-        {"seed": seed, "color": calculate_player_color(seed)}
-        for seed in range(1, 101)
+        {"seed": seed, "color": calculate_player_color(seed)} for seed in range(1, 101)
     ]
     available_colors.sort(key=lambda option: option["color"].hue)
 
