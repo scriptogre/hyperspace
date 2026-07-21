@@ -1,4 +1,5 @@
 """Application lifespan: DB init and NOTIFY listener."""
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -6,7 +7,6 @@ import asyncpg
 from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
-from app import broadcast
 from app.config import settings
 from app.models import Brick, Player
 
@@ -42,7 +42,9 @@ async def _install_triggers(pg: asyncpg.Connection) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(
+    app: FastAPI,
+) -> AsyncIterator[dict[str, asyncpg.Connection]]:
     """
     Start the DB and NOTIFY listener for the app's lifetime.
     """
@@ -56,12 +58,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pg = await asyncpg.connect(settings.DATABASE_URL)
         await _install_triggers(pg)
 
-        async def on_notify(conn, pid, channel, payload):
-            broadcast.notify(payload)
+        def keep_listening(conn, pid, channel, payload):
+            pass
 
-        await pg.add_listener("hyperspace", on_notify)
+        await pg.add_listener("hyperspace", keep_listening)
 
-        yield
+        yield {"postgres": pg}
 
-        await pg.remove_listener("hyperspace", on_notify)
+        await pg.remove_listener("hyperspace", keep_listening)
         await pg.close()

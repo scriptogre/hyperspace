@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from random import randrange
 from typing import Annotated
 
+import asyncpg
 from fastapi import Depends, Form, Header, HTTPException, Request, Response
 from starlette.status import (
     HTTP_204_NO_CONTENT,
@@ -17,7 +18,6 @@ from starlette.status import (
 )
 from tortoise.transactions import in_transaction
 
-from app import broadcast
 from app.colors import calculate_player_color
 from app.config import settings
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
@@ -100,17 +100,33 @@ async def require_online_player(
         await mark_player_as_offline(player)
 
 
-async def subscribe_to_updates(
-    player: Player = Depends(require_online_player, scope="request"),
-) -> AsyncIterator[asyncio.Event]:
-    """
-    Wake updates for the lifetime of a connection.
-    """
-    update = broadcast.subscribe(player.token)
+async def listen_to_postgres(
+    postgres: asyncpg.Connection,
+) -> AsyncIterator[str]:
+    event = asyncio.Event()
+    tables: set[str] = set()
+
+    def notify(conn, pid, channel, payload):
+        tables.add(payload)
+        event.set()
+
+    await postgres.add_listener("hyperspace", notify)
     try:
-        yield update
+        while True:
+            await event.wait()
+            event.clear()
+            pending, tables = tables, set()
+            for table in sorted(pending):
+                yield table
     finally:
-        broadcast.unsubscribe(player.token)
+        await postgres.remove_listener("hyperspace", notify)
+
+
+async def get_postgres_updates(
+    request: Request,
+    _: Player = Depends(require_online_player, scope="request"),
+) -> AsyncIterator[str]:
+    return listen_to_postgres(request.state.postgres)
 
 
 async def lock_brick(brick_id: int) -> AsyncIterator[Brick | None]:
@@ -205,10 +221,6 @@ async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
     return brick_stacks
 
 
-async def get_brick_count() -> int:
-    return await Brick.all().count()
-
-
 async def get_players() -> list[PlayerRow]:
     rows = (
         await Player.all()
@@ -276,7 +288,6 @@ async def get_game_context(
     player: Player | None = Depends(get_current_player),
     brick_stacks: dict[int, dict[int, list[BrickRow]]] = Depends(get_brick_stacks),
     players: list[PlayerRow] = Depends(get_players),
-    brick_count: int = Depends(get_brick_count),
     cursors: list[CursorRow] = Depends(get_cursors),
     form_errors: FormErrors = Depends(get_form_errors),
 ) -> dict:
@@ -301,7 +312,6 @@ async def get_game_context(
         "player": player,
         "brick_stacks": brick_stacks,
         "players": players,
-        "brick_count": brick_count,
         "cursors": cursors,
         "form_errors": form_errors,
         "selected_color_seed": selected_color_seed,

@@ -4,6 +4,7 @@
              data-x="{{ x }}"
              data-y="{{ y }}"
              data-z="0"
+             data-creating="false"
              hx-patch="/cursor"
              hx-trigger="pointerenter"
              hx-vals="js:{
@@ -39,7 +40,7 @@
 
                     <button aria-label="Delete brick"
                             hx-delete="/bricks/{{ brick.id }}"
-                            hx-trigger="pointerdown, pointerenter[buttons]"
+                            hx-trigger="pointerdown, pointerenter[buttons] delay:100ms"
                     ></button>
 
                     <button hidden
@@ -55,10 +56,12 @@
             {% else %}
                 <button aria-label="Add brick"
                         hx-post="/bricks"
-                        hx-trigger="pointerdown, pointerenter[buttons && !q('.brick:active').count]"
                         hx-vals="js:{...data}"
                 ></button>
             {% endfor %}
+
+            {# CSS shows this atop the hovered stack during local drags. #}
+            <span class="brick-preview" aria-hidden="true"></span>
         </div>
     {% endfor %}
 </div>

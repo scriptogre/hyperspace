@@ -34,7 +34,7 @@ def test_desktop_drag_moves_brick(joined_page: Page):
         *center(source.locator(".brick > button:not([hx-delete]):not([hidden])"))
     )
     page.mouse.down()
-    page.mouse.move(*center(target), steps=8)
+    page.mouse.move(*center(target.locator(":scope > button")), steps=8)
     assert target.evaluate("element => element.matches(':hover')")
     page.mouse.up()
 
@@ -75,7 +75,7 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     source_x, source_y = center(
         source.locator(".brick > button:not([hx-delete]):not([hidden])")
     )
-    target_x, target_y = center(target)
+    target_x, target_y = center(target.locator(":scope > button"))
     cdp = context.new_cdp_session(page)
 
     cdp.send(

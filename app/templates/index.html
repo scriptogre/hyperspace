@@ -12,6 +12,11 @@
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-multipart.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
+    <script>
+        htmx.registerExtension('dollar-query', {
+            htmx_scope: (element, detail) => detail.scope.$ = detail.scope.q
+        })
+    </script>
     <script src="{{ url_for('static', path='js/drag-and-drop-mobile-polyfill.js') }}"></script>
 </head>
 
@@ -30,7 +35,7 @@
         </details>
 
         <aside id="stats" aria-label="Game statistics">
-            <output id="brick-count">{{ brick_count }}</output>
+            <output id="brick-count" :text="$('.brick').count"></output>
             bricks
         </aside>
 

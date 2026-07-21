@@ -1,6 +1,6 @@
 """HTTP routes."""
 
-import asyncio
+from collections.abc import AsyncIterator
 
 from fastapi import (
     APIRouter,
@@ -23,15 +23,13 @@ from app.dependencies import (
     require_current_player,
     require_available_brick_or_204,
     require_htmx_request,
-    require_online_player,
-    subscribe_to_updates,
+    get_postgres_updates,
     get_brick_stacks,
     get_cursors,
     get_players,
-    get_brick_count,
 )
 from app.jinja import render
-from app.models import Brick, Player
+from app.models import Brick, Cursor, Player
 from app.schemas import PlayerJoinForm
 from app.services import (
     delete_brick,
@@ -76,7 +74,7 @@ async def player_join(
     "/logout",
     status_code=HTTP_204_NO_CONTENT,
 )
-async def logout(response: RedirectResponse):
+async def player_logout(response: RedirectResponse):
     response.headers["HX-Redirect"] = "/"
     response.delete_cookie("hyperspace")
 
@@ -89,56 +87,51 @@ async def health() -> str:
 # ── Streams ─────────────────────────────────────────────────────────────
 
 
-@router.get("/updates", response_class=MultipartResponse, status_code=200)
+@router.get(
+    "/updates",
+    response_class=MultipartResponse,
+)
 async def updates_endpoint(
-    update: asyncio.Event = Depends(subscribe_to_updates, scope="request"),
-    player: Player = Depends(require_online_player, scope="request"),
+    postgres_updates: AsyncIterator[str] = Depends(get_postgres_updates),
 ):
-    while True:
-        await update.wait()
-        update.clear()
+    async for table in postgres_updates:
+        if table == Brick.Meta.table:
+            yield Part(
+                render(
+                    "_bricks.html",
+                    {"brick_stacks": await get_brick_stacks()},
+                ),
+                headers={
+                    "HX-Swap": "outerMorph",
+                    "HX-Target": "#bricks",
+                },
+                media_type="text/html",
+            )
+        elif table == Player.Meta.table:
+            yield Part(
+                render(
+                    "_players.html",
+                    {"players": await get_players()},
+                ),
+                headers={
+                    "HX-Swap": "innerHTML",
+                    "HX-Target": "#players",
+                },
+                media_type="text/html",
+            )
 
-        yield Part(
-            render(
-                "_bricks.html",
-                {"brick_stacks": await get_brick_stacks()},
-            ),
-            headers={
-                "HX-Swap": "outerMorph",
-                "HX-Target": "#bricks",
-            },
-            media_type="text/html",
-        )
-        yield Part(
-            render(
-                "_players.html",
-                {"players": await get_players()},
-            ),
-            headers={
-                "HX-Swap": "innerHTML",
-                "HX-Target": "#players",
-            },
-            media_type="text/html",
-        )
-        yield Part(
-            str(await get_brick_count()),
-            headers={
-                "HX-Swap": "textContent",
-                "HX-Target": "#brick-count",
-            },
-            media_type="text/html",
-        )
-        yield Part(
-            render(
-                "_cursors.html",
-                {"cursors": await get_cursors()},
-            ),
-            headers={
-                "HX-Swap": "outerMorph",
-                "HX-Target": "#cursors",
-            },
-            media_type="text/html",
-        )
+        elif table == Cursor.Meta.table:
+            yield Part(
+                render(
+                    "_cursors.html",
+                    {"cursors": await get_cursors()},
+                ),
+                headers={
+                    "HX-Swap": "outerMorph",
+                    "HX-Target": "#cursors",
+                },
+                media_type="text/html",
+            )
 
 
 # ── Actions ─────────────────────────────────────────────────────────────
