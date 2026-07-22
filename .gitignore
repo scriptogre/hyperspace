@@ -8,4 +8,5 @@ __pycache__/
 .env
 
 # Local scratch / experiments, not part of the app
+bench/results/
 test.py

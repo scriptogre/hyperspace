@@ -88,10 +88,10 @@ async def health() -> str:
 
 
 @router.get(
-    "/updates",
+    "/stream",
     response_class=MultipartResponse,
 )
-async def updates_endpoint(
+async def stream_endpoint(
     postgres_updates: AsyncIterator[str] = Depends(get_postgres_updates),
 ):
     async for table in postgres_updates:

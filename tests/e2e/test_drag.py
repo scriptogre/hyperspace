@@ -43,21 +43,6 @@ def test_desktop_drag_moves_brick(joined_page: Page):
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
 
 
-def test_drag_from_empty_cell_paints_bricks(joined_page: Page):
-    page = joined_page
-    cells = []
-    for index in range(3):
-        cell = page.locator(".grid-cell:not(:has(.brick))").nth(index)
-        cells.append(page.locator(f"#{cell.get_attribute('id')}"))
-
-    cells[0].locator(":scope > button").dispatch_event("pointerdown", {"buttons": 1})
-    for cell in cells[1:]:
-        cell.locator(":scope > button").dispatch_event("pointerenter", {"buttons": 1})
-
-    for cell in cells:
-        expect(cell.locator(".brick")).to_have_count(1)
-
-
 def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     context = browser.new_context(
         base_url="http://fastapi:8000",

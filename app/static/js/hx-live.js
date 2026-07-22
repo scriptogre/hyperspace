@@ -1,35 +1,76 @@
 // hx-live extension: reactive live expressions + q() proxy + scope helpers.
 // Hooks:
 //   htmx:after:process  find new [hx-live] elements and register them
-//   htmx:before:swap    increment swap depth (defer recomputes)
-//   htmx:finally:swap   decrement, fire one consolidated recompute
+//   htmx:before:swap    increment swap depth (defer recompute passes)
+//   htmx:finally:swap   decrement, fire one consolidated recompute pass
 //   htmx:scope          inject q, wait, trigger, debounce into JS expression scopes
 (() => {
     let api;
-    let fns = new Set();
+    let liveExpressions = new Set();
     let pending = false;
     let dbSym = Symbol();
     let observer = null;
     let recomputeBound = null;
     let inputBound = null;
     let swaps = 0;
-    let i = 0;
-    let start = 0;
-    let warned = false;
+    let recomputeMonitor = null;
 
-    const OBSERVE_OPTIONS = { childList: true, subtree: true, attributes: true, characterData: true };
+    const OBSERVE_OPTIONS = {childList: true, subtree: true, attributes: true, characterData: true};
+    const RECOMPUTE_LIMITS = {timePerSecond: 100, passTime: 16};
 
     let inputDebounceId = null;
-    const INPUT_DEBOUNCE_MS = htmx.config.live?.inputDebounceMs ?? 100;
 
     function ensureActive() {
         if (observer) return;
+        recomputeMonitor = makeRecomputeMonitor();
         recomputeBound = () => schedule();
-        inputBound = () => { clearTimeout(inputDebounceId); inputDebounceId = setTimeout(schedule, INPUT_DEBOUNCE_MS); };
+        let inputDelay = htmx.parseInterval(htmx.config.live?.inputDebounce ?? 100) ?? 100;
+        inputBound = () => {
+            clearTimeout(inputDebounceId);
+            inputDebounceId = setTimeout(schedule, inputDelay);
+        };
         document.addEventListener('input', inputBound, true);
         document.addEventListener('change', recomputeBound, true);
         observer = new MutationObserver(recomputeBound);
         observer.observe(document.documentElement, OBSERVE_OPTIONS);
+    }
+
+    function makeRecomputeMonitor() {
+        let periodStartedAt = null;
+        let recomputePassCount = 0;
+        let totalTime = 0;
+        let hadLongPass = false;
+        let overThresholdSeconds = 0;
+        let hasWarned = false;
+
+        return (startedAt, expressionCount) => {
+            let now = performance.now();
+            let elapsed = now - startedAt;
+            periodStartedAt ??= now;
+            recomputePassCount++;
+            totalTime += elapsed;
+            let longPass = elapsed > RECOMPUTE_LIMITS.passTime;
+            hadLongPass ||= longPass;
+
+            let periodFinished = now - periodStartedAt > 1000;
+            if (periodFinished) {
+                let isOverThreshold = totalTime > RECOMPUTE_LIMITS.timePerSecond || hadLongPass;
+                overThresholdSeconds = isOverThreshold ? overThresholdSeconds + 1 : 0;
+                if (!isOverThreshold) hasWarned = false;
+            }
+            if (!hasWarned && (longPass || overThresholdSeconds > 1)) {
+                let detail = longPass ? `${elapsed.toFixed(1)}ms pass`
+                    : `${totalTime.toFixed(1)}ms/s; ${(totalTime / recomputePassCount).toFixed(1)}ms/pass`;
+                console.warn(`htmx: hx-live overloaded: ${detail}; ${expressionCount} expr/pass`);
+                hasWarned = true;
+            }
+            if (periodFinished) {
+                periodStartedAt = null;
+                recomputePassCount = 0;
+                totalTime = 0;
+                hadLongPass = false;
+            }
+        };
     }
 
     function deactivate() {
@@ -42,27 +83,20 @@
         observer.disconnect();
         observer = null;
         recomputeBound = null;
+        recomputeMonitor = null;
     }
 
     function schedule() {
-        if (pending) return;
-        if (swaps > 0) return;
-        let now = Date.now();
-        if (now - start > 1000) {
-            start = now;
-            i = 0;
-            warned = false;
-        }
-        if (++i > 50 && !warned) {
-            console.warn('htmx: hx-live recompute exceeded 50/sec.');
-            warned = true;
-        }
+        if (pending || swaps > 0) return;
         pending = true;
         queueMicrotask(() => {
             // Detach observer while writing so our own writes don't queue records.
             observer?.disconnect();
-            fns.forEach(f => f());
-            if (fns.size === 0) {
+            let expressionCount = liveExpressions.size;
+            let startedAt = expressionCount > 0 ? performance.now() : 0;
+            liveExpressions.forEach(run => run());
+            if (expressionCount > 0) recomputeMonitor(startedAt, expressionCount);
+            if (liveExpressions.size === 0) {
                 deactivate();
             } else {
                 observer.observe(document.documentElement, OBSERVE_OPTIONS);
@@ -72,120 +106,129 @@
     }
 
     let BOOLEAN_ATTRS = new Set([
-        'disabled','hidden','required','readonly','open','inert',
-        'multiple','autofocus','novalidate','default','reversed',
-        'loop','muted','controls','autoplay','playsinline',
-        'formnovalidate','async','defer','ismap','typemustmatch',
-        'allowfullscreen','itemscope','nomodule'
+        'disabled', 'hidden', 'required', 'readonly', 'open', 'inert',
+        'multiple', 'autofocus', 'novalidate', 'default', 'reversed',
+        'loop', 'muted', 'controls', 'autoplay', 'playsinline',
+        'formnovalidate', 'async', 'defer', 'ismap', 'typemustmatch',
+        'allowfullscreen', 'itemscope', 'nomodule'
     ]);
-    let PROPERTY_ATTRS = new Set(['checked','value','selected']);
-    let STRINGY_BOOLEAN_ATTRS = new Set(['contenteditable','draggable','spellcheck']);
+    let BOOLEAN_PROPERTY_ATTRS = new Set(['checked', 'selected']);
+    let STRING_PROPERTY_ATTRS = new Set(['value']);
+    let STRINGY_BOOLEAN_ATTRS = new Set(['contenteditable', 'draggable', 'spellcheck']);
 
-    /**
-     * Get or set an attribute, class, or property-backed value on one or more elements.
-     *
-     * @param {Element[]} elts - Target elements.
-     * @param {string} name - Class (`.foo`), `'class'`, or attribute name.
-     * @param {*} [value] - Value to set. Omit for getter (reads from first element).
-     * @returns {*} Getter result; setter returns nothing.
-     *
-     * @example
-     * attr('hidden')                  // boolean: is hidden present?
-     * attr('hidden', true)            // set hidden=""
-     * attr('.active')                 // boolean: has class .active?
-     * attr('.active', cond)           // add/remove class
-     * attr('class', 'foo bar')        // multi-class string
-     * attr('class', { active: cond }) // multi-class object
-     * attr('aria-expanded', open)     // ARIA: always "true"/"false"
-     * attr('value', 'hello')          // sync DOM property + attribute
-     * attr('contenteditable', false)  // "false", not removed
-     * attr('data-x', null)            // remove attribute
-     */
-    function applyAttr(elts, name, ...rest) {
-        let isClass = name.startsWith('.');
-        let isMultiClass = name === 'class';
-        let isAria = name.startsWith('aria-');
-        let isPropAttr = PROPERTY_ATTRS.has(name);
+    function getAttr(elts, name) {
+        let elt = elts[0];
+        if (!elt) return undefined;
+        if (name.startsWith('.')) return elt.classList.contains(name.slice(1));
+        if (name === 'class') return elt.getAttribute('class');
+        if (name.startsWith('aria-')) return elt.getAttribute(name) === 'true';
+        if (BOOLEAN_ATTRS.has(name)) return elt.hasAttribute(name);
+        if (BOOLEAN_PROPERTY_ATTRS.has(name) || STRING_PROPERTY_ATTRS.has(name)) return elt[name];
+        return elt.getAttribute(name);
+    }
 
-        if (rest.length === 0) {
-            let e = elts[0];
-            if (!e) return undefined;
-            if (isClass) return e.classList.contains(name.slice(1));
-            if (isMultiClass) return e.getAttribute('class');
-            if (isAria) return e.getAttribute(name) === 'true';
-            if (BOOLEAN_ATTRS.has(name)) return e.hasAttribute(name);
-            if (isPropAttr) return e[name];
-            return e.getAttribute(name);
-        }
-
-        let value = rest[0];
-        for (let e of elts) {
-            if (isClass) {
-                e.classList.toggle(name.slice(1), !!value);
-                if (e.classList.length === 0) e.removeAttribute('class');
-            } else if (isMultiClass) {
-                applyMultiClass(e, value);
-            } else if (isAria) {
-                // Strings and numbers pass through (e.g. aria-current="page",
-                // aria-pressed="mixed", aria-valuenow="50"). Other values coerce
-                // to "true"/"false". Never removed.
-                let attrVal = (typeof value === 'string' || typeof value === 'number')
-                    ? String(value)
-                    : (value ? 'true' : 'false');
-                e.setAttribute(name, attrVal);
-            } else if (isPropAttr) {
-                if (value === false || value == null) {
-                    e[name] = (typeof e[name] === 'boolean') ? false : '';
-                    e.removeAttribute(name);
-                } else if (value === true) {
-                    e[name] = true;
-                    e.setAttribute(name, '');
-                } else {
-                    e[name] = value;
-                    e.setAttribute(name, String(value));
-                }
-            } else if (BOOLEAN_ATTRS.has(name)) {
-                if (value) e.setAttribute(name, '');
-                else e.removeAttribute(name);
-            } else if (STRINGY_BOOLEAN_ATTRS.has(name)) {
-                if (value === null || value === undefined) e.removeAttribute(name);
-                else if (value === true) e.setAttribute(name, 'true');
-                else if (value === false) e.setAttribute(name, 'false');
-                else e.setAttribute(name, String(value));
-            } else {
-                if (value === null || value === undefined || value === false) e.removeAttribute(name);
-                else e.setAttribute(name, value === true ? '' : String(value));
-            }
+    function setDomAttr(elt, name, value) {
+        if (value == null) {
+            if (elt.hasAttribute(name)) elt.removeAttribute(name);
+        } else if (elt.getAttribute(name) !== value) {
+            elt.setAttribute(name, value);
         }
     }
 
-    function applyStyleBinding(elt, value) {
-        let prop = api.htmxProp(elt);
-        let oldManaged = prop.liveStyles || new Set();
-        let newManaged = new Set();
+    function setAttr(elts, name, value) {
+        if (name.startsWith('.')) {
+            let className = name.slice(1);
+            let present = !!value;
+            for (let elt of elts) {
+                if (elt.classList.contains(className) !== present) elt.classList.toggle(className, present);
+                if (elt.classList.length === 0 && elt.hasAttribute('class')) elt.removeAttribute('class');
+            }
+            return;
+        }
+        if (name === 'class') {
+            for (let elt of elts) setClasses(elt, value);
+            return;
+        }
+        if (BOOLEAN_PROPERTY_ATTRS.has(name)) {
+            let present = !!value;
+            let attrValue = present ? '' : null;
+            for (let elt of elts) {
+                if (elt[name] === present && elt.getAttribute(name) === attrValue) continue;
+                elt[name] = present;
+                setDomAttr(elt, name, attrValue);
+            }
+            return;
+        }
+        if (STRING_PROPERTY_ATTRS.has(name)) {
+            let propValue = value == null ? '' : String(value);
+            let attrValue = value == null ? null : propValue;
+            for (let elt of elts) {
+                if (elt[name] === propValue && elt.getAttribute(name) === attrValue) continue;
+                elt[name] = propValue;
+                setDomAttr(elt, name, attrValue);
+            }
+            return;
+        }
+        let attrValue;
+        if (name.startsWith('aria-')) {
+            // Strings and numbers pass through. Other values become "true" or "false".
+            attrValue = (typeof value === 'string' || typeof value === 'number')
+                ? String(value)
+                : String(!!value);
+        } else if (BOOLEAN_ATTRS.has(name)) {
+            attrValue = value ? '' : null;
+        } else if (STRINGY_BOOLEAN_ATTRS.has(name)) {
+            attrValue = value == null ? null : String(value);
+        } else {
+            attrValue = value == null || value === false ? null : (value === true ? '' : String(value));
+        }
+        for (let elt of elts) setDomAttr(elt, name, attrValue);
+    }
 
+    function parseStyles(value) {
+        let styles = [];
         if (typeof value === 'string') {
-            for (let decl of value.split(';')) {
-                let idx = decl.indexOf(':');
-                if (idx < 0) continue;
-                let k = decl.slice(0, idx).trim();
-                let v = decl.slice(idx + 1).trim();
-                if (k) {
-                    newManaged.add(k);
-                    elt.style.setProperty(k, v);
-                }
+            for (let declaration of value.split(';')) {
+                let colon = declaration.indexOf(':');
+                if (colon < 0) continue;
+                let name = declaration.slice(0, colon).trim();
+                if (name) styles.push([name, declaration.slice(colon + 1).trim()]);
             }
         } else if (value && typeof value === 'object') {
-            for (let [k, v] of Object.entries(value)) {
-                let cssProp = camelToKebab(k);
-                newManaged.add(cssProp);
-                if (v == null || v === '') elt.style.removeProperty(cssProp);
-                else elt.style.setProperty(cssProp, String(v));
+            for (let [name, styleValue] of Object.entries(value)) {
+                styles.push([camelToKebab(name), styleValue == null || styleValue === '' ? null : String(styleValue)]);
             }
         }
-        for (let k of oldManaged) if (!newManaged.has(k)) elt.style.removeProperty(k);
-        if (elt.style.length === 0) elt.removeAttribute('style');
-        prop.liveStyles = newManaged;
+        return styles;
+    }
+
+    function setStyleValue(style, name, value) {
+        let before = style.cssText;
+        if (value == null) style.removeProperty(name);
+        else style.setProperty(name, value);
+        return style.cssText !== before;
+    }
+
+    function setStyles(elt, value) {
+        let prop = api.htmxProp(elt);
+        let oldStyles = prop.liveStyles || new Set();
+        let styles = parseStyles(value);
+        let styleNames = new Set(styles.map(([name]) => name));
+        let parsed = elt.ownerDocument.createElement('div').style;
+        let writes = [];
+        parsed.cssText = elt.style.cssText;
+
+        for (let name of oldStyles) {
+            if (!styleNames.has(name) && setStyleValue(parsed, name, null)) writes.push([name, null]);
+        }
+        for (let [name, styleValue] of styles) {
+            if (setStyleValue(parsed, name, styleValue)) writes.push([name, styleValue]);
+        }
+        if (elt.style.cssText !== parsed.cssText) {
+            for (let [name, styleValue] of writes) setStyleValue(elt.style, name, styleValue);
+        }
+        if (elt.style.length === 0 && elt.hasAttribute('style')) elt.removeAttribute('style');
+        prop.liveStyles = styleNames;
     }
 
     function camelToKebab(s) {
@@ -203,7 +246,11 @@
                 let ancestor = elt.closest('[data-' + kebab + ']');
                 if (!ancestor) return undefined;
                 let raw = ancestor.dataset[prop];
-                try { return JSON.parse(raw); } catch { return raw; }
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return raw;
+                }
             },
             set: (_, prop, val) => {
                 if (typeof prop !== 'string') return false;
@@ -233,60 +280,53 @@
             getOwnPropertyDescriptor: (_, prop) => {
                 if (typeof prop !== 'string' || prop === 'htmxPowered') return;
                 let kebab = camelToKebab(prop);
-                if (elt.closest('[data-' + kebab + ']')) return { enumerable: true, configurable: true };
+                if (elt.closest('[data-' + kebab + ']')) return {enumerable: true, configurable: true};
             }
         });
     }
 
-    function applyMultiClass(elt, value) {
-        let prop = api.htmxProp(elt);
-        let oldManaged = prop.liveClasses || new Set();
-        let newManaged = new Set();
-
+    function parseClasses(value) {
+        let classes = new Map();
         if (typeof value === 'string') {
-            for (let c of value.trim().split(/\s+/).filter(Boolean)) {
-                newManaged.add(c);
-                elt.classList.add(c);
-            }
+            for (let name of value.trim().split(/\s+/).filter(Boolean)) classes.set(name, true);
         } else if (value && typeof value === 'object') {
-            for (let [key, cond] of Object.entries(value)) {
-                for (let c of key.trim().split(/\s+/).filter(Boolean)) {
-                    newManaged.add(c);
-                    elt.classList.toggle(c, !!cond);
-                }
+            for (let [names, present] of Object.entries(value)) {
+                for (let name of names.trim().split(/\s+/).filter(Boolean)) classes.set(name, !!present);
             }
         }
-        for (let c of oldManaged) if (!newManaged.has(c)) elt.classList.remove(c);
-        if (elt.classList.length === 0) elt.removeAttribute('class');
-        prop.liveClasses = newManaged;
+        return classes;
     }
 
-    function applyTake(targets, name, scope) {
-        let isClass = name.startsWith('.');
-        let key = isClass ? name.slice(1) : name;
-        let isAria = name.startsWith('aria-');
-        let auto = isClass ? '.' + key : '[' + name + ']';
-        let root = scope == null ? targets[0]?.parentElement
+    function setClasses(elt, value) {
+        let prop = api.htmxProp(elt);
+        let oldClasses = prop.liveClasses || new Set();
+        let classes = parseClasses(value);
+
+        for (let [name, present] of classes) {
+            if (elt.classList.contains(name) !== present) elt.classList.toggle(name, present);
+        }
+        for (let name of oldClasses) {
+            if (!classes.has(name) && elt.classList.contains(name)) elt.classList.remove(name);
+        }
+        if (elt.classList.length === 0 && elt.hasAttribute('class')) elt.removeAttribute('class');
+        prop.liveClasses = new Set(classes.keys());
+    }
+
+    function take(elts, name, scope) {
+        let selector = name.startsWith('.') ? name : '[' + name + ']';
+        let root = scope == null ? elts[0]?.parentElement
             : scope.nodeType ? scope : null;
         let sources = root
-            ? [root, ...root.querySelectorAll(auto)]
-            : document.querySelectorAll(typeof scope === 'string' ? scope : scope?.from || auto);
-        let targetSet = new Set(targets);
-        for (let s of sources) {
-            if (targetSet.has(s)) continue;
-            if (isClass) {
-                s.classList?.remove(key);
-                if (s.classList?.length === 0) s.removeAttribute('class');
-            } else if (isAria) {
-                s.setAttribute(name, 'false');
-            } else {
-                s.removeAttribute(name);
-            }
-        }
-        for (let t of targets) {
-            if (isClass) t.classList?.add(key);
-            else if (isAria) t.setAttribute(name, 'true');
-            else t.setAttribute(name, '');
+            ? [root, ...root.querySelectorAll(selector)]
+            : document.querySelectorAll(typeof scope === 'string' ? scope : scope?.from || selector);
+        let targets = new Set(elts);
+        let others = [...sources].filter(elt => !targets.has(elt));
+        if (name.startsWith('.') || name.startsWith('aria-')) {
+            setAttr(others, name, false);
+            setAttr(elts, name, true);
+        } else {
+            for (let elt of others) setDomAttr(elt, name, null);
+            for (let elt of elts) setDomAttr(elt, name, '');
         }
     }
 
@@ -295,7 +335,12 @@
         for (let a of args) if (a?.nodeType) target = a;
         return new Promise(resolve => {
             let cleanups = [], done = false;
-            let fire = v => { if (done) return; done = true; for (let c of cleanups) c(); resolve(v); };
+            let fire = v => {
+                if (done) return;
+                done = true;
+                for (let c of cleanups) c();
+                resolve(v);
+            };
             for (let a of args) {
                 if (a == null || a?.nodeType) continue;
                 let ms = typeof a === 'number' ? a
@@ -305,7 +350,7 @@
                     cleanups.push(() => clearTimeout(id));
                 } else if (typeof a === 'string') {
                     let h = evt => fire(evt);
-                    target.addEventListener(a, h, { once: true });
+                    target.addEventListener(a, h, {once: true});
                     cleanups.push(() => target.removeEventListener(a, h));
                 }
             }
@@ -315,9 +360,9 @@
     /**
      * Toggle or cycle a class, ARIA attribute, or attribute on an element.
      *
+     * @param {Element} elt - DOM element to mutate.
      * @param {string} name - Class (`.foo`) or attribute name.
      * @param {string|string[]} [values] - Cycle list (pipe-delimited string or array). Omit for binary flip.
-     * @param {Element} element - DOM element to mutate.
      *
      * @example
      * toggle('.active')                      // toggle class
@@ -327,7 +372,7 @@
      * toggle('.size', 'sm|md|lg')            // cycle classes (one at a time)
      * toggle('data-open', 'on|')             // 'on' ↔ absent slot
      */
-    function applyToggle(name, values, element) {
+    function toggle(elt, name, values) {
         let isClass = name.startsWith('.');
         let key = isClass ? name.slice(1) : name;
         let isAria = name.startsWith('aria-');
@@ -336,33 +381,33 @@
             : values);
 
         if (!asArray) {
-            if (isClass) element.classList.toggle(key);
+            if (isClass) elt.classList.toggle(key);
             else if (isAria) {
-                let cur = element.getAttribute(name);
-                element.setAttribute(name, cur === 'true' ? 'false' : 'true');
+                let cur = elt.getAttribute(name);
+                elt.setAttribute(name, cur === 'true' ? 'false' : 'true');
             } else {
-                element.toggleAttribute(name);
+                elt.toggleAttribute(name);
             }
             return;
         }
         if (isClass) {
-            let cur = asArray.findIndex(v => v && element.classList.contains(v));
-            if (cur >= 0) element.classList.remove(asArray[cur]);
+            let cur = asArray.findIndex(v => v && elt.classList.contains(v));
+            if (cur >= 0) elt.classList.remove(asArray[cur]);
             let next = asArray[(cur + 1) % asArray.length];
-            if (next) element.classList.add(next);
+            if (next) elt.classList.add(next);
         } else {
-            let curVal = element.getAttribute(name) ?? '';
+            let curVal = elt.getAttribute(name) ?? '';
             let cur = asArray.indexOf(curVal);
             let next = asArray[(cur + 1) % asArray.length];
-            if (next === '') element.removeAttribute(name);
-            else element.setAttribute(name, next);
+            if (next === '') elt.removeAttribute(name);
+            else elt.setAttribute(name, next);
         }
     }
 
     function makeDebounce() {
         // Closure form keyed by fn.toString() (no async context to abort); promise form keyed null.
         let channels = new Map();
-        let chan = key => channels.get(key) || (channels.set(key, { last: 0, reject: null }), channels.get(key));
+        let chan = key => channels.get(key) || (channels.set(key, {last: 0, reject: null}), channels.get(key));
         return (ms, fn) => {
             let ch = chan(fn ? fn.toString() : null);
             ch.reject?.(dbSym);
@@ -411,7 +456,10 @@
                 if (roots.length === 1) return [...roots[0].querySelectorAll(s)];
                 let out = [], seen = new Set();
                 for (let r of roots) for (let e of r.querySelectorAll(s)) {
-                    if (!seen.has(e)) { seen.add(e); out.push(e); }
+                    if (!seen.has(e)) {
+                        seen.add(e);
+                        out.push(e);
+                    }
                 }
                 return out.sort((a, b) => a.compareDocumentPosition(b) & 4 ? -1 : 1);
             };
@@ -446,7 +494,7 @@
         'find', 'findIndex', 'findLast', 'findLastIndex', 'flatMap', 'flat',
         'slice', 'indexOf', 'lastIndexOf', 'includes', 'join', 'at']);
 
-    let positions = { before: 'beforebegin', after: 'afterend', start: 'afterbegin', end: 'beforeend' };
+    let positions = {before: 'beforebegin', after: 'afterend', start: 'afterbegin', end: 'beforeend'};
 
     function qProxy(elts) {
         let proxy = new Proxy({}, {
@@ -459,13 +507,25 @@
                     for (let e of elts) for (let r of makeQ(e, e)(s).arr()) out.add(r);
                     return qProxy([...out]);
                 };
-                if (p === 'trigger') return (t, d, b) => { elts.forEach(e => htmx.trigger(e, t, d, b)); return proxy; };
-                if (p === 'insert') return (pos, s) => { elts.forEach(e => e.insertAdjacentHTML(positions[pos], s)); return proxy; };
-                if (p === 'take') return (name, scope) => { applyTake(elts, name, scope); return proxy; };
-                if (p === 'toggle') return (name, values) => { elts.forEach(e => applyToggle(name, values, e)); return proxy; };
+                if (p === 'trigger') return (t, d, b) => {
+                    elts.forEach(e => htmx.trigger(e, t, d, b));
+                    return proxy;
+                };
+                if (p === 'insert') return (pos, s) => {
+                    elts.forEach(e => e.insertAdjacentHTML(positions[pos], s));
+                    return proxy;
+                };
+                if (p === 'take') return (name, scope) => {
+                    take(elts, name, scope);
+                    return proxy;
+                };
+                if (p === 'toggle') return (name, values) => {
+                    elts.forEach(elt => toggle(elt, name, values));
+                    return proxy;
+                };
                 if (p === 'attr') return (name, ...rest) => {
-                    if (rest.length === 0) return applyAttr(elts, name);
-                    applyAttr(elts, name, ...rest);
+                    if (rest.length === 0) return getAttr(elts, name);
+                    setAttr(elts, name, rest[0]);
                     return proxy;
                 };
                 if (p === 'data') return elts[0] ? makeDataProxy(elts[0]) : undefined;
@@ -517,7 +577,7 @@
     function cleanupLive(elt) {
         let prop = elt._htmx;
         if (!prop?.liveRuns) return;
-        for (let run of prop.liveRuns) fns.delete(run);
+        for (let run of prop.liveRuns) liveExpressions.delete(run);
         delete prop.liveRuns;
         delete prop.liveRegistered;
         delete prop.liveAttrs;
@@ -535,16 +595,16 @@
                 let debounce = getDebounce(elt);
                 let run = async () => {
                     if (!elt.isConnected) {
-                        fns.delete(run);
+                        liveExpressions.delete(run);
                         return;
                     }
                     try {
-                        await api.executeJavaScript(elt, { debounce }, code, false);
+                        await api.executeJavaScript(elt, {debounce}, code, false);
                     } catch (e) {
-                        if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt });
+                        if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt});
                     }
                 };
-                fns.add(run);
+                liveExpressions.add(run);
                 prop.liveRuns = prop.liveRuns || new Set();
                 prop.liveRuns.add(run);
                 run();
@@ -567,71 +627,74 @@
         for (node of nodes) processElement(node);
     }
 
-    function registerSimpleLive(elt, attrName, code) {
+    function registerSimpleLive(elt, bindingName, code) {
         ensureActive();
         let debounce = getDebounce(elt);
         let isAsync = /\bawait\b/.test(code);
         let run = isAsync ? async () => {
             if (!elt.isConnected) {
-                fns.delete(run);
+                liveExpressions.delete(run);
                 return;
             }
             try {
-                let value = await api.executeJavaScript(elt, { debounce }, code, true);
-                writeAttrBinding(elt, attrName, value);
+                let exprResult = await api.executeJavaScript(elt, {debounce}, code, true);
+                renderBinding(elt, bindingName, exprResult);
                 observer?.takeRecords();
             } catch (e) {
-                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt, attr: attrName });
+                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt, attr: bindingName});
             }
         } : () => {
             if (!elt.isConnected) {
-                fns.delete(run);
+                liveExpressions.delete(run);
                 return;
             }
             try {
-                let value = api.executeJavaScript(elt, { debounce }, code, true, false);
-                writeAttrBinding(elt, attrName, value);
+                let exprResult = api.executeJavaScript(elt, {debounce}, code, true, false);
+                renderBinding(elt, bindingName, exprResult);
             } catch (e) {
-                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, { elt, attr: attrName });
+                if (e !== dbSym) console.error('htmx: hx-live expression threw', e, {elt, attr: bindingName});
             }
         };
-        fns.add(run);
+        liveExpressions.add(run);
         let prop = api.htmxProp(elt);
         prop.liveRuns = prop.liveRuns || new Set();
         prop.liveRuns.add(run);
         run();
     }
 
-    function writeAttrBinding(elt, attrName, value) {
-        if (attrName === 'text') {
-            let s = value == null ? '' : String(value);
-            if (elt.textContent !== s) elt.textContent = s;
+    /** Render one evaluated `:<name>` binding to its DOM target. */
+    function renderBinding(elt, name, exprResult) {
+        if (name === 'text') {
+            let text = exprResult == null ? '' : String(exprResult);
+            if (elt.textContent !== text) elt.textContent = text;
             return;
         }
-        if (attrName === 'html') {
-            let s = value == null ? '' : String(value);
-            if (elt.innerHTML !== s) elt.innerHTML = s;
+        if (name === 'html') {
+            let html = exprResult == null ? '' : String(exprResult);
+            if (elt.innerHTML !== html) elt.innerHTML = html;
             return;
         }
-        if (attrName === 'style') { applyStyleBinding(elt, value); return; }
-        // Always write aria-* and property-backed attrs (getter type differs from setter).
-        // For everything else skip if unchanged.
-        if (!attrName.startsWith('aria-') && !PROPERTY_ATTRS.has(attrName) && applyAttr([elt], attrName) === value) return;
-        applyAttr([elt], attrName, value);
+        if (name === 'style') {
+            setStyles(elt, exprResult);
+            return;
+        }
+        setAttr([elt], name, exprResult);
     }
 
     let asTargets = t => t == null ? []
         : typeof t === 'string' ? document.querySelectorAll(t)
-        : t.nodeType ? [t]
-        : t;
+            : t.nodeType ? [t]
+                : t;
 
     htmx.live = {
         q: s => makeQ(document.documentElement)(s),
         debounce: makeDebounce(),
         refresh: () => schedule(),
-        take: (target, name, scope) => applyTake([...asTargets(target)], name, scope),
-        toggle: (target, name, values) => [...asTargets(target)].forEach(e => applyToggle(name, values, e)),
-        attr: (target, name, ...rest) => applyAttr([...asTargets(target)], name, ...rest),
+        take: (target, name, scope) => take([...asTargets(target)], name, scope),
+        toggle: (target, name, values) => [...asTargets(target)].forEach(elt => toggle(elt, name, values)),
+        attr: (target, name, ...rest) => rest.length === 0
+            ? getAttr([...asTargets(target)], name)
+            : setAttr([...asTargets(target)], name, rest[0]),
         forEvent: (...args) => forEvent(null, ...args),
         nextFrame: () => new Promise(r => requestAnimationFrame(r))
     };
@@ -653,7 +716,7 @@
             swaps++;
         },
         htmx_finally_swap: () => {
-            if (--swaps === 0 && fns.size > 0) schedule();
+            if (--swaps === 0 && liveExpressions.size > 0) schedule();
         },
         htmx_scope: (elt, detail) => {
             Object.assign(detail.scope, {
@@ -662,9 +725,11 @@
                 nextFrame: () => new Promise(r => requestAnimationFrame(r)),
                 trigger: (type, detail, bubbles) => htmx.trigger(elt, type, detail, bubbles),
                 debounce: getDebounce(elt),
-                take: (name, scope) => applyTake([elt], name, scope),
-                toggle: (name, values) => applyToggle(name, values, elt),
-                attr: (name, ...rest) => applyAttr([elt], name, ...rest),
+                take: (name, scope) => take([elt], name, scope),
+                toggle: (name, values) => toggle(elt, name, values),
+                attr: (name, ...rest) => rest.length === 0
+                    ? getAttr([elt], name)
+                    : setAttr([elt], name, rest[0]),
                 insert: (pos, html) => elt.insertAdjacentHTML(positions[pos], html),
                 matches: (sel) => elt.matches(sel),
                 style: elt.style,

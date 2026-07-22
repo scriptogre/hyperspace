@@ -17,6 +17,7 @@ from app.lifespan import lifespan
 from app.routes import router
 
 app = FastAPI(
+    debug=settings.DEBUG,
     default_response_class=HTMLResponse,
     title="Hyperspace",
     lifespan=lifespan,

@@ -29,6 +29,7 @@ async def _install_triggers(pg: asyncpg.Connection) -> None:
     """
     await pg.execute("SELECT pg_advisory_lock($1)", _TRIGGER_LOCK)
     try:
+        await pg.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
         await pg.execute(_NOTIFY_FN)
         for table in _TABLES:
             await pg.execute(

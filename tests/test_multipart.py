@@ -6,7 +6,7 @@ from multipart_response.fastapi import MultipartResponse
 from app import routes
 
 
-def test_updates_endpoint_emits_a_multipart_part(monkeypatch):
+def test_stream_endpoint_emits_a_multipart_part(monkeypatch):
     monkeypatch.setattr(routes, "render", lambda name, context: "<p>Ready</p>")
 
     async def get_brick_stacks():
@@ -18,7 +18,7 @@ def test_updates_endpoint_emits_a_multipart_part(monkeypatch):
         yield "bricks"
 
     async def collect_part():
-        parts = [part async for part in routes.updates_endpoint(postgres_updates())]
+        parts = [part async for part in routes.stream_endpoint(postgres_updates())]
         assert len(parts) == 1
         return parts[0]
 
@@ -47,7 +47,7 @@ def test_cursor_notification_emits_only_the_cursor_part(monkeypatch):
         yield "cursors"
 
     async def collect_parts():
-        return [part async for part in routes.updates_endpoint(postgres_updates())]
+        return [part async for part in routes.stream_endpoint(postgres_updates())]
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         parts = executor.submit(asyncio.run, collect_parts()).result()

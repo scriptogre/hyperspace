@@ -92,12 +92,23 @@
             document.addEventListener('visibilitychange', connection.visibilityHandler);
         }
 
+        let currentResponse = ctx.response.raw;
+        let {
+            target: envelopeTarget,
+            swap: envelopeSwap,
+            select: envelopeSelect,
+            retarget: envelopeRetarget,
+            reswap: envelopeReswap,
+            reselect: envelopeReselect
+        } = extractPartActions(currentResponse.headers);
         let {
             content,
-            target: defaultTarget,
+            target: requestTarget,
             ...defaultSwap
         } = ctx.swap;
-        let currentResponse = ctx.response.raw;
+        let defaultTarget = envelopeRetarget ?? envelopeTarget ?? requestTarget;
+        let defaultSwapValue = envelopeReswap ?? envelopeSwap;
+        let defaultSelect = envelopeReselect ?? envelopeSelect ?? defaultSwap.select;
 
         try {
             while (element.isConnected && !connection.cancelled) {
@@ -172,8 +183,7 @@
                     api.triggerHtmxEvent(element, 'htmx:multipart:after:connection', {connection});
                 }
 
-                let completed = true;
-                let pending = [];
+                let pending = new Set();
                 let iterator = currentResponse.parts()[Symbol.asyncIterator]();
                 connection.iterator = iterator;
 
@@ -182,48 +192,68 @@
                         let {done, value: part} = await iterator.next();
                         if (done) break;
 
+                        let pendingWork = [];
+                        let detail = {
+                            ctx,
+                            part,
+                            cancelled: false,
+                            waitUntil: promise => pendingWork.push(Promise.resolve(promise))
+                        };
+                        let shouldProcess = api.triggerHtmxEvent(
+                            ctx.sourceElement,
+                            'htmx:multipart:before:part',
+                            detail
+                        );
+
+                        await Promise.all(pendingWork);
+                        if (!shouldProcess || detail.cancelled) continue;
+
+                        let {
+                            swap,     // HX-Swap
+                            target,   // HX-Target
+                            select,   // HX-Select
+                            reswap,   // HX-Reswap
+                            retarget, // HX-Retarget
+                            reselect, // HX-Reselect
+                            ...actions // other HX-* headers in camelCase
+                        } = extractPartActions(part.headers);
+
+                        // Let part headers override envelope and request defaults.
+                        swap = reswap ?? swap ?? defaultSwapValue;
+                        target = retarget ?? target ?? defaultTarget;
+                        select = reselect ?? select ?? defaultSelect;
+
+                        let text = await part.text();
                         let handling = (async () => {
-                            let {
-                                swap,     // HX-Swap
-                                target,   // HX-Target
-                                select,   // HX-Select
-                                reswap,   // HX-Reswap
-                                retarget, // HX-Retarget
-                                reselect, // HX-Reselect
-                                ...actions // other HX-* headers in camelCase
-                            } = extractPartActions(part.headers);
+                            let skipSwap = api.runActions(actions, ctx.sourceElement, {ctx, part});
 
-                            // Let HX-Re* headers take precedence.
-                            swap = reswap ?? swap;
-                            target = retarget ?? target;
-                            select = reselect ?? select;
-
-                            let text = await part.text();
-                            if (api.runActions(actions, ctx.sourceElement, {ctx})) {
-                                ctx.keepIndicators = true;
-                                return false;
-                            }
-
-                            let options = {source: ctx.sourceElement};
-                            if (swap) {
-                                options.swap = swap;
-                                if (defaultSwap.select !== undefined) options.select = defaultSwap.select;
-                                if (defaultSwap.selectOOB !== undefined) options.selectOOB = defaultSwap.selectOOB;
-                            } else {
-                                for (let key in defaultSwap) {
-                                    if (defaultSwap[key] !== undefined) options[key] = defaultSwap[key];
+                            if (!skipSwap) {
+                                let options = {source: ctx.sourceElement};
+                                if (swap) {
+                                    options.swap = swap;
+                                    if (defaultSwap.select !== undefined) options.select = defaultSwap.select;
+                                    if (defaultSwap.selectOOB !== undefined) options.selectOOB = defaultSwap.selectOOB;
+                                } else {
+                                    for (let key in defaultSwap) {
+                                        if (defaultSwap[key] !== undefined) options[key] = defaultSwap[key];
+                                    }
                                 }
+                                if (select) options.select = select;
+                                await htmx.swap(text, target, options);
                             }
-                            if (select) options.select = select;
-                            await htmx.swap(text, target ?? defaultTarget, options);
-                            return true;
+
+                            api.triggerHtmxEvent(ctx.sourceElement, 'htmx:multipart:after:part', {ctx, part});
                         })();
 
                         if (type === 'multipart/parallel') {
-                            pending.push(handling);
-                        } else if (!await handling) {
-                            completed = false;
-                            break;
+                            pending.add(handling);
+                            handling.then(
+                                () => pending.delete(handling),
+                                () => {
+                                }
+                            );
+                        } else {
+                            await handling;
                         }
                     }
                     await Promise.all(pending);
@@ -238,7 +268,6 @@
                     connection.iterator = null;
                 }
 
-                if (!completed) break;
                 if (!config.reconnect && !connection.reconnectRequested) break;
                 if (!element.isConnected || connection.cancelled) break;
                 connection.reconnectRequested = false;
@@ -266,7 +295,7 @@
         },
 
         /**
-         * Include `multipart/mixed` & `multipart/parallel` in htmx requests' `Accept` header.
+         * Add `multipart/mixed` and `multipart/parallel` to every htmx request's `Accept` header.
          */
         htmx_config_request: (element, {ctx: {request}}) => {
             request.headers['Accept'] = `${request.headers['Accept'] ?? request.headers['accept'] ?? 'text/html'}, multipart/mixed, multipart/parallel`;
@@ -293,6 +322,7 @@
 
             for (let connectElt of connectElements) {
                 let hxMultipartConnect = api.attributeValue(connectElt, 'hx-multipart:connect');
+                let hxMultipartClose = api.attributeValue(connectElt, 'hx-multipart:close');
                 let hxTrigger = api.attributeValue(connectElt, 'hx-trigger');
 
                 let url = hxMultipartConnect;
@@ -312,13 +342,17 @@
                             });
                     }
                 );
+
+                if (hxMultipartClose) {
+                    api.onTrigger(connectElt, hxMultipartClose, () => cleanup(connectElt, 'part'));
+                }
             }
         },
 
         htmx_before_response: (element, detail) => {
             let ctx = detail.ctx;
             let response = ctx.response.raw;
-            let contentType = response.headers?.get?.('Content-Type') || response.headers?.get?.('content-type') || '';
+            let contentType = response.headers.get('Content-Type') || '';
             let type = contentType.split(';', 1)[0].trim().toLowerCase();
             if (type !== 'multipart/mixed' && type !== 'multipart/parallel') return;
 
@@ -337,7 +371,7 @@
         }
     });
 
-// BEGIN vendored fetch-multipart parser from https://github.com/scriptogre/fetch-multipart
+// BEGIN vendored fetch-multipart parser from https://github.com/scriptogre/fetch-multipart @ e08a100de2
 // Copied so this extension can parse multipart responses without requiring core htmx changes.
 // @ts-self-types="./fetch-multipart.d.ts"
 // Streaming multipart parser for the browser.
@@ -428,8 +462,10 @@
         READING_BODY_UNTIL_BOUNDARY: 3,
         // Read exactly the declared Content-Length bytes.
         READING_BODY_WITH_CONTENT_LENGTH: 4,
+        // Content-Length body is complete. Validate the following boundary.
+        EXPECTING_BOUNDARY: 5,
         // Final "--" after a boundary was read.
-        DONE: 5,
+        DONE: 6,
     })
 
     const findDoubleNewline = createSearch('\r\n\r\n')
@@ -596,7 +632,7 @@
                 }
 
                 // Fast path: the part declared its size, so read exactly that many
-                // body bytes, then expect the boundary to immediately follow.
+                // body bytes and close its stream without waiting for more wire data.
                 if (this.#state === State.READING_BODY_WITH_CONTENT_LENGTH) {
                     const bodyBytes = Math.min(this.#remainingBodyBytes, chunkLength - index)
                     if (bodyBytes > 0) this.#routeBody(chunk.subarray(index, index + bodyBytes))
@@ -607,21 +643,23 @@
                         this.#buffer = chunk.subarray(index)
                         break
                     }
+                    this.#finalizeActivePart()
+                    this.#state = State.EXPECTING_BOUNDARY
+                }
+
+                if (this.#state === State.EXPECTING_BOUNDARY) {
                     if (chunkLength - index < this.#boundaryLength) {
                         this.#buffer = chunk.subarray(index)
                         break
                     }
                     for (let i = 0; i < this.#boundaryLength; i++) {
                         if (chunk[index + i] !== this.#boundaryBytes[i]) {
-                            const err = new MultipartParseError(
-                                'Content-Length does not match actual body length',
+                            throw new MultipartParseError(
+                                'Content-Length body is not followed by boundary',
                             )
-                            this.abortActive(err)
-                            throw err
                         }
                     }
 
-                    this.#finalizeActivePart()
                     index += this.#boundaryLength
                     this.#state = State.READING_BOUNDARY_SUFFIX
                 }
@@ -651,7 +689,10 @@
                 this.#buffer = null
             }
             if (this.#state !== State.DONE) {
-                const err = new MultipartParseError('Stream ended before final boundary')
+                const message = this.#state === State.READING_BODY_WITH_CONTENT_LENGTH
+                    ? 'Stream ended before Content-Length body completed'
+                    : 'Stream ended before final boundary'
+                const err = new MultipartParseError(message)
                 this.abortActive(err)
                 throw err
             }
@@ -1091,6 +1132,5 @@
             configurable: true,
         })
     }
-
 // END vendored fetch-multipart parser
 })();

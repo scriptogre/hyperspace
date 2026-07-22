@@ -18,6 +18,14 @@ COPY . /code
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# BENCHMARK BUILD STAGE: add profiling and load-test dependencies
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+FROM builder AS benchmark-builder
+
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # RUNTIME STAGE
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 FROM python:3.14-slim-bookworm AS runtime
@@ -43,6 +51,15 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=10 --start-period=10s \
 
 USER non-root
 EXPOSE 8000
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# BENCHMARK STAGE: runtime plus py-spy and load-test dependencies
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+FROM runtime AS benchmark
+
+USER root
+COPY --from=benchmark-builder /usr/local /usr/local
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -35,7 +35,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    command: postgres -c synchronous_commit=off
+    command: postgres -c synchronous_commit=off -c shared_preload_libraries=pg_stat_statements
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
@@ -52,6 +52,58 @@ services:
     volumes:
       - .:/code
     command: sh -c "bun install --frozen-lockfile && bunx tailwindcss -i ./app/static/css/input.css -o ./app/static/css/output.css --watch"
+
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: benchmark
+    entrypoint: []
+    command:
+      - py-spy
+      - record
+      - --nonblocking
+      - --rate
+      - "100"
+      - --full-filenames
+      - --format
+      - speedscope
+      - --output
+      - /code/bench/results/cpu.speedscope.json
+      - --
+      - python
+      - -m
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --workers
+      - "1"
+      - --log-level
+      - warning
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/code
+    init: true
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    env_file: .env
+    environment:
+      DEBUG: "false"
+      ENVIRONMENT: testing
+      POSTGRES_DB: hyperspace_bench
+      POSTGRES_HOST: postgres
+    stop_grace_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - benchmark
 
   tests:
     build:

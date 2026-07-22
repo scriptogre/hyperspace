@@ -23,7 +23,7 @@
 <body data-shift-key="false"
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
-      {% if player %}hx-multipart:connect="/updates"{% endif %}
+      {% if player %}hx-multipart:connect="/stream"{% endif %}
       hx-on="keydown, keyup -> data.shiftKey = event.shiftKey">
 
 {% if player %}
