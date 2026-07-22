@@ -9,6 +9,7 @@ services:
     init: true
     tty: true
     env_file: .env
+    entrypoint: ["sh", "/code/scripts/migrate-and-run"]
     command: granian --interface asgi --http 1 --loop uvloop --task-impl asyncio --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-4} app.main:app
     restart: always
     depends_on:

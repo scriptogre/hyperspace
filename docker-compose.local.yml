@@ -13,6 +13,7 @@ services:
     init: true
     tty: true
     env_file: .env
+    entrypoint: ["sh", "/code/scripts/migrate-and-run"]
     command: granian --interface asgi --http 1 --loop uvloop --task-impl asyncio --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-paths app --workers-kill-timeout 1 app.main:app
     restart: unless-stopped
     healthcheck:
@@ -58,7 +59,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: benchmark
-    entrypoint: []
+    entrypoint: ["sh", "/code/scripts/migrate-and-run"]
     command:
       - py-spy
       - record
