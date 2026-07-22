@@ -2,12 +2,10 @@
 FastAPI dependencies for players, bricks, and game state.
 """
 
-import asyncio
 from collections.abc import AsyncIterator
 from random import randrange
 from typing import Annotated
 
-import asyncpg
 from fastapi import Depends, Form, Header, HTTPException, Request, Response
 from starlette.status import (
     HTTP_204_NO_CONTENT,
@@ -98,35 +96,6 @@ async def require_online_player(
         yield player
     finally:
         await mark_player_as_offline(player)
-
-
-async def listen_to_postgres(
-    postgres: asyncpg.Connection,
-) -> AsyncIterator[str]:
-    event = asyncio.Event()
-    tables: set[str] = set()
-
-    def notify(conn, pid, channel, payload):
-        tables.add(payload)
-        event.set()
-
-    await postgres.add_listener("hyperspace", notify)
-    try:
-        while True:
-            await event.wait()
-            event.clear()
-            pending, tables = tables, set()
-            for table in sorted(pending):
-                yield table
-    finally:
-        await postgres.remove_listener("hyperspace", notify)
-
-
-async def get_postgres_updates(
-    request: Request,
-    _: Player = Depends(require_online_player, scope="request"),
-) -> AsyncIterator[str]:
-    return listen_to_postgres(request.state.postgres)
 
 
 async def lock_brick(brick_id: int) -> AsyncIterator[Brick | None]:

@@ -1,5 +1,6 @@
-"""Application lifespan: DB init and NOTIFY listener."""
+"""Application lifespan: DB init and shared update renderer."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,7 @@ from tortoise.contrib.fastapi import RegisterTortoise
 
 from app.config import settings
 from app.models import Brick, Player
+from app.updates import run_updates
 
 _NOTIFY_FN = """
 CREATE OR REPLACE FUNCTION hyperspace_notify() RETURNS trigger AS $$
@@ -58,13 +60,13 @@ async def lifespan(
 
         pg = await asyncpg.connect(settings.DATABASE_URL)
         await _install_triggers(pg)
+        updates = asyncio.create_task(run_updates(pg))
 
-        def keep_listening(conn, pid, channel, payload):
+        yield {}
+
+        updates.cancel()
+        try:
+            await updates
+        except asyncio.CancelledError:
             pass
-
-        await pg.add_listener("hyperspace", keep_listening)
-
-        yield {"postgres": pg}
-
-        await pg.remove_listener("hyperspace", keep_listening)
         await pg.close()
