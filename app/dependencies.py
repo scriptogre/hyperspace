@@ -98,6 +98,37 @@ async def require_online_player(
         await mark_player_as_offline(player)
 
 
+def get_fragments(
+    request: Request,
+    _: Player = Depends(require_online_player, scope="request"),
+) -> AsyncIterator[tuple[str, bytes]]:
+    """
+    Yield rendered fragments as their tables change.
+    """
+    fragments = request.state.fragments
+    changed = request.state.fragments_changed
+
+    async def iterate() -> AsyncIterator[tuple[str, bytes]]:
+        seen: dict[str, bytes] = {}
+        while True:
+            async with changed:
+                await changed.wait_for(
+                    lambda: any(
+                        html != seen.get(table) for table, html in fragments.items()
+                    )
+                )
+                pending = [
+                    (table, html)
+                    for table, html in fragments.items()
+                    if html != seen.get(table)
+                ]
+                seen.update(pending)
+            for fragment in pending:
+                yield fragment
+
+    return iterate()
+
+
 async def lock_brick(brick_id: int) -> AsyncIterator[Brick | None]:
     """Yield a row-locked brick, or None when absent."""
     async with in_transaction():

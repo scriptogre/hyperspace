@@ -1,12 +1,13 @@
 import asyncio
 
+import pytest
 from multipart_response.fastapi import MultipartResponse
 
-from app import routes, updates
+from app import routes
 
 
-def test_table_update_renders_its_own_partial(monkeypatch):
-    monkeypatch.setattr(updates, "render", lambda name, context: name)
+def test_table_notification_renders_its_fragment(monkeypatch):
+    monkeypatch.setattr(routes, "render", lambda name, context: name)
 
     async def get_brick_stacks():
         return {}
@@ -17,34 +18,40 @@ def test_table_update_renders_its_own_partial(monkeypatch):
     async def get_cursors():
         return []
 
-    monkeypatch.setattr(updates, "get_brick_stacks", get_brick_stacks)
-    monkeypatch.setattr(updates, "get_players", get_players)
-    monkeypatch.setattr(updates, "get_cursors", get_cursors)
+    monkeypatch.setattr(routes, "get_brick_stacks", get_brick_stacks)
+    monkeypatch.setattr(routes, "get_players", get_players)
+    monkeypatch.setattr(routes, "get_cursors", get_cursors)
 
     async def render_all():
         return [
-            await updates.render_update("bricks"),
-            await updates.render_update("players"),
-            await updates.render_update("cursors"),
-            await updates.render_update("events"),
+            await routes.render_fragment("bricks"),
+            await routes.render_fragment("players"),
+            await routes.render_fragment("cursors"),
+            await routes.render_fragment("events"),
         ]
 
     assert asyncio.run(render_all()) == [
-        ("_bricks.html", "#bricks", "outerMorph"),
-        ("_players.html", "#players", "innerHTML"),
-        ("_cursors.html", "#cursors", "outerMorph"),
+        b"_bricks.html",
+        b"_players.html",
+        b"_cursors.html",
         None,
     ]
 
 
-def test_stream_wraps_rendered_update_in_a_multipart_part(monkeypatch):
-    async def rendered_updates():
-        yield "<p>Ready</p>", "#bricks", "outerMorph"
-
-    monkeypatch.setattr(routes, "get_rendered_updates", rendered_updates)
+@pytest.mark.parametrize(
+    ("table", "target", "swap"),
+    [
+        ("bricks", "#bricks", "outerMorph"),
+        ("players", "#players", "innerHTML"),
+        ("cursors", "#cursors", "outerMorph"),
+    ],
+)
+def test_stream_routes_fragment(table, target, swap):
+    async def fragments():
+        yield table, b"<p>Ready</p>"
 
     async def collect_part():
-        parts = [part async for part in routes.stream_endpoint()]
+        parts = [part async for part in routes.stream(fragments())]
         assert len(parts) == 1
         return parts[0]
 
@@ -53,6 +60,6 @@ def test_stream_wraps_rendered_update_in_a_multipart_part(monkeypatch):
 
     assert b"content-type: text/html; charset=utf-8\r\n" in response.body
     assert b"content-length: 12\r\n" in response.body
-    assert b"hx-target: #bricks\r\n" in response.body
-    assert b"hx-swap: outerMorph\r\n" in response.body
+    assert f"hx-target: {target}\r\n".encode() in response.body
+    assert f"hx-swap: {swap}\r\n".encode() in response.body
     assert b"\r\n<p>Ready</p>\r\n--test-boundary--\r\n" in response.body

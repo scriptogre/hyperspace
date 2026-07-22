@@ -1,5 +1,7 @@
 """HTTP routes."""
 
+from collections.abc import AsyncIterator
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -21,11 +23,13 @@ from app.dependencies import (
     require_current_player,
     require_available_brick_or_204,
     require_htmx_request,
-    require_online_player,
+    get_brick_stacks,
+    get_cursors,
+    get_fragments,
+    get_players,
 )
 from app.jinja import render
-from app.models import Brick, Player
-from app.updates import get_rendered_updates
+from app.models import Brick, Cursor, Player
 from app.schemas import PlayerJoinForm
 from app.services import (
     delete_brick,
@@ -83,18 +87,66 @@ async def health() -> str:
 # ── Streams ─────────────────────────────────────────────────────────────
 
 
+async def render_fragment(table: str) -> bytes | None:
+    """
+    Render the fragment affected by one table notification.
+    """
+    if table == Brick.Meta.table:
+        return render(
+            "_bricks.html",
+            {"brick_stacks": await get_brick_stacks()},
+        ).encode()
+    if table == Player.Meta.table:
+        return render(
+            "_players.html",
+            {"players": await get_players()},
+        ).encode()
+    if table == Cursor.Meta.table:
+        return render(
+            "_cursors.html",
+            {"cursors": await get_cursors()},
+        ).encode()
+    return None
+
+
 @router.get(
     "/stream",
     response_class=MultipartResponse,
-    dependencies=[Depends(require_online_player, scope="request")],
 )
-async def stream_endpoint():
-    async for html, target, swap in get_rendered_updates():
-        yield Part(
-            html,
-            headers={"HX-Target": target, "HX-Swap": swap},
-            media_type="text/html",
-        )
+async def stream(
+    fragments: AsyncIterator[tuple[str, bytes]] = Depends(get_fragments),
+):
+    """
+    Stream rendered fragments as multipart HTML.
+    """
+    async for table, html in fragments:
+        if table == Brick.Meta.table:
+            yield Part(
+                html,
+                headers={
+                    "HX-Target": "#bricks",
+                    "HX-Swap": "outerMorph",
+                },
+                media_type="text/html",
+            )
+        elif table == Player.Meta.table:
+            yield Part(
+                html,
+                headers={
+                    "HX-Target": "#players",
+                    "HX-Swap": "innerHTML",
+                },
+                media_type="text/html",
+            )
+        elif table == Cursor.Meta.table:
+            yield Part(
+                html,
+                headers={
+                    "HX-Target": "#cursors",
+                    "HX-Swap": "outerMorph",
+                },
+                media_type="text/html",
+            )
 
 
 # ── Actions ─────────────────────────────────────────────────────────────
