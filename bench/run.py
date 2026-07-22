@@ -1,7 +1,8 @@
-"""Benchmark the current HTTP and multipart application from outside FastAPI."""
+"""Measure the cost of broadcasting one shared cursor update."""
 
 import asyncio
 import json
+import math
 import random
 import subprocess
 import time
@@ -11,48 +12,42 @@ from pathlib import Path
 
 import asyncpg
 import httpx
-from playwright.async_api import async_playwright
 
 from app.config import settings
 
 BASE_URL = "http://127.0.0.1:8001"
 BENCHMARK_DB = "hyperspace_bench"
+CLIENT_COUNTS = (1, 10, 50, 100)
+MOVES = 15
+MOVE_INTERVAL = 0.2
 RESULTS_DIR = Path(__file__).parent / "results"
 PROFILE_PATH = RESULTS_DIR / "cpu.speedscope.json"
-SERVER_LOG = RESULTS_DIR / "server.log"
 REPORT_PATH = RESULTS_DIR / "latest.md"
-MOVE_INTERVAL = 0.15
+SERVER_LOG = RESULTS_DIR / "server.log"
 
 
 @dataclass
-class Scenario:
-    name: str
+class Result:
     clients: int
-    movers: int
-    seconds: float
     patch_ms: list[float] = field(default_factory=list)
-    stream_ms: list[float] = field(default_factory=list)
-    parts: dict[str, int] = field(default_factory=dict)
-    errors: list[str] = field(default_factory=list)
-    sql: list[dict] = field(default_factory=list)
-    browser: dict[str, list[float] | list[str]] = field(default_factory=dict)
+    fanout_ms: list[float] = field(default_factory=list)
+    bytes_per_move: float = 0
+    sql_calls_per_move: float = 0
+    sql_ms_per_move: float = 0
+    error: str = ""
 
 
 def percentile(values: list[float], fraction: float) -> float:
     if not values:
         return 0
     ordered = sorted(values)
-    return ordered[min(int(len(ordered) * fraction), len(ordered) - 1)]
+    return ordered[math.ceil(len(ordered) * fraction) - 1]
 
 
-def latency(values: list[float]) -> str:
-    if not values:
-        return "n/a"
-    return (
-        f"p50={percentile(values, 0.50):.1f}ms "
-        f"p95={percentile(values, 0.95):.1f}ms "
-        f"p99={percentile(values, 0.99):.1f}ms"
-    )
+def format_bytes(value: float) -> str:
+    if value >= 1024 * 1024:
+        return f"{value / 1024 / 1024:.1f} MiB"
+    return f"{value / 1024:.1f} KiB"
 
 
 def postgres_kwargs(database: str) -> dict:
@@ -124,7 +119,7 @@ async def wait_for_server(process: subprocess.Popen) -> None:
             except httpx.HTTPError:
                 pass
             await asyncio.sleep(0.5)
-    raise RuntimeError("Benchmark server did not start")
+    raise RuntimeError("Benchmark server did not start within two minutes")
 
 
 def stop_server(process: subprocess.Popen, log: object) -> None:
@@ -157,53 +152,17 @@ def stop_server(process: subprocess.Popen, log: object) -> None:
     log.close()
 
 
-async def reset_database(connection: asyncpg.Connection) -> None:
-    await connection.execute(
-        "TRUNCATE events, cursors, bricks, players RESTART IDENTITY CASCADE"
-    )
-
-
-async def reset_query_stats(connection: asyncpg.Connection) -> None:
-    await connection.execute("SELECT pg_stat_statements_reset()")
-
-
-async def query_stats(connection: asyncpg.Connection) -> list[dict]:
-    rows = await connection.fetch(
-        """
-        SELECT calls,
-               total_exec_time,
-               mean_exec_time,
-               rows,
-               shared_blks_hit,
-               shared_blks_read,
-               wal_bytes,
-               regexp_replace(query, '\\s+', ' ', 'g') AS query
-          FROM pg_stat_statements
-         WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
-           AND query NOT ILIKE '%pg_stat_statements%'
-         ORDER BY total_exec_time DESC
-         LIMIT 12
-        """
-    )
-    return [dict(row) for row in rows]
-
-
 async def stream_reader(
     client: httpx.AsyncClient,
     ready: asyncio.Event,
-    cursor_parts: asyncio.Queue,
-    parts: dict[str, int],
-    errors: list[str],
+    cursor_parts: asyncio.Queue[tuple[float, int]],
 ) -> None:
     buffer = b""
     content_length: int | None = None
-    target = "unknown"
+    target = ""
     try:
         async with client.stream("GET", "/stream") as response:
-            if response.status_code != 200:
-                errors.append(f"stream status {response.status_code}")
-                ready.set()
-                return
+            response.raise_for_status()
             ready.set()
             async for chunk in response.aiter_bytes():
                 buffer += chunk
@@ -219,28 +178,22 @@ async def stream_reader(
                             if ":" in line:
                                 name, value = line.split(":", 1)
                                 parsed[name.lower()] = value.strip()
-                        if "content-length" not in parsed:
-                            errors.append("stream part missing Content-Length")
-                            return
                         content_length = int(parsed["content-length"])
-                        target = parsed.get("hx-target", "unknown")
+                        target = parsed.get("hx-target", "")
                     if len(buffer) < content_length:
                         break
                     buffer = buffer[content_length:]
-                    parts[target] = parts.get(target, 0) + 1
                     if target == "#cursors":
-                        cursor_parts.put_nowait(time.perf_counter())
+                        cursor_parts.put_nowait((time.perf_counter(), content_length))
                     content_length = None
     except asyncio.CancelledError:
         raise
-    except Exception as error:
-        errors.append(f"stream: {type(error).__name__}: {error}")
+    finally:
         ready.set()
 
 
 async def open_players(
     count: int,
-    scenario: Scenario,
 ) -> tuple[list[httpx.AsyncClient], list[asyncio.Queue], list[asyncio.Task]]:
     clients = [
         httpx.AsyncClient(
@@ -256,23 +209,33 @@ async def open_players(
         response = await client.post(
             "/join",
             data={
-                "name": f"Bench {scenario.name} {index} {uuid.uuid4().hex[:6]}",
+                "name": f"Bench {count} {index} {uuid.uuid4().hex[:6]}",
                 "color_seed": index % 100 + 1,
             },
         )
-        if response.status_code != 204:
-            raise RuntimeError(f"join returned {response.status_code}: {response.text}")
+        response.raise_for_status()
 
     await asyncio.gather(*(join(index, client) for index, client in enumerate(clients)))
+
+    # Build a real N-player world before opening streams. Setup traffic is not measured.
+    await asyncio.gather(
+        *(
+            client.patch(
+                "/cursor",
+                data={
+                    "x": index % settings.GRID_SIZE,
+                    "y": index // settings.GRID_SIZE % settings.GRID_SIZE,
+                    "z": -1,
+                },
+            )
+            for index, client in enumerate(clients)
+        )
+    )
 
     queues = [asyncio.Queue() for _ in clients]
     ready = [asyncio.Event() for _ in clients]
     tasks = [
-        asyncio.create_task(
-            stream_reader(
-                client, ready[index], queues[index], scenario.parts, scenario.errors
-            )
-        )
+        asyncio.create_task(stream_reader(client, ready[index], queues[index]))
         for index, client in enumerate(clients)
     ]
     await asyncio.wait_for(
@@ -290,204 +253,78 @@ async def close_players(
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
     await asyncio.gather(*(client.aclose() for client in clients))
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
 
 
-async def run_fanout(
-    connection: asyncpg.Connection,
-    count: int,
-) -> Scenario:
-    scenario = Scenario(f"fanout-{count}", count, 1, 1.5)
-    await reset_database(connection)
-    clients, queues, tasks = await open_players(count, scenario)
+def clear(queues: list[asyncio.Queue]) -> None:
+    for queue in queues:
+        while not queue.empty():
+            queue.get_nowait()
+
+
+async def move_and_wait(
+    client: httpx.AsyncClient,
+    queues: list[asyncio.Queue],
+    x: int,
+) -> tuple[float, float, int]:
+    clear(queues)
+    sent_at = time.perf_counter()
+    response = await client.patch("/cursor", data={"x": x, "y": 0, "z": -1})
+    patch_ms = (time.perf_counter() - sent_at) * 1000
+    response.raise_for_status()
+    arrivals = await asyncio.gather(
+        *(asyncio.wait_for(queue.get(), timeout=10) for queue in queues)
+    )
+    return (
+        patch_ms,
+        (max(arrival for arrival, _ in arrivals) - sent_at) * 1000,
+        sum(length for _, length in arrivals),
+    )
+
+
+async def sql_cost(connection: asyncpg.Connection) -> tuple[float, float]:
+    row = await connection.fetchrow(
+        """
+        SELECT coalesce(sum(calls), 0) AS calls,
+               coalesce(sum(total_exec_time), 0) AS total_exec_time
+          FROM pg_stat_statements
+         WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+           AND query NOT ILIKE '%pg_stat_statements%'
+        """
+    )
+    return float(row["calls"]), float(row["total_exec_time"])
+
+
+async def run_scenario(connection: asyncpg.Connection, count: int) -> Result:
+    result = Result(clients=count)
+    await connection.execute(
+        "TRUNCATE events, cursors, bricks, players RESTART IDENTITY CASCADE"
+    )
+    clients, queues, tasks = await open_players(count)
     try:
-        await asyncio.sleep(0.2)
-        await reset_query_stats(connection)
-        mover = clients[0]
-        x = y = 0
-        started = time.perf_counter()
-        for step in range(10):
-            for queue in queues:
-                while not queue.empty():
-                    queue.get_nowait()
-            x = (x + 1) % settings.GRID_SIZE
-            if x == 0:
-                y = (y + 1) % settings.GRID_SIZE
-            sent_at = time.perf_counter()
-            response = await mover.patch("/cursor", data={"x": x, "y": y, "z": -1})
-            scenario.patch_ms.append((time.perf_counter() - sent_at) * 1000)
-            if response.status_code != 204:
-                scenario.errors.append(f"cursor status {response.status_code}")
-            arrivals = await asyncio.gather(
-                *(asyncio.wait_for(queue.get(), timeout=5) for queue in queues),
-                return_exceptions=True,
+        await asyncio.sleep(1)
+        await move_and_wait(clients[0], queues, 1)
+        await connection.execute("SELECT pg_stat_statements_reset()")
+
+        total_bytes = 0
+        for step in range(MOVES):
+            started = time.perf_counter()
+            patch_ms, fanout_ms, body_bytes = await move_and_wait(
+                clients[0], queues, step % settings.GRID_SIZE
             )
-            for arrival in arrivals:
-                if isinstance(arrival, float):
-                    scenario.stream_ms.append((arrival - sent_at) * 1000)
-                else:
-                    scenario.errors.append("cursor part timeout")
-            remaining = MOVE_INTERVAL - (time.perf_counter() - sent_at)
+            result.patch_ms.append(patch_ms)
+            result.fanout_ms.append(fanout_ms)
+            total_bytes += body_bytes
+            remaining = MOVE_INTERVAL - (time.perf_counter() - started)
             if remaining > 0:
                 await asyncio.sleep(remaining)
-        scenario.seconds = time.perf_counter() - started
-        scenario.sql = await query_stats(connection)
-        return scenario
+
+        calls, sql_ms = await sql_cost(connection)
+        result.bytes_per_move = total_bytes / MOVES
+        result.sql_calls_per_move = calls / MOVES
+        result.sql_ms_per_move = sql_ms / MOVES
+        return result
     finally:
-        await close_players(clients, tasks)
-
-
-async def browser_probe() -> dict[str, list[float] | list[str]]:
-    result: dict[str, list[float] | list[str]] = {
-        "create": [],
-        "drag": [],
-        "delete": [],
-        "errors": [],
-    }
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch()
-        page = await browser.new_page()
-        page.on(
-            "console",
-            lambda message: (
-                result["errors"].append(message.text)
-                if message.type in {"error", "warning"}
-                else None
-            ),
-        )
-        await page.goto(BASE_URL)
-        form = page.locator("#player-form")
-        await form.locator("input[name=name]").fill("Benchmark Browser")
-        await form.locator("button[type=submit]").click()
-        await form.wait_for(state="detached")
-
-        created: list[str] = []
-        for _ in range(5):
-            cell = page.locator(".grid-cell:not(:has(.brick))").first
-            cell_id = await cell.get_attribute("id")
-            started = time.perf_counter()
-            await cell.locator(":scope > button[aria-label='Add brick']").click()
-            await page.wait_for_function(
-                "id => document.querySelector(`#${id} > .brick`)",
-                arg=cell_id,
-            )
-            result["create"].append((time.perf_counter() - started) * 1000)
-            brick_id = await page.locator(f"#{cell_id} > .brick").get_attribute("id")
-            created.append(brick_id)
-
-        brick_id = created[0]
-        for _ in range(5):
-            source = page.locator(f"#{brick_id}")
-            target = page.locator(".grid-cell:not(:has(.brick))").first
-            target_id = await target.get_attribute("id")
-            source_button = source.locator(
-                ":scope > button:not([hx-delete]):not([hidden])"
-            )
-            source_box = await source_button.bounding_box()
-            target_box = await target.locator(":scope > button").bounding_box()
-            await page.mouse.move(
-                source_box["x"] + source_box["width"] / 2,
-                source_box["y"] + source_box["height"] / 2,
-            )
-            started = time.perf_counter()
-            await page.mouse.down()
-            await page.mouse.move(
-                target_box["x"] + target_box["width"] / 2,
-                target_box["y"] + target_box["height"] / 2,
-                steps=8,
-            )
-            await page.mouse.up()
-            await page.wait_for_function(
-                "([cell, brick]) => document.querySelector(`#${cell} > #${brick}`)",
-                arg=[target_id, brick_id],
-            )
-            result["drag"].append((time.perf_counter() - started) * 1000)
-
-        for brick_id in created[1:]:
-            brick = page.locator(f"#{brick_id}")
-            delete_button = brick.locator(":scope > button[hx-delete]")
-            await page.keyboard.down("Shift")
-            box = await delete_button.bounding_box()
-            await page.mouse.move(
-                box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
-            )
-            started = time.perf_counter()
-            await page.mouse.down()
-            await asyncio.sleep(0.12)
-            await page.mouse.up()
-            await page.keyboard.up("Shift")
-            await page.wait_for_function(
-                "id => !document.getElementById(id)",
-                arg=brick_id,
-            )
-            result["delete"].append((time.perf_counter() - started) * 1000)
-
-        await browser.close()
-    return result
-
-
-async def run_mixed(connection: asyncpg.Connection) -> Scenario:
-    scenario = Scenario("mixed", 100, 20, 10)
-    await reset_database(connection)
-    clients, _, tasks = await open_players(scenario.clients, scenario)
-    stop = asyncio.Event()
-
-    async def move(index: int) -> None:
-        client = clients[index]
-        x = index % settings.GRID_SIZE
-        y = index // settings.GRID_SIZE % settings.GRID_SIZE
-        while not stop.is_set():
-            x = max(0, min(settings.GRID_SIZE - 1, x + random.choice((-1, 0, 1))))
-            y = max(0, min(settings.GRID_SIZE - 1, y + random.choice((-1, 0, 1))))
-            started = time.perf_counter()
-            try:
-                response = await client.patch(
-                    "/cursor",
-                    data={"x": x, "y": y, "z": -1},
-                )
-                scenario.patch_ms.append((time.perf_counter() - started) * 1000)
-                if response.status_code != 204:
-                    scenario.errors.append(f"cursor status {response.status_code}")
-            except Exception as error:
-                scenario.errors.append(f"cursor: {type(error).__name__}")
-            await asyncio.sleep(random.uniform(0.10, 0.25))
-
-    async def build(index: int) -> None:
-        client = clients[index]
-        while not stop.is_set():
-            try:
-                response = await client.post(
-                    "/bricks",
-                    data={
-                        "x": random.randrange(settings.GRID_SIZE),
-                        "y": random.randrange(settings.GRID_SIZE),
-                    },
-                )
-                if response.status_code != 204:
-                    scenario.errors.append(f"brick status {response.status_code}")
-            except Exception as error:
-                scenario.errors.append(f"brick: {type(error).__name__}")
-            await asyncio.sleep(random.uniform(1.5, 3.0))
-
-    workers = [asyncio.create_task(move(index)) for index in range(scenario.movers)]
-    workers.extend(asyncio.create_task(build(index)) for index in range(2))
-    try:
-        await asyncio.sleep(0.2)
-        await reset_query_stats(connection)
-        started = time.perf_counter()
-        browser_task = asyncio.create_task(browser_probe())
-        await asyncio.sleep(scenario.seconds)
-        stop.set()
-        await asyncio.gather(*workers, return_exceptions=True)
-        scenario.browser = await asyncio.wait_for(browser_task, timeout=30)
-        scenario.seconds = time.perf_counter() - started
-        scenario.sql = await query_stats(connection)
-        return scenario
-    finally:
-        stop.set()
-        for worker in workers:
-            worker.cancel()
-        await asyncio.gather(*workers, return_exceptions=True)
         await close_players(clients, tasks)
 
 
@@ -503,132 +340,93 @@ def cpu_summary() -> list[tuple[str, float]]:
             continue
         item_weights = item.get("weights") or [1] * len(item["samples"])
         for sample, weight in zip(item["samples"], item_weights, strict=True):
-            app_frame = None
             for frame_index in reversed(sample):
                 frame = frames[frame_index]
                 filename = frame.get("file", "")
-                if "/app/" in filename or "/bench/" in filename:
-                    app_frame = frame
-                    break
-            if app_frame is None:
-                continue
-            name = f"{app_frame['name']} ({Path(app_frame.get('file', '')).name})"
-            weights[name] = weights.get(name, 0) + weight
-            total += weight
+                if "/app/" not in filename or frame["name"] == "<module>":
+                    continue
+                name = f"{frame['name']} ({Path(filename).name})"
+                weights[name] = weights.get(name, 0) + weight
+                total += weight
+                break
+    if not total:
+        return []
     return sorted(
         ((name, weight / total * 100) for name, weight in weights.items()),
         key=lambda item: item[1],
         reverse=True,
-    )[:12]
+    )[:5]
 
 
-def write_report(scenarios: list[Scenario], cpu: list[tuple[str, float]]) -> None:
+def write_report(results: list[Result], cpu: list[tuple[str, float]]) -> None:
     commit = subprocess.check_output(
-        ["git", "rev-parse", "--short", "HEAD"],
-        text=True,
+        ["git", "rev-parse", "--short", "HEAD"], text=True
     ).strip()
     lines = [
-        "# Hyperspace benchmark",
+        "# Cursor fanout benchmark",
         "",
-        f"Commit: `{commit}`  ",
-        f"Generated: `{time.strftime('%Y-%m-%d %H:%M:%S')}`",
+        f"Commit: `{commit}`",
         "",
-        "## End-to-end results",
+        "One player moves at 5 Hz in an N-player world. Each move completes when every stream receives the cursor part.",
         "",
-        "| Scenario | Clients | Movers | Duration | PATCH latency | Stream latency | Parts/s | Errors |",
-        "| --- | ---: | ---: | ---: | --- | --- | ---: | ---: |",
+        "| Players | PATCH p95 | Fanout p50 | Fanout p95 | SQL calls/move | SQL ms/move | HTML/move |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for scenario in scenarios:
-        part_count = sum(scenario.parts.values())
-        lines.append(
-            f"| {scenario.name} | {scenario.clients} | {scenario.movers} | "
-            f"{scenario.seconds:.1f}s | {latency(scenario.patch_ms)} | "
-            f"{latency(scenario.stream_ms)} | {part_count / scenario.seconds:.1f} | "
-            f"{len(scenario.errors)} |"
-        )
-
-    mixed = scenarios[-1]
-    lines.extend(["", "## Browser under mixed load", ""])
-    for action in ("create", "drag", "delete"):
-        values = mixed.browser.get(action, [])
-        lines.append(f"- **{action}:** {latency(values)}")
-    browser_errors = mixed.browser.get("errors", [])
-    lines.append(f"- **console errors:** {len(browser_errors)}")
-
-    for scenario in scenarios:
-        lines.extend(
-            [
-                "",
-                f"## SQL: {scenario.name}",
-                "",
-                "| Calls | Total ms | Mean ms | Rows | Hits | Reads | WAL bytes | Query |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
-            ]
-        )
-        for query in scenario.sql:
-            sql = query["query"].replace("|", "\\|")[:180]
+    for result in results:
+        if result.error:
             lines.append(
-                f"| {query['calls']} | {query['total_exec_time']:.1f} | "
-                f"{query['mean_exec_time']:.3f} | {query['rows']} | "
-                f"{query['shared_blks_hit']} | {query['shared_blks_read']} | "
-                f"{query['wal_bytes']} | `{sql}` |"
+                f"| {result.clients} | timeout | timeout | timeout | n/a | n/a | n/a |"
             )
+            continue
+        lines.append(
+            f"| {result.clients} | {percentile(result.patch_ms, 0.95):.1f} ms | "
+            f"{percentile(result.fanout_ms, 0.50):.1f} ms | "
+            f"{percentile(result.fanout_ms, 0.95):.1f} ms | "
+            f"{result.sql_calls_per_move:.1f} | {result.sql_ms_per_move:.2f} | "
+            f"{format_bytes(result.bytes_per_move)} |"
+        )
 
-    lines.extend(["", "## Python CPU", ""])
-    if cpu:
-        for name, percentage in cpu:
-            lines.append(f"- **{percentage:.1f}%** {name}")
-    else:
-        lines.append("No application samples were recorded.")
-    lines.extend(
-        [
-            "",
-            f"Open `{PROFILE_PATH}` in https://www.speedscope.app for the full profile.",
-            "",
-        ]
-    )
-    REPORT_PATH.write_text("\n".join(lines))
+    lines.extend(["", "Hot application CPU:", ""])
+    for name, percentage in cpu:
+        lines.append(f"- {percentage:.0f}% `{name}`")
+    REPORT_PATH.write_text("\n".join(lines) + "\n")
 
 
 async def run() -> None:
     random.seed(1)
-    RESULTS_DIR.mkdir(exist_ok=True)
     await recreate_database()
     process, log = start_server()
-    scenarios: list[Scenario] = []
+    results: list[Result] = []
     try:
         await wait_for_server(process)
         connection = await asyncpg.connect(**postgres_kwargs(BENCHMARK_DB))
         try:
-            for count in (1, 10, 50, 100):
-                scenario = await asyncio.wait_for(
-                    run_fanout(connection, count),
-                    timeout=30,
-                )
-                scenarios.append(scenario)
-                print(
-                    f"{scenario.name:>12}: PATCH {latency(scenario.patch_ms)}; "
-                    f"stream {latency(scenario.stream_ms)}; errors={len(scenario.errors)}",
-                    flush=True,
-                )
-            mixed = await asyncio.wait_for(run_mixed(connection), timeout=60)
-            scenarios.append(mixed)
-            print(
-                f"{mixed.name:>12}: PATCH {latency(mixed.patch_ms)}; "
-                f"parts/s={sum(mixed.parts.values()) / mixed.seconds:.1f}; "
-                f"errors={len(mixed.errors)}",
-                flush=True,
-            )
+            for count in CLIENT_COUNTS:
+                try:
+                    result = await asyncio.wait_for(
+                        run_scenario(connection, count), timeout=45
+                    )
+                except TimeoutError:
+                    result = Result(clients=count, error="timeout")
+                results.append(result)
+                if result.error:
+                    print(f"{count:3} players: timed out", flush=True)
+                else:
+                    print(
+                        f"{count:3} players: fanout p95 "
+                        f"{percentile(result.fanout_ms, 0.95):.1f}ms, "
+                        f"SQL {result.sql_calls_per_move:.1f}/move, "
+                        f"HTML {format_bytes(result.bytes_per_move)}/move",
+                        flush=True,
+                    )
         finally:
             await connection.close()
     finally:
         stop_server(process, log)
         await drop_database()
 
-    cpu = cpu_summary()
-    write_report(scenarios, cpu)
-    print(f"\nReport: {REPORT_PATH}")
-    print(f"CPU profile: {PROFILE_PATH}")
+    write_report(results, cpu_summary())
+    print(f"\n{REPORT_PATH.read_text()}")
 
 
 if __name__ == "__main__":
