@@ -108,13 +108,29 @@ realistic mix (a fraction moving at once), one worker reaches ~4000 users.
 - **No message bus.** Each worker holds its own Postgres LISTEN, so every worker
   already hears every change directly. A bus like NATS would sit in the middle
   doing nothing.
-- **uvicorn, not Granian.** Granian (a Rust server) wins on plain HTTP throughput,
-  but it crosses the Python/Rust boundary once per message, which makes our
-  many-tiny-WebSocket sends 5 to 9x slower.
+- **Granian, not Uvicorn.** Granian sustained about twice as many shared ASGI
+  streams before dropping updates. See the benchmark below.
 - **Cursors stay in Postgres.** Keeping them in app memory would be faster, but it
   would make the database no longer the source of truth. Not worth breaking the rule.
 - **No Redis cache.** Redis is a separate process, so a read still pays a network
   round trip. That is the same cost as reading Postgres, so it would not help.
+
+## ASGI fanout benchmark
+
+Uvicorn 0.51.0 versus Granian 2.7.9: one worker, HTTP/1.1, `uvloop`, one shared
+32-byte frame at 20Hz, eight client processes, and three alternating 20-second
+trials on the same Mac.
+
+| Streams | Uvicorn p95 | Uvicorn missed | Granian p95 | Granian missed |
+| ------: | -----------: | --------------: | -----------: | ---------------: |
+| 4,000 | 62ms | 0% | 33ms | 0% |
+| 8,000 | 92ms | 41% | 68ms | 0.25% |
+
+Saturation: Uvicorn between 2,000 and 4,000 streams; Granian between 4,000 and
+8,000. At 8,000, Granian used 125% CPU and 311MiB summed RSS; Uvicorn used 73%
+and 148MiB while delivering only 59% of updates. Summed RSS overcounts shared
+pages. The benchmark excludes queries, rendering, compression, and browser
+morphing.
 
 ## Aren't the database round-trips the real cost?
 

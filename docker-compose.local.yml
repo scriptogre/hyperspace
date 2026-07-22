@@ -13,7 +13,7 @@ services:
     init: true
     tty: true
     env_file: .env
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.html" --ws-per-message-deflate false --timeout-graceful-shutdown 1
+    command: granian --interface asgi --http 1 --loop uvloop --task-impl asyncio --host 0.0.0.0 --port 8000 --workers 1 --reload --reload-paths app --workers-kill-timeout 1 app.main:app
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/health')" ]
@@ -70,11 +70,17 @@ services:
       - speedscope
       - --output
       - /code/bench/results/cpu.speedscope.json
+      - --subprocesses
       - --
-      - python
-      - -m
-      - uvicorn
-      - app.main:app
+      - granian
+      - --interface
+      - asgi
+      - --http
+      - "1"
+      - --loop
+      - uvloop
+      - --task-impl
+      - asyncio
       - --host
       - 0.0.0.0
       - --port
@@ -83,6 +89,7 @@ services:
       - "1"
       - --log-level
       - warning
+      - app.main:app
     ports:
       - "8001:8001"
     volumes:

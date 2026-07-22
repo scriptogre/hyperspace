@@ -5,7 +5,6 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.0",
-    "uvicorn[standard]>=0.51.0",
     "tortoise-orm>=1.1.7",
     "asyncpg>=0.31.0",
     "minijinja>=2.21.0",
@@ -13,6 +12,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "itsdangerous>=2.2.0",
     "multipart-response[fastapi]>=0.1.0",
+    "granian[reload,uvloop]>=2.7.9",
 ]
 
 [tool.uv]
