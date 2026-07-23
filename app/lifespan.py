@@ -1,4 +1,4 @@
-"""Application lifespan: DB init and shared update renderer."""
+"""Application lifespan: DB init and Postgres notification forwarding."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -8,21 +8,70 @@ import asyncpg
 from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
+from app.broadcast import publish_template
 from app.config import settings
-from app.models import Brick, Cursor, Player
+from app.dependencies import get_brick_stacks, get_cursors, get_players
+from app.jinja import render
+from app.models import Brick, Player
+
+
+@asynccontextmanager
+async def lifespan(
+    app: FastAPI,
+) -> AsyncIterator[None]:
+    """
+    Start the DB and NOTIFY listener for the app's lifetime.
+    """
+    async with RegisterTortoise(
+        app, config=settings.TORTOISE_ORM, generate_schemas=False
+    ):
+        await Brick.all().update(dragged_by_id=None)
+        await Player.all().update(is_online=False)
+
+        postgres = await asyncpg.connect(settings.DATABASE_URL)
+
+        # TODO: Find a more elgant way to do this
+        async def forward_postgres_notifications() -> None:
+            async for table_name in listen_to_postgres(postgres):
+                if table_name == "bricks":
+                    template_name = "_bricks.html"
+                    context = {"brick_stacks": await get_brick_stacks()}
+                elif table_name == "players":
+                    template_name = "_players.html"
+                    context = {"players": await get_players()}
+                elif table_name == "cursors":
+                    template_name = "_cursors.html"
+                    context = {"cursors": await get_cursors()}
+                else:
+                    continue
+
+                html = render(template_name, context).encode()
+                publish_template(template_name, html)
+
+        forwarder = asyncio.create_task(forward_postgres_notifications())
+
+        try:
+            yield
+        finally:
+            forwarder.cancel()
+            try:
+                await forwarder
+            except asyncio.CancelledError:
+                pass
+            await postgres.close()
 
 
 async def listen_to_postgres(
     postgres: asyncpg.Connection,
 ) -> AsyncIterator[str]:
     """
-    Yield table names received through PostgreSQL notifications.
+    Yield (coalesced) notifications from Postgres LISTEN/NOTIFY.
     """
     notified = asyncio.Event()
-    tables: set[str] = set()
+    pending: set[str] = set()
 
-    def notify(conn, pid, channel, payload):
-        tables.add(payload)
+    def notify(_, __, ___, notification):
+        pending.add(notification)
         notified.set()
 
     await postgres.add_listener("hyperspace", notify)
@@ -30,61 +79,7 @@ async def listen_to_postgres(
         while True:
             await notified.wait()
             notified.clear()
-            pending, tables = tables, set()
-            for table in sorted(pending):
-                yield table
+            while pending:
+                yield pending.pop()
     finally:
         await postgres.remove_listener("hyperspace", notify)
-
-
-@asynccontextmanager
-async def lifespan(
-    app: FastAPI,
-) -> AsyncIterator[dict[str, object]]:
-    """
-    Start the DB and NOTIFY listener for the app's lifetime.
-    """
-    async with RegisterTortoise(
-        app, config=settings.TORTOISE_ORM, generate_schemas=False
-    ):
-        # Release drags and sessions orphaned by ungraceful shutdown
-        await Brick.all().update(dragged_by_id=None)
-        await Player.all().update(is_online=False)
-
-        pg = await asyncpg.connect(settings.DATABASE_URL)
-
-        # Delay the import to avoid the app startup cycle.
-        from app.routes import render_fragment
-
-        fragments: dict[str, bytes] = {}
-        changed = asyncio.Condition()
-        for table in (Brick.Meta.table, Player.Meta.table, Cursor.Meta.table):
-            html = await render_fragment(table)
-            if html is not None:
-                fragments[table] = html
-
-        async def refresh_fragments() -> None:
-            """
-            Refresh each fragment PostgreSQL says may have changed.
-            """
-            async for table in listen_to_postgres(pg):
-                html = await render_fragment(table)
-                if html is None:
-                    continue
-                async with changed:
-                    fragments[table] = html
-                    changed.notify_all()
-
-        refresher = asyncio.create_task(refresh_fragments())
-
-        yield {
-            "fragments": fragments,
-            "fragments_changed": changed,
-        }
-
-        refresher.cancel()
-        try:
-            await refresher
-        except asyncio.CancelledError:
-            pass
-        await pg.close()

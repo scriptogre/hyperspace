@@ -66,4 +66,18 @@
             </kbd></dd>
         </dl>
     </aside>
+
+    <aside id="join-qr" aria-labelledby="join-qr-title">
+        <div>
+            <img src="{{ url_for('static', path='images/logo_transp.png') }}" alt="">
+            <p id="join-qr-title">Join us live at BigSkyDevCon 2026</p>
+        </div>
+        <a href="https://hyperspace.christiantanul.com"
+           aria-label="Open Hyperspace on this device">
+            <qr-code content="https://hyperspace.christiantanul.com"
+                     ecclevel="M"
+                     margin="4"
+                     aria-hidden="true"></qr-code>
+        </a>
+    </aside>
 </div>

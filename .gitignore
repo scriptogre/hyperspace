@@ -9,4 +9,5 @@ __pycache__/
 
 # Local scratch / experiments, not part of the app
 bench/results/
+.qr-*.png
 test.py

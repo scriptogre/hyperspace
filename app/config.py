@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     # --------------------
     ENVIRONMENT: Literal["local", "production", "testing"] = "local"
     DEBUG: bool = False
-    WEB_CONCURRENCY: int = 4
     SECRET_KEY: str = "dev-insecure-change-me"  # signs the form-errors cookie
     GRID_SIZE: int = 12  # cells per side of the square world
 

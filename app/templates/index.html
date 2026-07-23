@@ -9,15 +9,19 @@
 
     <link href="{{ url_for('static', path='css/output.css') }}" rel="stylesheet">
 
+    <!-- <qr-code> Web Component (https://github.com/bitjson/qr-code) -->
+    <script defer src="{{ url_for('static', path='js/qr-code.js') }}"></script>
+
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-multipart.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
+    <script src="{{ url_for('static', path='js/drag-and-drop-mobile-polyfill.js') }}"></script>
+
     <script>
         htmx.registerExtension('dollar-query', {
             htmx_scope: (element, detail) => detail.scope.$ = detail.scope.q
         })
     </script>
-    <script src="{{ url_for('static', path='js/drag-and-drop-mobile-polyfill.js') }}"></script>
 </head>
 
 <body data-shift-key="false"

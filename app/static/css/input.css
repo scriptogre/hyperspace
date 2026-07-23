@@ -213,7 +213,8 @@
         }
 
         #player-form,
-        #controls {
+        #controls,
+        #join-qr {
             @apply rounded-2xl border border-border bg-card p-6 shadow-iso;
         }
 
@@ -355,6 +356,30 @@
                         scale: 0.8;
                     }
                 }
+            }
+        }
+
+        #join-qr {
+            @apply col-span-full flex flex-col items-center justify-between gap-6 px-4 sm:flex-row sm:px-6;
+
+            > div {
+                @apply flex flex-col items-center gap-3 sm:flex-row;
+            }
+
+            img {
+                @apply h-20 w-auto shrink-0;
+            }
+
+            p {
+                @apply text-sm font-medium whitespace-nowrap text-foreground;
+            }
+
+            > a {
+                @apply shrink-0 overflow-hidden rounded-lg bg-white text-neutral-950;
+            }
+
+            qr-code {
+                @apply block size-32;
             }
         }
     }

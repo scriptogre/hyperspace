@@ -2,15 +2,16 @@ from tortoise import migrations
 from tortoise.migrations import operations as ops
 from tortoise import fields
 
+
 class Migration(migrations.Migration):
-    dependencies = [('models', '0001_auto')]
+    dependencies = [("models", "0001_auto")]
 
     initial = False
 
     operations = [
         ops.AddField(
-            model_name='Brick',
-            name='color_seed',
+            model_name="Brick",
+            name="color_seed",
             field=fields.IntField(null=True),
         ),
         ops.RunSQL(
@@ -30,14 +31,19 @@ class Migration(migrations.Migration):
             """
         ),
         ops.AlterField(
-            model_name='Brick',
-            name='color_seed',
+            model_name="Brick",
+            name="color_seed",
             field=fields.IntField(),
         ),
-        ops.RemoveField(model_name='Brick', name='color'),
+        ops.RemoveField(model_name="Brick", name="color"),
         ops.AlterModelOptions(
-            name='Cursor',
-            options={'table': 'cursors', 'app': 'models', 'pk_attr': 'player_id', 'table_description': "Last known grid position for a player's cursor."},
+            name="Cursor",
+            options={
+                "table": "cursors",
+                "app": "models",
+                "pk_attr": "player_id",
+                "table_description": "Last known grid position for a player's cursor.",
+            },
         ),
-        ops.RemoveField(model_name='Player', name='color'),
+        ops.RemoveField(model_name="Player", name="color"),
     ]
