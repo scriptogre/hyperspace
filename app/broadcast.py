@@ -39,6 +39,7 @@ class SharedStream:
         self.queue_size = queue_size
         self.subscribers: set[Subscriber] = set()
         self.latest: dict[str, bytes] = {}
+        self.snapshot_zstd = b""
         self.compressor = ZstdCompressor(level=6)
         self.compressor_started = False
 
@@ -49,6 +50,7 @@ class SharedStream:
         identity = b"\r\n" + writer.start_part(multipart_part.headers)
         identity += bytes(writer.write_body(html))
         self.latest[template_name] = identity
+        self.snapshot_zstd = b""
         self._send(identity)
 
     async def subscribe(self, compressed: bool) -> AsyncIterator[bytes]:
@@ -59,8 +61,14 @@ class SharedStream:
         self.subscribers.add(subscriber)
 
         if compressed:
-            for identity in self.latest.values():
-                self._send(identity, compressed_only=True)
+            if self.latest:
+                if not self.snapshot_zstd:
+                    compressor = ZstdCompressor(level=6)
+                    self.snapshot_zstd = compressor.compress(
+                        b"".join(self.latest.values()),
+                        mode=ZstdCompressor.FLUSH_FRAME,
+                    )
+                subscriber.queue.put_nowait(StreamChunk(b"", self.snapshot_zstd))
         else:
             for identity in self.latest.values():
                 subscriber.queue.put_nowait(StreamChunk(identity))

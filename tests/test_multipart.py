@@ -59,7 +59,7 @@ def test_zstd_stream_keeps_history_between_updates():
     assert not decompressor.eof
 
 
-def test_late_join_starts_shared_epoch_and_replays_latest_part():
+def test_late_join_replays_latest_part_only_to_new_subscriber():
     async def collect():
         stream = SharedStream()
         first_subscription = stream.subscribe(compressed=True)
@@ -72,37 +72,35 @@ def test_late_join_starts_shared_epoch_and_replays_latest_part():
         second_pending = asyncio.create_task(anext(second_subscription))
         await asyncio.sleep(0)
         frame_end = await anext(first_subscription)
-        first_replay = await anext(first_subscription)
-        second_replay = await second_pending
+        second_snapshot = await second_pending
+
+        first_next_pending = asyncio.create_task(anext(first_subscription))
+        second_next_pending = asyncio.create_task(anext(second_subscription))
+        await asyncio.sleep(0)
+        assert not first_next_pending.done()
+        assert not second_next_pending.done()
 
         stream.publish("_bricks.html", b"<p>Next</p>")
-        first_next = await anext(first_subscription)
-        second_next = await anext(second_subscription)
+        first_next = await first_next_pending
+        second_next = await second_next_pending
         await first_subscription.aclose()
         await second_subscription.aclose()
-        return (
-            first_chunk,
-            frame_end,
-            first_replay,
-            second_replay,
-            first_next,
-            second_next,
-        )
+        return first_chunk, frame_end, second_snapshot, first_next, second_next
 
-    first, frame_end, first_replay, second_replay, first_next, second_next = run_async(
-        collect()
-    )
+    first, frame_end, second_snapshot, first_next, second_next = run_async(collect())
 
     old_epoch = ZstdDecompressor()
     assert b"<p>Current</p>" in old_epoch.decompress(first)
     assert old_epoch.decompress(frame_end) == b""
     assert old_epoch.eof
 
-    assert first_replay == second_replay
+    snapshot = ZstdDecompressor()
+    assert b"<p>Current</p>" in snapshot.decompress(second_snapshot)
+    assert snapshot.eof
+
     assert first_next == second_next
     new_epoch = ZstdDecompressor()
-    assert b"<p>Current</p>" in new_epoch.decompress(second_replay)
-    assert b"<p>Next</p>" in new_epoch.decompress(second_next)
+    assert b"<p>Next</p>" in new_epoch.decompress(first_next)
 
 
 def test_queue_overflow_disconnects_and_replay_catches_up():
