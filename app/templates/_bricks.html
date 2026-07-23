@@ -19,7 +19,7 @@
                      data-z="{{ brick.z }}"
                      {% if brick.dragged_by_id %}data-dragging{% endif %}
                      style="--z: {{ brick.z }}; --color: {{ brick.color }}"
-                     :draggable="!data.shiftKey"
+                     :draggable="!data.shiftKey && !data.deleteMode"
                      hx-patch="/cursor"
                      hx-trigger="pointerenter"
                      hx-vals="js:{

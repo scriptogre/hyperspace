@@ -91,6 +91,41 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     context.close()
 
 
+def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
+    context = browser.new_context(
+        base_url="http://fastapi:8000",
+        has_touch=True,
+        is_mobile=True,
+        viewport={"width": 390, "height": 844},
+    )
+    page = context.new_page()
+    browser_errors(page)
+    join(page, "Touch Delete")
+    cell = place_brick(page)
+    brick = cell.locator(".brick")
+    delete_button = brick.locator("button[hx-delete]")
+    mode_button = page.locator("#delete-mode-button")
+
+    expect(mode_button).to_be_visible()
+    expect(mode_button).to_have_attribute("aria-pressed", "false")
+    expect(delete_button).not_to_be_visible()
+
+    mode_button.tap()
+
+    expect(page.locator("body")).to_have_attribute("data-delete-mode", "true")
+    expect(mode_button).to_have_attribute("aria-pressed", "true")
+    expect(mode_button).to_contain_text("Delete")
+    expect(mode_button.locator(".icon-\\[lucide--check\\]")).to_be_visible()
+    expect(mode_button.locator(".icon-\\[lucide--trash-2\\]")).not_to_be_visible()
+    expect(brick).to_have_attribute("draggable", "false")
+    expect(delete_button).to_be_visible()
+
+    delete_button.tap()
+
+    expect(cell.locator(".brick")).to_have_count(0)
+    context.close()
+
+
 def test_shift_drag_deletes_touched_bricks(joined_page: Page):
     page = joined_page
     cells = [place_brick(page) for _ in range(3)]

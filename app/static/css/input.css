@@ -96,14 +96,14 @@
     body {
         @apply h-screen overflow-hidden touch-none bg-background font-mono text-foreground;
 
-        &:not([data-shift-key="true"]):not(:has(.brick:active)) #board {
+        &:not([data-shift-key="true"]):not([data-delete-mode="true"]):not(:has(.brick:active)) #board {
             .grid-cell:not(:has(> .brick:nth-child(12))):hover > .brick:last-of-type {
                 border-color: color-mix(in oklch, var(--surface-color), var(--color-foreground) 65%);
                 box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--surface-color), var(--color-foreground) 35%);
             }
         }
 
-        &:not([data-shift-key="true"]):has(.brick:active) #board {
+        &:not([data-shift-key="true"]):not([data-delete-mode="true"]):has(.brick:active) #board {
             .grid-cell:hover:not(:has(.brick:active)) > .brick-preview {
                 display: block;
             }
@@ -126,7 +126,7 @@
             }
         }
 
-        &[data-shift-key="true"] #board {
+        &:is([data-shift-key="true"], [data-delete-mode="true"]) #board {
             .grid-cell > button,
             .brick > button:not([hx-delete]) {
                 display: none;
@@ -147,6 +147,18 @@
                 display: block;
             }
         }
+
+        &[data-delete-mode="true"] #board {
+            .brick,
+            .brick::before,
+            .brick::after {
+                border-color: rgb(239 68 68 / 75%);
+            }
+
+            .brick {
+                box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 20%);
+            }
+        }
     }
 
     #app {
@@ -156,11 +168,34 @@
             @apply pointer-events-none absolute top-6 right-6 z-50 hidden font-sans text-xs font-normal text-foreground/60 tabular-nums sm:block;
         }
 
-        #logout-button {
-            @apply absolute bottom-4 left-4 z-50 inline-flex cursor-pointer items-center gap-2 px-1 py-2 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground;
+        #logout-button,
+        #delete-mode-button {
+            @apply absolute bottom-4 z-50 cursor-pointer items-center gap-2 px-1 py-2 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground;
 
-            > span {
+            > span[class*="icon-"] {
                 @apply size-3.5;
+            }
+        }
+
+        #logout-button {
+            @apply left-4 inline-flex;
+        }
+
+        #delete-mode-button {
+            @apply right-4 hidden;
+
+            &::before {
+                content: "";
+                position: absolute;
+                inset: -0.5rem 0;
+            }
+
+            @media (hover: none) {
+                display: inline-flex;
+            }
+
+            &[aria-pressed="true"] {
+                @apply rounded-xl bg-red-500 text-white shadow-iso-sm;
             }
         }
     }
@@ -360,7 +395,7 @@
         }
 
         #join-qr {
-            @apply col-span-full flex w-full flex-col gap-4 px-4;
+            @apply col-span-full hidden w-full flex-col gap-4 px-4 sm:flex;
 
             > p {
                 @apply text-center text-sm font-semibold whitespace-nowrap text-foreground sm:text-lg;

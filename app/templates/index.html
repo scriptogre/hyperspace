@@ -25,6 +25,7 @@
 </head>
 
 <body data-shift-key="false"
+      data-delete-mode="false"
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
       {% if player %}hx-multipart:connect="/stream"{% endif %}
@@ -51,6 +52,17 @@
         <button id="logout-button" hx-post="/logout">
             <span class="icon-[lucide--log-out]" aria-hidden="true"></span>
             Log out
+        </button>
+
+        <button id="delete-mode-button"
+                type="button"
+                aria-pressed="false"
+                :aria-pressed="data.deleteMode"
+                :aria-label="data.deleteMode ? 'Exit delete mode' : 'Enter delete mode'"
+                hx-on:click="data.deleteMode = !data.deleteMode">
+            <span class="icon-[lucide--trash-2]" :hidden="data.deleteMode" aria-hidden="true"></span>
+            <span class="icon-[lucide--check]" :hidden="!data.deleteMode" aria-hidden="true"></span>
+            <span>Delete</span>
         </button>
     </main>
 
