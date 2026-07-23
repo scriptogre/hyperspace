@@ -1,11 +1,17 @@
 """Game state mutations."""
 
+import asyncio
 import uuid
 
 from tortoise.transactions import atomic
 
 from app.config import settings
 from app.models import Brick, Cursor, Player
+
+# TODO: Clean this up please
+CURSOR_BATCH_INTERVAL = 1 / 30
+pending_cursors: dict[int, Cursor] = {}
+cursor_flush_task: asyncio.Task[None] | None = None
 
 
 @atomic()
@@ -100,11 +106,27 @@ async def release_brick(brick: Brick) -> None:
 
 
 async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
-    """
-    Store the player's current cursor position.
-    """
-    await Cursor.bulk_create(
-        [Cursor(player_id=player.id, x=x, y=y, z=z)],
-        update_fields=("x", "y", "z"),
-        on_conflict=("player_id",),
-    )
+    """Store the player's latest cursor position in the next shared batch."""
+    global cursor_flush_task
+
+    pending_cursors[player.id] = Cursor(player_id=player.id, x=x, y=y, z=z)
+    if cursor_flush_task is None:
+        cursor_flush_task = asyncio.create_task(flush_cursors())
+    await cursor_flush_task
+
+
+async def flush_cursors() -> None:
+    global cursor_flush_task
+
+    try:
+        await asyncio.sleep(CURSOR_BATCH_INTERVAL)
+        while pending_cursors:
+            cursors = list(pending_cursors.values())
+            pending_cursors.clear()
+            await Cursor.bulk_create(
+                cursors,
+                update_fields=("x", "y", "z"),
+                on_conflict=("player_id",),
+            )
+    finally:
+        cursor_flush_task = None
