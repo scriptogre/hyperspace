@@ -41,11 +41,6 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def DATABASE_URL(self) -> str:
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-
-    @computed_field
-    @property
     def TORTOISE_ORM(self) -> dict:
         """
         Tortoise ORM config for the app's models and connection.

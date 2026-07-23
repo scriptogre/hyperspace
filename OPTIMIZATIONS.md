@@ -158,6 +158,67 @@ holding the system up.
 The cliff is the last row: one query per cursor, the classic N+1. A thousand
 trips back to back is 125ms. That is the pattern to never write.
 
+## Unix socket or Docker TCP?
+
+The app and PostgreSQL run on one Linux host. A Unix-domain socket skips the IP
+stack and Docker bridge while keeping the PostgreSQL protocol unchanged.
+
+Production shares `/var/run/postgresql` between the two containers. `asyncpg`
+connects to `/var/run/postgresql/.s.PGSQL.5432`. This is local IPC through an
+`AF_UNIX` stream socket, not shared memory.
+
+### Measured latency
+
+The smallest possible query exposes transport overhead:
+
+| Transport | `SELECT 1`/second | p50 | p95 |
+| --- | ---: | ---: | ---: |
+| Unix socket | 17,472 | 52.5µs | 72.5µs |
+| Docker TCP | 12,910 | 71.2µs | 101.3µs |
+
+The socket cut the median round trip by 26%. The benchmark used one persistent
+`asyncpg` connection for three alternating runs of 20,000 queries on the
+2-vCPU Droplet.
+
+Opening 200 connections sequentially took 2.43ms p50 through the socket and
+36.81ms through TCP. Most of that gap is authentication: the private socket
+trusts containers with access to its volume, while TCP performs SCRAM. The app
+still sends the database password in both cases.
+
+These numbers isolate transport overhead. Real queries also pay for planning,
+row conversion, ORM work, and rendering, so the full app gains less than 26%.
+
+### Connection limits
+
+Both transports reach PostgreSQL's connection limit long before their kernel
+address limits:
+
+| Limit | Unix socket | Docker TCP |
+| --- | ---: | ---: |
+| PostgreSQL sessions | 100 total, 97 ordinary | 100 total, 97 ordinary |
+| Maximum sessions per app worker | 21 | 21 |
+| Container soft file-descriptor limit | 1,024 | 1,024 |
+| Transport address space | 107-byte path | 28,232 automatic client ports per source IP and database endpoint |
+| Reach | Same host only | Routable to another host |
+
+Each worker can open 20 pooled ORM connections plus one dedicated `LISTEN`
+connection. Four workers can consume 84 sessions. Five can request 105 and
+exceed the 97 ordinary slots. Browser streams do not hold database sessions;
+they borrow from the pool only while running a query.
+
+The TCP figure comes from the Droplet's current Linux ephemeral range,
+`32768-60999`. Unix sockets do not consume client ports. Their Linux pathname
+must fit in 108 bytes including its null terminator; the production socket path
+uses 33 bytes.
+
+The socket is the better transport while both containers share one host. TCP is
+required if PostgreSQL moves to another machine.
+
+Sources: [asyncpg connections](https://magicstack.github.io/asyncpg/current/api/index.html#asyncpg.connection.connect),
+[PostgreSQL connection settings](https://www.postgresql.org/docs/17/runtime-config-connection.html),
+[Linux Unix sockets](https://man7.org/linux/man-pages/man7/unix.7.html), and
+[Linux IP port settings](https://docs.kernel.org/networking/ip-sysctl.html#ip-variables).
+
 ## So do we still need SpacetimeDB?
 
 SpacetimeDB runs your logic inside the database, against in-memory tables, so a

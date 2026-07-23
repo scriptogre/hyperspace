@@ -6,9 +6,13 @@ services:
       args:
         ENVIRONMENT: production
     expose: [8000]
+    volumes:
+      - postgres_socket:/var/run/postgresql
     init: true
     tty: true
     env_file: .env
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
     entrypoint: ["sh", "/code/scripts/migrate-and-run"]
     command: granian --interface asgi --host 0.0.0.0 app.main:app
     restart: always
@@ -24,9 +28,10 @@ services:
       - POSTGRES_DB
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    command: postgres -c synchronous_commit=off -c shared_buffers=512MB -c shared_preload_libraries=pg_stat_statements
+      - postgres_socket:/var/run/postgresql
+    command: postgres -c listen_addresses= -c synchronous_commit=off -c shared_buffers=512MB -c shared_preload_libraries=pg_stat_statements
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h /var/run/postgresql -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -35,3 +40,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_socket:

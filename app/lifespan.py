@@ -28,7 +28,13 @@ async def lifespan(
         await Brick.all().update(dragged_by_id=None)
         await Player.all().update(is_online=False)
 
-        postgres = await asyncpg.connect(settings.DATABASE_URL)
+        postgres = await asyncpg.connect(
+            host=settings.POSTGRES_HOST,
+            port=settings.POSTGRES_PORT,
+            user=settings.POSTGRES_USER,
+            password=settings.POSTGRES_PASSWORD,
+            database=settings.POSTGRES_DB,
+        )
 
         # TODO: Find a more elgant way to do this
         async def forward_postgres_notifications() -> None:
