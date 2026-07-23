@@ -21,6 +21,8 @@
     --text-sm--line-height: calc(1.25 / 0.875);
     --text-base: 1rem;
     --text-base--line-height: calc(1.5 / 1);
+    --text-3xl: 1.875rem;
+    --text-3xl--line-height: calc(2.25 / 1.875);
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
@@ -881,40 +883,46 @@
     #join-qr {
       grid-column: 1 / -1;
       display: flex;
+      width: 100%;
       flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
       gap: calc(var(--spacing) * 6);
       padding-inline: calc(var(--spacing) * 4);
-      @media (width >= 40rem) {
-        flex-direction: row;
+      @media (min-width: 40rem) {
+        width: min(44rem, calc(100vw - 2rem));
+        justify-self: center;
+        padding: 2rem;
       }
-      @media (width >= 40rem) {
-        padding-inline: calc(var(--spacing) * 6);
+      > p {
+        text-align: center;
+        font-size: var(--text-sm);
+        line-height: var(--tw-leading, var(--text-sm--line-height));
+        --tw-font-weight: var(--font-weight-semibold);
+        font-weight: var(--font-weight-semibold);
+        white-space: nowrap;
+        color: var(--color-foreground);
+        @media (width >= 40rem) {
+          font-size: var(--text-3xl);
+          line-height: var(--tw-leading, var(--text-3xl--line-height));
+        }
       }
       > div {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: calc(var(--spacing) * 3);
+        justify-content: space-evenly;
+        gap: calc(var(--spacing) * 4);
         @media (width >= 40rem) {
-          flex-direction: row;
+          gap: calc(var(--spacing) * 12);
         }
       }
       img {
-        height: calc(var(--spacing) * 20);
+        height: calc(var(--spacing) * 28);
         width: auto;
         flex-shrink: 0;
+        @media (width >= 40rem) {
+          height: calc(var(--spacing) * 36);
+        }
       }
-      p {
-        font-size: var(--text-sm);
-        line-height: var(--tw-leading, var(--text-sm--line-height));
-        --tw-font-weight: var(--font-weight-medium);
-        font-weight: var(--font-weight-medium);
-        white-space: nowrap;
-        color: var(--color-foreground);
-      }
-      > a {
+      a {
         flex-shrink: 0;
         overflow: hidden;
         border-radius: var(--radius-lg);
@@ -923,8 +931,12 @@
       }
       qr-code {
         display: block;
-        width: calc(var(--spacing) * 32);
-        height: calc(var(--spacing) * 32);
+        width: calc(var(--spacing) * 40);
+        height: calc(var(--spacing) * 40);
+        @media (width >= 40rem) {
+          width: calc(var(--spacing) * 64);
+          height: calc(var(--spacing) * 64);
+        }
       }
     }
   }

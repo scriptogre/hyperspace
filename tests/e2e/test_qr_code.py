@@ -10,7 +10,7 @@ def test_login_qr_code(page: Page, browser_errors):
     page.goto("/")
 
     card = page.locator("#join-qr")
-    link = card.locator(":scope > a")
+    link = card.locator("a")
     qr_code = link.locator("qr-code")
 
     expect(card.locator("img")).to_have_attribute(
