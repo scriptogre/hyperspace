@@ -1,14 +1,16 @@
 """HTTP routes."""
 
+from typing import Annotated
+
 from fastapi import (
     APIRouter,
     Depends,
     Form,
+    Header,
     Response,
 )
 
-from fastapi.responses import RedirectResponse
-from multipart_response.starlette import Part, MultipartResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.status import (
     HTTP_204_NO_CONTENT,
 )
@@ -23,7 +25,7 @@ from app.dependencies import (
     require_htmx_request,
     require_online_player,
 )
-from app.broadcast import subscribe_to_templates
+from app.broadcast import create_streaming_response
 from app.jinja import render
 from app.models import Brick, Player
 from app.schemas import PlayerJoinForm
@@ -85,30 +87,19 @@ async def health() -> str:
 
 @router.get(
     "/stream",
-    response_class=MultipartResponse,
+    response_class=StreamingResponse,
     dependencies=[Depends(require_online_player, scope="request")],
 )
-async def stream():
+async def stream(
+    accept_encoding: Annotated[str, Header()] = "",
+) -> StreamingResponse:
     """Stream rendered templates as they change."""
-    async for template_name, html in subscribe_to_templates():
-        if template_name == "_bricks.html":
-            yield Part(
-                html,
-                headers={"HX-Target": "#bricks", "HX-Swap": "outerMorph"},
-                media_type="text/html",
-            )
-        elif template_name == "_players.html":
-            yield Part(
-                html,
-                headers={"HX-Target": "#players", "HX-Swap": "innerHTML"},
-                media_type="text/html",
-            )
-        elif template_name == "_cursors.html":
-            yield Part(
-                html,
-                headers={"HX-Target": "#cursors", "HX-Swap": "outerMorph"},
-                media_type="text/html",
-            )
+    encodings = {
+        value.partition(";")[0].strip() for value in accept_encoding.lower().split(",")
+    }
+
+    # TODO: Replace this with MultipartResponse
+    return create_streaming_response("zstd" in encodings)
 
 
 # ── Actions ─────────────────────────────────────────────────────────────
