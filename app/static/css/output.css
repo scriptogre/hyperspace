@@ -21,8 +21,8 @@
     --text-sm--line-height: calc(1.25 / 0.875);
     --text-base: 1rem;
     --text-base--line-height: calc(1.5 / 1);
-    --text-3xl: 1.875rem;
-    --text-3xl--line-height: calc(2.25 / 1.875);
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
@@ -885,13 +885,8 @@
       display: flex;
       width: 100%;
       flex-direction: column;
-      gap: calc(var(--spacing) * 6);
+      gap: calc(var(--spacing) * 4);
       padding-inline: calc(var(--spacing) * 4);
-      @media (min-width: 40rem) {
-        width: min(44rem, calc(100vw - 2rem));
-        justify-self: center;
-        padding: 2rem;
-      }
       > p {
         text-align: center;
         font-size: var(--text-sm);
@@ -901,8 +896,8 @@
         white-space: nowrap;
         color: var(--color-foreground);
         @media (width >= 40rem) {
-          font-size: var(--text-3xl);
-          line-height: var(--tw-leading, var(--text-3xl--line-height));
+          font-size: var(--text-lg);
+          line-height: var(--tw-leading, var(--text-lg--line-height));
         }
       }
       > div {
@@ -911,7 +906,7 @@
         justify-content: space-evenly;
         gap: calc(var(--spacing) * 4);
         @media (width >= 40rem) {
-          gap: calc(var(--spacing) * 12);
+          gap: calc(var(--spacing) * 8);
         }
       }
       img {
@@ -919,7 +914,7 @@
         width: auto;
         flex-shrink: 0;
         @media (width >= 40rem) {
-          height: calc(var(--spacing) * 36);
+          height: calc(var(--spacing) * 32);
         }
       }
       a {
@@ -931,11 +926,11 @@
       }
       qr-code {
         display: block;
-        width: calc(var(--spacing) * 40);
-        height: calc(var(--spacing) * 40);
+        width: calc(var(--spacing) * 36);
+        height: calc(var(--spacing) * 36);
         @media (width >= 40rem) {
-          width: calc(var(--spacing) * 64);
-          height: calc(var(--spacing) * 64);
+          width: calc(var(--spacing) * 44);
+          height: calc(var(--spacing) * 44);
         }
       }
     }

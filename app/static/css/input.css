@@ -360,24 +360,18 @@
         }
 
         #join-qr {
-            @apply col-span-full flex w-full flex-col gap-6 px-4;
-
-            @media (min-width: 40rem) {
-                width: min(44rem, calc(100vw - 2rem));
-                justify-self: center;
-                padding: 2rem;
-            }
+            @apply col-span-full flex w-full flex-col gap-4 px-4;
 
             > p {
-                @apply text-center text-sm font-semibold whitespace-nowrap text-foreground sm:text-3xl;
+                @apply text-center text-sm font-semibold whitespace-nowrap text-foreground sm:text-lg;
             }
 
             > div {
-                @apply flex items-center justify-evenly gap-4 sm:gap-12;
+                @apply flex items-center justify-evenly gap-4 sm:gap-8;
             }
 
             img {
-                @apply h-28 w-auto shrink-0 sm:h-36;
+                @apply h-28 w-auto shrink-0 sm:h-32;
             }
 
             a {
@@ -385,7 +379,7 @@
             }
 
             qr-code {
-                @apply block size-40 sm:size-64;
+                @apply block size-36 sm:size-44;
             }
         }
     }
