@@ -7,6 +7,7 @@
              data-creating="false"
              hx-patch="/cursor"
              hx-trigger="pointerenter"
+             hx-sync="#board:queue last"
              hx-vals="js:{
                           x: data.x,
                           y: data.y,
@@ -22,6 +23,7 @@
                      :draggable="!data.shiftKey && !data.deleteMode"
                      hx-patch="/cursor"
                      hx-trigger="pointerenter"
+                     hx-sync="#board:queue last"
                      hx-vals="js:{
                                  x: data.x,
                                  y: data.y,
@@ -41,6 +43,7 @@
                     <button aria-label="Delete brick"
                             hx-delete="/bricks/{{ brick.id }}"
                             hx-trigger="pointerdown, pointerenter[buttons] delay:100ms"
+                            hx-on::after:request="$('closest .brick').remove()"
                     ></button>
 
                     <button hidden
@@ -51,7 +54,8 @@
                     <button hidden
                             aria-label="Release brick"
                             hx-post="/bricks/{{ brick.id }}/release"
-                            hx-trigger="dragend from:<closest .brick/>"></button>
+                            hx-trigger="dragend from:<closest .brick/>"
+                            hx-sync="#board:queue all"></button>
                 </div>
             {% else %}
                 <button aria-label="Add brick"

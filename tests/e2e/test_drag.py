@@ -43,6 +43,35 @@ def test_desktop_drag_moves_brick(joined_page: Page):
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
 
 
+def test_release_waits_for_final_cursor(joined_page: Page):
+    page = joined_page
+    source = place_brick(page)
+    target = page.locator(".grid-cell:not(:has(.brick))").first
+    target = page.locator(f"#{target.get_attribute('id')}")
+    brick_id = source.locator(".brick").get_attribute("id")
+
+    with page.expect_response("**/grab"):
+        page.locator(f"#{brick_id}").dispatch_event("dragstart")
+    expect(page.locator(f"#{brick_id}")).to_have_attribute("data-dragging", "")
+
+    held_cursor = []
+    requests = []
+    page.on("request", lambda request: requests.append(request.url))
+    page.route("**/cursor", lambda route: held_cursor.append(route))
+
+    target.dispatch_event("pointerenter")
+    page.wait_for_timeout(50)
+    assert len(held_cursor) == 1
+
+    page.locator(f"#{brick_id}").dispatch_event("dragend")
+    page.wait_for_timeout(100)
+    assert not any(url.endswith("/release") for url in requests)
+
+    held_cursor[0].continue_()
+    expect(target.locator(f"#{brick_id}")).to_have_count(1)
+    expect(source.locator(f"#{brick_id}")).to_have_count(0)
+
+
 def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     context = browser.new_context(
         base_url="http://fastapi:8000",
@@ -57,6 +86,13 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     target = page.locator(".grid-cell:not(:has(.brick))").first
     target = page.locator(f"#{target.get_attribute('id')}")
     brick_id = source.locator(".brick").get_attribute("id")
+    page.evaluate(
+        """() => {
+            window.dragEvents = []
+            document.addEventListener('dragstart', () => dragEvents.push('dragstart'))
+            document.addEventListener('dragend', () => dragEvents.push('dragend'))
+        }"""
+    )
     source_x, source_y = center(
         source.locator(".brick > button:not([hx-delete]):not([hidden])")
     )
@@ -70,6 +106,7 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
             "touchPoints": [{"x": source_x, "y": source_y, "id": 1}],
         },
     )
+    page.wait_for_timeout(20)
     for step in range(1, 9):
         cdp.send(
             "Input.dispatchTouchEvent",
@@ -84,8 +121,10 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
                 ],
             },
         )
+        page.wait_for_timeout(20)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
 
+    assert page.evaluate("dragEvents") == ["dragstart", "dragend"]
     expect(target.locator(f"#{brick_id}")).to_have_count(1)
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
     context.close()
