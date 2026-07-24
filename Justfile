@@ -25,7 +25,7 @@ makemigrations name="auto":
 migrate:
     docker compose run --rm fastapi tortoise migrate
 
-# Push and deploy the committed Python branch to DigitalOcean.
+# Push and deploy the committed main branch to DigitalOcean.
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -33,7 +33,7 @@ deploy:
         echo "Commit the working tree before deploying." >&2
         exit 1
     fi
-    git push origin python
+    git push origin main
     ssh digitalocean /opt/hyperspace/deploy/deploy
 
 # Benchmark one worker with external players, PostgreSQL stats, and a CPU profile.
