@@ -216,7 +216,7 @@ async def get_cursors() -> list[CursorRow]:
         stack_tops[position] = max(stack_tops.get(position, -1), brick["z"])
 
     rows = (
-        await Cursor.all()
+        await Cursor.filter(player__is_online=True)
         .order_by("player_id")
         .values(
             "player_id",

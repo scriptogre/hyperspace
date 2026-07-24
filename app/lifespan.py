@@ -12,7 +12,7 @@ from app.broadcast import publish_template
 from app.config import settings
 from app.dependencies import get_brick_stacks, get_cursors, get_players
 from app.jinja import render
-from app.models import Brick, Player
+from app.models import Brick, Cursor, Player
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ async def lifespan(
     ):
         await Brick.all().update(dragged_by_id=None)
         await Player.all().update(is_online=False)
+        await Cursor.all().delete()
 
         postgres = await asyncpg.connect(
             host=settings.POSTGRES_HOST,

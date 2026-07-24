@@ -99,8 +99,13 @@ async def release_brick(brick: Brick) -> None:
     await brick.save(update_fields=["dragged_by_id"])
 
 
+@atomic()
 async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
-    """Store the player's latest cursor position."""
+    """Store the latest cursor position while the player is online."""
+    locked_player = await Player.select_for_update().get(id=player.id)
+    if not locked_player.is_online:
+        return
+
     await Cursor.bulk_create(
         [Cursor(player_id=player.id, x=x, y=y, z=z)],
         update_fields=("x", "y", "z"),
