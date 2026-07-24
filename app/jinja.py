@@ -1,7 +1,5 @@
 """minijinja (Rust) template rendering. Named jinja.py by convention."""
 
-from itertools import product
-
 import minijinja
 
 from app.config import settings
@@ -17,11 +15,7 @@ def url_for(name: str, **params: str) -> str:
 _env = minijinja.Environment(
     loader=lambda name: (settings.TEMPLATES_DIR / name).read_text(),
     auto_escape_callback=lambda name: True,
-    globals={
-        "grid_size": settings.GRID_SIZE,
-        "grid_cells": list(product(range(settings.GRID_SIZE), repeat=2)),
-        "url_for": url_for,
-    },
+    globals={"url_for": url_for},
 )
 
 

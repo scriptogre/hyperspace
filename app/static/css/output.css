@@ -402,12 +402,19 @@
   .table {
     display: table;
   }
+  .shrink {
+    flex-shrink: 1;
+  }
   .border {
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
   .blur {
     --tw-blur: blur(8px);
+    filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
+  }
+  .sepia {
+    --tw-sepia: sepia(100%);
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
   }
   .filter {
@@ -460,8 +467,8 @@
     background-color: var(--color-background);
     font-family: var(--font-mono);
     color: var(--color-foreground);
-    &:not([data-delete-mode="true"]):not(:has(.brick:active)) #board {
-      .grid-cell:not(:has(> .brick:nth-child(12))):hover > .brick:last-of-type {
+    &:not([data-delete-mode="true"]):not(:has(.brick:active)) #grid {
+      .grid-cell:hover > .brick:last-of-type {
         border-color: var(--surface-color);
         @supports (color: color-mix(in lab, red, red)) {
           border-color: color-mix(in oklch, var(--surface-color), var(--color-foreground) 65%);
@@ -472,7 +479,7 @@
         }
       }
     }
-    &:not([data-delete-mode="true"]):has(.brick:active) #board {
+    &:not([data-delete-mode="true"]):has(.brick:active) #grid {
       .grid-cell:hover:not(:has(.brick:active)) > .brick-preview {
         display: block;
       }
@@ -487,7 +494,7 @@
         border-color: rgba(255, 255, 255, 0.15);
       }
     }
-    &[data-delete-mode="true"] #board {
+    &[data-delete-mode="true"] #grid {
       .grid-cell > button, .brick > button:not([hx-delete]) {
         display: none;
       }
@@ -502,7 +509,7 @@
         display: block;
       }
     }
-    &[data-delete-mode="true"] #board {
+    &[data-delete-mode="true"] #grid {
       .brick, .brick::before, .brick::after {
         border-color: rgb(239 68 68 / 55%);
       }
@@ -533,6 +540,40 @@
         width: calc(var(--spacing) * 4);
         height: calc(var(--spacing) * 4);
       }
+    }
+    #world {
+      position: absolute;
+      inset: calc(var(--spacing) * 0);
+      background-color: var(--color-background);
+      color: var(--color-foreground);
+    }
+    #announcement {
+      position: absolute;
+      top: calc(var(--spacing) * 6);
+      left: calc(1 / 2 * 100%);
+      z-index: 50;
+      max-width: calc(100% - 12rem);
+      --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
+      translate: var(--tw-translate-x) var(--tw-translate-y);
+      border-radius: calc(infinity * 1px);
+      border-style: var(--tw-border-style);
+      border-width: 1px;
+      border-color: var(--color-border);
+      background-color: color-mix(in srgb, light-dark(var(--color-neutral-10), var(--color-neutral-910)) 90%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-card) 90%, transparent);
+      }
+      padding-inline: calc(var(--spacing) * 4);
+      padding-block: calc(var(--spacing) * 2);
+      text-align: center;
+      font-size: var(--text-xs);
+      line-height: var(--tw-leading, var(--text-xs--line-height));
+      color: var(--color-foreground);
+      --tw-shadow: 2px 2px 0 var(--tw-shadow-color, var(--color-shadow));
+      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+      --tw-backdrop-blur: blur(var(--blur-md));
+      -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+      backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
     }
     #stats {
       position: absolute;
@@ -1204,16 +1245,16 @@
       }
     }
   }
-  #board {
+  #grid {
     position: absolute;
     top: 40%;
     left: 50%;
     display: grid;
-    grid-template-columns: repeat(var(--grid-size), var(--cell-size));
-    grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+    grid-template-columns: repeat(var(--world-size), var(--cell-size));
+    grid-template-rows: repeat(var(--world-size), var(--cell-size));
     translate: -50% -50%;
     scale: 0.4;
-    transform: perspective(1000px) rotateX(60deg) rotateZ(-45deg);
+    transform: perspective(calc(var(--world-size) * 5.208333rem)) rotateX(60deg) rotateZ(-45deg);
     transform-style: preserve-3d;
     @media (min-width: 40rem) {
       scale: 1;
@@ -1221,10 +1262,10 @@
     @supports (scale: calc(1rem / 1rem)) {
       --grid-scale: min(
                 1,
-                calc((100dvw - 3rem) / 72rem),
-                calc((100dvh - 3rem) / 48rem)
+                calc((100dvw - 3rem) / (var(--world-size) * 6rem)),
+                calc((100dvh - 3rem) / (var(--world-size) * 4rem))
             );
-      top: calc(50% - 10.25rem * var(--grid-scale));
+      top: calc(50% - var(--world-size) * 0.854167rem * var(--grid-scale));
       scale: var(--grid-scale);
     }
     #bricks, #cursors {
@@ -1352,7 +1393,7 @@
       --color: var(--player-color);
       --face-opacity: 40%;
       display: none;
-      opacity: clamp(0, calc(var(--grid-size) - var(--stack-height)), 1);
+      opacity: clamp(0, calc(var(--world-size) - var(--stack-height)), 1);
       pointer-events: none;
       z-index: 10000;
       transform: translateZ(calc((var(--stack-height) + 1) * var(--brick-height)));
@@ -1416,9 +1457,6 @@
       &::before, &::after {
         cursor: grab;
       }
-    }
-    .grid-cell:has(> .brick:nth-child(12)) > .brick:last-of-type > button:not([hx-delete]):not([hidden]) {
-      cursor: not-allowed;
     }
     .cursor {
       --cursor-size: 1rem;
@@ -1542,29 +1580,20 @@
   syntax: "*";
   inherits: false;
 }
-@property --tw-font-weight {
+@property --tw-translate-x {
   syntax: "*";
   inherits: false;
+  initial-value: 0;
 }
-@property --tw-ordinal {
+@property --tw-translate-y {
   syntax: "*";
   inherits: false;
+  initial-value: 0;
 }
-@property --tw-slashed-zero {
+@property --tw-translate-z {
   syntax: "*";
   inherits: false;
-}
-@property --tw-numeric-figure {
-  syntax: "*";
-  inherits: false;
-}
-@property --tw-numeric-spacing {
-  syntax: "*";
-  inherits: false;
-}
-@property --tw-numeric-fraction {
-  syntax: "*";
-  inherits: false;
+  initial-value: 0;
 }
 @property --tw-shadow {
   syntax: "*";
@@ -1667,6 +1696,30 @@
   syntax: "*";
   inherits: false;
 }
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ordinal {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-slashed-zero {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-figure {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-spacing {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-fraction {
+  syntax: "*";
+  inherits: false;
+}
 @property --tw-tracking {
   syntax: "*";
   inherits: false;
@@ -1707,12 +1760,9 @@
       --tw-drop-shadow-color: initial;
       --tw-drop-shadow-alpha: 100%;
       --tw-drop-shadow-size: initial;
-      --tw-font-weight: initial;
-      --tw-ordinal: initial;
-      --tw-slashed-zero: initial;
-      --tw-numeric-figure: initial;
-      --tw-numeric-spacing: initial;
-      --tw-numeric-fraction: initial;
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
       --tw-shadow: 0 0 #0000;
       --tw-shadow-color: initial;
       --tw-shadow-alpha: 100%;
@@ -1736,6 +1786,12 @@
       --tw-backdrop-opacity: initial;
       --tw-backdrop-saturate: initial;
       --tw-backdrop-sepia: initial;
+      --tw-font-weight: initial;
+      --tw-ordinal: initial;
+      --tw-slashed-zero: initial;
+      --tw-numeric-figure: initial;
+      --tw-numeric-spacing: initial;
+      --tw-numeric-fraction: initial;
       --tw-tracking: initial;
       --tw-scale-x: 1;
       --tw-scale-y: 1;

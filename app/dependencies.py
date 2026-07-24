@@ -1,10 +1,8 @@
-"""
-FastAPI dependencies for players, bricks, and game state.
-"""
+"""FastAPI dependencies for players, actions, and the world snapshot."""
 
 from collections.abc import AsyncIterator
 from random import randrange
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Form, Header, HTTPException, Request, Response
 from starlette.status import (
@@ -14,15 +12,15 @@ from starlette.status import (
     HTTP_404_NOT_FOUND,
     HTTP_422_UNPROCESSABLE_CONTENT,
 )
+from tortoise.backends.base.client import BaseDBAsyncClient
 from tortoise.transactions import in_transaction
 
 from app.colors import calculate_player_color
-from app.config import settings
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
-from app.models import Brick, Cursor, Player
-from app.signals import current_player
-from app.services import mark_player_as_offline, mark_player_as_online
+from app.models import Brick, Cursor, Player, World
 from app.schemas import BrickRow, CursorRow, PlayerRow
+from app.services import mark_player_as_offline, mark_player_as_online
+from app.signals import current_player
 
 
 def player_initials(name: str) -> str:
@@ -37,18 +35,23 @@ def player_initials(name: str) -> str:
 def require_htmx_request(
     hx_request: Annotated[bool, Header(alias="HX-Request")] = False,
 ) -> None:
-    """
-    Require an htmx request or redirect a regular browser request.
-    """
+    """Require an htmx request or redirect a regular browser request."""
     if not hx_request:
         raise HTTPException(HTTP_303_SEE_OTHER, headers={"Location": "/"})
 
 
-def require_coordinates_on_grid(x: int = Form(...), y: int = Form(...)):
-    """
-    Require x, y, z coordinates to be inside the grid.
-    """
-    if x not in range(settings.GRID_SIZE) or y not in range(settings.GRID_SIZE):
+async def get_world() -> World:
+    """Return the singleton world configuration."""
+    return await World.get(id=1)
+
+
+async def require_coordinates_on_grid(
+    x: int = Form(...),
+    y: int = Form(...),
+    world: World = Depends(get_world),
+) -> None:
+    """Require x and y coordinates to be inside the current world."""
+    if x not in range(world.size) or y not in range(world.size):
         raise HTTPException(
             HTTP_422_UNPROCESSABLE_CONTENT,
             "Position is outside grid",
@@ -56,16 +59,12 @@ def require_coordinates_on_grid(x: int = Form(...), y: int = Form(...)):
 
 
 def get_form_errors(request: Request, response: Response) -> FormErrors:
-    """
-    Get validation errors left in the signed cookie by a failed POST.
-    """
+    """Get validation errors left in the signed cookie by a failed POST."""
     return FormErrors.pop(request, response)
 
 
 async def get_current_player(request: Request) -> Player | None:
-    """
-    Get a player for this cookie, or None when not joined.
-    """
+    """Get a player for this cookie, or None when not joined."""
     token = request.cookies.get("hyperspace")
     return await Player.filter(token=token).first() if token else None
 
@@ -73,9 +72,7 @@ async def get_current_player(request: Request) -> Player | None:
 async def require_current_player(
     player: Player | None = Depends(get_current_player),
 ) -> Player:
-    """
-    Get a joined (required) player. Raises for anonymous requests.
-    """
+    """Get a joined (required) player. Raises for anonymous requests."""
     if not player:
         raise PlayerRequired
 
@@ -125,7 +122,7 @@ async def get_available_brick(
 async def require_available_brick(
     brick: Brick | None = Depends(get_available_brick, scope="function"),
 ) -> Brick:
-    """Return an available brick, or respond with 404 when absent."""
+    """Return an available brick, or respond with 404."""
     if brick is None:
         raise HTTPException(HTTP_404_NOT_FOUND, "Brick not found")
     return brick
@@ -151,9 +148,11 @@ async def require_brick_dragged_by_current_player(
     return brick
 
 
-async def get_current_bricks() -> list[BrickRow]:
+async def get_current_bricks(
+    database: BaseDBAsyncClient,
+) -> list[BrickRow]:
     rows = (
-        await Brick.all()
+        await Brick.all(using_db=database)
         .order_by("x", "y", "z")
         .values(
             "id",
@@ -179,20 +178,22 @@ async def get_current_bricks() -> list[BrickRow]:
     ]
 
 
-async def get_brick_stacks() -> dict[int, dict[int, list[BrickRow]]]:
-    """Bricks bucketed by cell, each stack sorted by z. Every cell has a list (possibly empty)."""
-    bricks = await get_current_bricks()
-    brick_stacks: dict[int, dict[int, list[BrickRow]]] = {
-        x: {y: [] for y in range(settings.GRID_SIZE)} for x in range(settings.GRID_SIZE)
-    }
+def get_brick_stacks(
+    world: World,
+    bricks: list[BrickRow],
+) -> dict[int, dict[int, list[BrickRow]]]:
+    """Bucket each sorted brick into its grid cell."""
+    stacks = {x: {y: [] for y in range(world.size)} for x in range(world.size)}
     for brick in bricks:
-        brick_stacks[brick["x"]][brick["y"]].append(brick)
-    return brick_stacks
+        stacks[brick["x"]][brick["y"]].append(brick)
+    return stacks
 
 
-async def get_players() -> list[PlayerRow]:
+async def get_players(
+    database: BaseDBAsyncClient,
+) -> list[PlayerRow]:
     rows = (
-        await Player.all()
+        await Player.all(using_db=database)
         .order_by("name")
         .values("id", "name", "color_seed", "is_online")
     )
@@ -208,15 +209,18 @@ async def get_players() -> list[PlayerRow]:
     ]
 
 
-async def get_cursors() -> list[CursorRow]:
-    brick_rows = await Brick.all().values("x", "y", "z")
+async def get_cursors(
+    database: BaseDBAsyncClient,
+    bricks: list[BrickRow],
+) -> list[CursorRow]:
     stack_tops: dict[tuple[int, int], int] = {}
-    for brick in brick_rows:
+    for brick in bricks:
         position = (brick["x"], brick["y"])
         stack_tops[position] = max(stack_tops.get(position, -1), brick["z"])
 
     rows = (
-        await Cursor.filter(player__is_online=True)
+        await Cursor.all(using_db=database)
+        .filter(player__is_online=True)
         .order_by("player_id")
         .values(
             "player_id",
@@ -253,13 +257,28 @@ async def get_cursors() -> list[CursorRow]:
     return cursors
 
 
+async def get_world_context() -> dict[str, Any]:
+    """Read one consistent snapshot of the complete world."""
+    async with in_transaction() as database:
+        await database.execute_script("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        world = await World.get(id=1, using_db=database)
+        bricks = await get_current_bricks(database)
+        players = await get_players(database)
+        cursors = await get_cursors(database, bricks)
+
+    return {
+        "world": world,
+        "brick_stacks": get_brick_stacks(world, bricks),
+        "players": players,
+        "cursors": cursors,
+    }
+
+
 async def get_game_context(
+    world_context: dict[str, Any] = Depends(get_world_context),
     player: Player | None = Depends(get_current_player),
-    brick_stacks: dict[int, dict[int, list[BrickRow]]] = Depends(get_brick_stacks),
-    players: list[PlayerRow] = Depends(get_players),
-    cursors: list[CursorRow] = Depends(get_cursors),
     form_errors: FormErrors = Depends(get_form_errors),
-) -> dict:
+) -> dict[str, Any]:
     """Full template context for the index page."""
     first_color_seed = randrange(1, 101)
     color_seeds = [((first_color_seed + offset - 1) % 100) + 1 for offset in range(5)]
@@ -278,10 +297,8 @@ async def get_game_context(
     available_colors.sort(key=lambda option: option["color"].hue)
 
     return {
+        **world_context,
         "player": player,
-        "brick_stacks": brick_stacks,
-        "players": players,
-        "cursors": cursors,
         "form_errors": form_errors,
         "selected_color_seed": selected_color_seed,
         "suggested_colors": [

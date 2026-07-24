@@ -4,8 +4,7 @@ import uuid
 
 from tortoise.transactions import atomic
 
-from app.config import settings
-from app.models import Brick, Cursor, Player
+from app.models import Brick, Cursor, Player, World
 
 
 @atomic()
@@ -40,9 +39,10 @@ async def create_brick(player: Player, x: int, y: int) -> Brick | None:
     """
     Add a brick at the top of (x, y) position.
     """
+    world = await World.select_for_update().get(id=1)
     height = await Brick.filter(x=x, y=y).count()
 
-    if height >= settings.GRID_SIZE:
+    if height >= world.size:
         return None
 
     brick, created = await Brick.get_or_create(
@@ -86,8 +86,9 @@ async def release_brick(brick: Brick) -> None:
     """
     cursor = await Cursor.filter(player_id=brick.dragged_by_id).first()
     if cursor and (brick.x, brick.y) != (cursor.x, cursor.y):
+        world = await World.select_for_update().get(id=1)
         height = await Brick.filter(x=cursor.x, y=cursor.y).count()
-        if height < settings.GRID_SIZE:
+        if height < world.size:
             previous_x, previous_y = brick.x, brick.y
             brick.x = cursor.x
             brick.y = cursor.y

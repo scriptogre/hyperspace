@@ -1,0 +1,27 @@
+<div id="world"
+     style="--world-size: {{ world.size }}; color-scheme: {{ world.theme }}">
+    {% if world.announcement %}
+        <p id="announcement" role="status">
+            {{ world.announcement }}
+        </p>
+    {% endif %}
+
+    <div id="stats" aria-label="Game statistics">
+        <details id="players">
+            {% include "_players.html" %}
+        </details>
+
+        <span>
+            <span class="icon-[lucide--blocks]" aria-hidden="true"></span>
+            <output id="brick-count"
+                    :text="$('.brick').count"
+                    aria-label="Brick count"></output>
+            <span class="stat-label">Bricks</span>
+        </span>
+    </div>
+
+    <div id="grid">
+        {% include "_bricks.html" %}
+        {% include "_cursors.html" %}
+    </div>
+</div>

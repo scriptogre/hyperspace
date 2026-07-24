@@ -13,22 +13,10 @@ from app.compression import ZstdStreamCompressor, compress_frame
 BOUNDARY = b"hyperspace-4b8f7c2d1e6a9035"
 QUEUE_SIZE = 16
 
-_PART_HEADERS = {
-    "_bricks.html": {"HX-Target": "#bricks", "HX-Swap": "outerMorph"},
-    "_players.html": {"HX-Target": "#players", "HX-Swap": "innerHTML"},
-    "_cursors.html": {"HX-Target": "#cursors", "HX-Swap": "outerMorph"},
-}
-
-
-@dataclass(frozen=True)
-class StreamChunk:
-    identity: bytes
-    zstd: bytes = b""
-
 
 @dataclass(eq=False)
 class Subscriber:
-    queue: asyncio.Queue[StreamChunk | None]
+    queue: asyncio.Queue[bytes | None]
     compressed: bool
 
 
@@ -39,17 +27,21 @@ class SharedStream:
     def __init__(self, queue_size: int = QUEUE_SIZE) -> None:
         self.queue_size = queue_size
         self.subscribers: set[Subscriber] = set()
-        self.latest: dict[str, bytes] = {}
+        self.latest = b""
         self.snapshot_zstd = b""
         self.compressor = ZstdStreamCompressor()
 
-    def publish(self, template_name: str, html: bytes) -> None:
-        part = Part(html, headers=_PART_HEADERS[template_name], media_type="text/html")
+    def publish(self, html: bytes) -> None:
+        part = Part(
+            html,
+            headers={"HX-Target": "#world", "HX-Swap": "outerMorph"},
+            media_type="text/html",
+        )
         multipart_part = part.as_multipart_part()
         writer = MultipartWriter(BOUNDARY)
         identity = b"\r\n" + writer.start_part(multipart_part.headers)
         identity += bytes(writer.write_body(html))
-        self.latest[template_name] = identity
+        self.latest = identity
         self.snapshot_zstd = b""
         self._send(identity)
 
@@ -63,35 +55,39 @@ class SharedStream:
         if compressed:
             if self.latest:
                 if not self.snapshot_zstd:
-                    self.snapshot_zstd = compress_frame(b"".join(self.latest.values()))
-                subscriber.queue.put_nowait(StreamChunk(b"", self.snapshot_zstd))
-        else:
-            for identity in self.latest.values():
-                subscriber.queue.put_nowait(StreamChunk(identity))
+                    self.snapshot_zstd = compress_frame(self.latest)
+                subscriber.queue.put_nowait(self.snapshot_zstd)
+        elif self.latest:
+            subscriber.queue.put_nowait(self.latest)
 
         try:
             while True:
-                chunk = await subscriber.queue.get()
-                if chunk is None:
+                data = await subscriber.queue.get()
+                if data is None:
                     return
-                data = chunk.zstd if compressed else chunk.identity
-                if data:
-                    yield data
+                yield data
         finally:
             self.subscribers.discard(subscriber)
 
     def _start_epoch(self) -> None:
         if self.compressor.has_open_frame:
             frame_end = self.compressor.finish_frame()
-            self._fan_out(StreamChunk(b"", frame_end), compressed_only=True)
+            self._fan_out(b"", frame_end, compressed_only=True)
 
-    def _send(self, identity: bytes, compressed_only: bool = False) -> None:
-        zstd = b""
-        if any(subscriber.compressed for subscriber in self.subscribers):
-            zstd = self.compressor.compress(identity)
-        self._fan_out(StreamChunk(identity, zstd), compressed_only)
+    def _send(self, identity: bytes) -> None:
+        zstd = (
+            self.compressor.compress(identity)
+            if any(subscriber.compressed for subscriber in self.subscribers)
+            else b""
+        )
+        self._fan_out(identity, zstd)
 
-    def _fan_out(self, chunk: StreamChunk, compressed_only: bool = False) -> None:
+    def _fan_out(
+        self,
+        identity: bytes,
+        zstd: bytes,
+        compressed_only: bool = False,
+    ) -> None:
         for subscriber in tuple(self.subscribers):
             if compressed_only and not subscriber.compressed:
                 continue
@@ -101,14 +97,14 @@ class SharedStream:
                     subscriber.queue.get_nowait()
                 subscriber.queue.put_nowait(None)
             else:
-                subscriber.queue.put_nowait(chunk)
+                subscriber.queue.put_nowait(zstd if subscriber.compressed else identity)
 
 
 shared_stream = SharedStream()
 
 
-def publish_template(template_name: str, html: bytes) -> None:
-    shared_stream.publish(template_name, html)
+def publish_world(html: bytes) -> None:
+    shared_stream.publish(html)
 
 
 def create_streaming_response(compressed: bool) -> StreamingResponse:

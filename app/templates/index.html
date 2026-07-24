@@ -35,18 +35,7 @@
     <main id="app"
           data-player-id="{{ player.id }}"
           style="--player-color: {{ player.color }}">
-        <div id="stats" aria-label="Game statistics">
-            <details id="players">
-                {% include "_players.html" %}
-            </details>
-            <span>
-                <span class="icon-[lucide--blocks]" aria-hidden="true"></span>
-                <output id="brick-count"
-                        :text="$('.brick').count"
-                        aria-label="Brick count"></output>
-                <span class="stat-label">Bricks</span>
-            </span>
-        </div>
+        {% include "_world.html" %}
 
         <aside id="controls"
                aria-label="Game controls"
@@ -79,11 +68,6 @@
                     :value="`${style.getPropertyValue('--request-latency-ms') || '--'}ms`"
                     aria-label="Last request time">--ms</output>
         </aside>
-
-        <div id="board" style="--grid-size: {{ grid_size }}">
-            {% include "_bricks.html" %}
-            {% include "_cursors.html" %}
-        </div>
 
         <button id="logout-button" class="ui-control" hx-post="/logout">
             <span class="icon-[lucide--log-out]" aria-hidden="true"></span>

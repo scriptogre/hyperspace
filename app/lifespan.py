@@ -8,9 +8,9 @@ import asyncpg
 from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
-from app.broadcast import publish_template
+from app.broadcast import publish_world
 from app.config import settings
-from app.dependencies import get_brick_stacks, get_cursors, get_players
+from app.dependencies import get_world_context
 from app.jinja import render
 from app.models import Brick, Cursor, Player
 
@@ -19,9 +19,7 @@ from app.models import Brick, Cursor, Player
 async def lifespan(
     app: FastAPI,
 ) -> AsyncIterator[None]:
-    """
-    Start the DB and NOTIFY listener for the app's lifetime.
-    """
+    """Start the DB and render the complete world after each change."""
     async with RegisterTortoise(
         app, config=settings.TORTOISE_ORM, generate_schemas=False
     ):
@@ -36,26 +34,7 @@ async def lifespan(
             password=settings.POSTGRES_PASSWORD,
             database=settings.POSTGRES_DB,
         )
-
-        # TODO: Find a more elgant way to do this
-        async def forward_postgres_notifications() -> None:
-            async for table_name in listen_to_postgres(postgres):
-                if table_name == "bricks":
-                    template_name = "_bricks.html"
-                    context = {"brick_stacks": await get_brick_stacks()}
-                elif table_name == "players":
-                    template_name = "_players.html"
-                    context = {"players": await get_players()}
-                elif table_name == "cursors":
-                    template_name = "_cursors.html"
-                    context = {"cursors": await get_cursors()}
-                else:
-                    continue
-
-                html = render(template_name, context).encode()
-                publish_template(template_name, html)
-
-        forwarder = asyncio.create_task(forward_postgres_notifications())
+        forwarder = asyncio.create_task(forward_world_changes(postgres))
 
         try:
             yield
@@ -68,17 +47,20 @@ async def lifespan(
             await postgres.close()
 
 
+async def forward_world_changes(postgres: asyncpg.Connection) -> None:
+    """Render and publish one complete world for every coalesced change."""
+    async for _ in listen_to_postgres(postgres):
+        html = render("_world.html", await get_world_context()).encode()
+        publish_world(html)
+
+
 async def listen_to_postgres(
     postgres: asyncpg.Connection,
-) -> AsyncIterator[str]:
-    """
-    Yield (coalesced) notifications from Postgres LISTEN/NOTIFY.
-    """
+) -> AsyncIterator[None]:
+    """Yield coalesced world changes from PostgreSQL."""
     notified = asyncio.Event()
-    pending: set[str] = set()
 
-    def notify(_, __, ___, notification):
-        pending.add(notification)
+    def notify(_, __, ___, ____) -> None:
         notified.set()
 
     await postgres.add_listener("hyperspace", notify)
@@ -86,7 +68,6 @@ async def listen_to_postgres(
         while True:
             await notified.wait()
             notified.clear()
-            while pending:
-                yield pending.pop()
+            yield
     finally:
         await postgres.remove_listener("hyperspace", notify)

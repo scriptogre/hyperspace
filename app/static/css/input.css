@@ -96,14 +96,14 @@
     body {
         @apply h-screen overflow-hidden touch-none bg-background font-mono text-foreground;
 
-        &:not([data-delete-mode="true"]):not(:has(.brick:active)) #board {
-            .grid-cell:not(:has(> .brick:nth-child(12))):hover > .brick:last-of-type {
+        &:not([data-delete-mode="true"]):not(:has(.brick:active)) #grid {
+            .grid-cell:hover > .brick:last-of-type {
                 border-color: color-mix(in oklch, var(--surface-color), var(--color-foreground) 65%);
                 box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--surface-color), var(--color-foreground) 35%);
             }
         }
 
-        &:not([data-delete-mode="true"]):has(.brick:active) #board {
+        &:not([data-delete-mode="true"]):has(.brick:active) #grid {
             .grid-cell:hover:not(:has(.brick:active)) > .brick-preview {
                 display: block;
             }
@@ -126,7 +126,7 @@
             }
         }
 
-        &[data-delete-mode="true"] #board {
+        &[data-delete-mode="true"] #grid {
             .grid-cell > button,
             .brick > button:not([hx-delete]) {
                 display: none;
@@ -148,7 +148,7 @@
             }
         }
 
-        &[data-delete-mode="true"] #board {
+        &[data-delete-mode="true"] #grid {
             .brick,
             .brick::before,
             .brick::after {
@@ -180,6 +180,17 @@
             > span[class*="icon-"] {
                 @apply size-4;
             }
+        }
+
+        #world {
+            @apply absolute inset-0 bg-background text-foreground;
+        }
+
+        #announcement {
+            @apply absolute top-6 left-1/2 z-50 max-w-[calc(100%-12rem)]
+                -translate-x-1/2 rounded-full border border-border
+                bg-card/90 px-4 py-2 text-center text-xs text-foreground
+                shadow-iso-sm backdrop-blur-md;
         }
 
         #stats {
@@ -512,16 +523,16 @@
         }
     }
 
-    #board {
+    #grid {
         position: absolute;
         top: 40%;
         left: 50%;
         display: grid;
-        grid-template-columns: repeat(var(--grid-size), var(--cell-size));
-        grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+        grid-template-columns: repeat(var(--world-size), var(--cell-size));
+        grid-template-rows: repeat(var(--world-size), var(--cell-size));
         translate: -50% -50%;
         scale: 0.4;
-        transform: perspective(1000px) rotateX(60deg) rotateZ(-45deg);
+        transform: perspective(calc(var(--world-size) * 5.208333rem)) rotateX(60deg) rotateZ(-45deg);
         transform-style: preserve-3d;
 
         @media (min-width: 40rem) {
@@ -531,10 +542,10 @@
         @supports (scale: calc(1rem / 1rem)) {
             --grid-scale: min(
                 1,
-                calc((100dvw - 3rem) / 72rem),
-                calc((100dvh - 3rem) / 48rem)
+                calc((100dvw - 3rem) / (var(--world-size) * 6rem)),
+                calc((100dvh - 3rem) / (var(--world-size) * 4rem))
             );
-            top: calc(50% - 10.25rem * var(--grid-scale));
+            top: calc(50% - var(--world-size) * 0.854167rem * var(--grid-scale));
             scale: var(--grid-scale);
         }
 
@@ -623,7 +634,7 @@
             --color: var(--player-color);
             --face-opacity: 40%;
             display: none;
-            opacity: clamp(0, calc(var(--grid-size) - var(--stack-height)), 1);
+            opacity: clamp(0, calc(var(--world-size) - var(--stack-height)), 1);
             pointer-events: none;
             z-index: 10000;
             transform: translateZ(calc((var(--stack-height) + 1) * var(--brick-height)));
@@ -696,12 +707,6 @@
             &::after {
                 cursor: grab;
             }
-        }
-
-        .grid-cell:has(> .brick:nth-child(12))
-            > .brick:last-of-type
-            > button:not([hx-delete]):not([hidden]) {
-            cursor: not-allowed;
         }
 
         .cursor {

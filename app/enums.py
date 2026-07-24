@@ -3,6 +3,11 @@
 from enum import StrEnum
 
 
+class Theme(StrEnum):
+    LIGHT = "light"
+    DARK = "dark"
+
+
 class EventType(StrEnum):
     """
     An entry type in the activity feed.
