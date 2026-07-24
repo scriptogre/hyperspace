@@ -194,6 +194,7 @@ async def stream_reader(
 
 async def open_players(
     count: int,
+    world_size: int,
 ) -> tuple[list[httpx.AsyncClient], list[asyncio.Queue], list[asyncio.Task]]:
     clients = [
         httpx.AsyncClient(
@@ -223,8 +224,8 @@ async def open_players(
             client.patch(
                 "/cursor",
                 data={
-                    "x": index % settings.GRID_SIZE,
-                    "y": index // settings.GRID_SIZE % settings.GRID_SIZE,
+                    "x": index % world_size,
+                    "y": index // world_size % world_size,
                     "z": -1,
                 },
             )
@@ -295,12 +296,16 @@ async def sql_cost(connection: asyncpg.Connection) -> tuple[float, float]:
     return float(row["calls"]), float(row["total_exec_time"])
 
 
-async def run_scenario(connection: asyncpg.Connection, count: int) -> Result:
+async def run_scenario(
+    connection: asyncpg.Connection,
+    count: int,
+    world_size: int,
+) -> Result:
     result = Result(clients=count)
     await connection.execute(
         "TRUNCATE events, cursors, bricks, players RESTART IDENTITY CASCADE"
     )
-    clients, queues, tasks = await open_players(count)
+    clients, queues, tasks = await open_players(count, world_size)
     try:
         await asyncio.sleep(1)
         await move_and_wait(clients[0], queues, 1)
@@ -310,7 +315,7 @@ async def run_scenario(connection: asyncpg.Connection, count: int) -> Result:
         for step in range(MOVES):
             started = time.perf_counter()
             patch_ms, fanout_ms, body_bytes = await move_and_wait(
-                clients[0], queues, step % settings.GRID_SIZE
+                clients[0], queues, step % world_size
             )
             result.patch_ms.append(patch_ms)
             result.fanout_ms.append(fanout_ms)
@@ -401,10 +406,13 @@ async def run() -> None:
         await wait_for_server(process)
         connection = await asyncpg.connect(**postgres_kwargs(BENCHMARK_DB))
         try:
+            world_size = await connection.fetchval(
+                "SELECT size FROM worlds WHERE id = 1"
+            )
             for count in CLIENT_COUNTS:
                 try:
                     result = await asyncio.wait_for(
-                        run_scenario(connection, count), timeout=45
+                        run_scenario(connection, count, world_size), timeout=45
                     )
                 except TimeoutError:
                     result = Result(clients=count, error="timeout")

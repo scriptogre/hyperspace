@@ -8,21 +8,13 @@ from app.broadcast import BOUNDARY, SharedStream
 from tests import run_async
 
 
-@pytest.mark.parametrize(
-    ("template_name", "target", "swap"),
-    [
-        ("_bricks.html", "#bricks", "outerMorph"),
-        ("_players.html", "#players", "innerHTML"),
-        ("_cursors.html", "#cursors", "outerMorph"),
-    ],
-)
-def test_identity_stream_serializes_shared_part(template_name, target, swap):
+def test_identity_stream_serializes_world_part():
     async def collect():
         stream = SharedStream()
         subscription = stream.subscribe(compressed=False)
         pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish(template_name, b"<p>Ready</p>")
+        stream.publish(b"<div id='world'>Ready</div>")
         chunk = await pending
         await subscription.aclose()
         return chunk
@@ -30,9 +22,9 @@ def test_identity_stream_serializes_shared_part(template_name, target, swap):
     chunk = run_async(collect())
 
     assert chunk.startswith(b"\r\n--" + BOUNDARY + b"\r\n")
-    assert f"hx-target: {target}\r\n".encode() in chunk
-    assert f"hx-swap: {swap}\r\n".encode() in chunk
-    assert chunk.endswith(b"\r\n\r\n<p>Ready</p>")
+    assert b"hx-target: #world\r\n" in chunk
+    assert b"hx-swap: outerMorph\r\n" in chunk
+    assert chunk.endswith(b"\r\n\r\n<div id='world'>Ready</div>")
 
 
 def test_zstd_stream_keeps_history_between_updates():
@@ -41,12 +33,12 @@ def test_zstd_stream_keeps_history_between_updates():
         subscription = stream.subscribe(compressed=True)
         first = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish("_bricks.html", b"<p>First</p>")
+        stream.publish(b"<div id='world'>First</div>")
         first_chunk = await first
 
         second = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish("_bricks.html", b"<p>Second</p>")
+        stream.publish(b"<div id='world'>Second</div>")
         second_chunk = await second
         await subscription.aclose()
         return first_chunk, second_chunk
@@ -54,18 +46,18 @@ def test_zstd_stream_keeps_history_between_updates():
     first, second = run_async(collect())
     decompressor = ZstdDecompressor()
 
-    assert b"<p>First</p>" in decompressor.decompress(first)
-    assert b"<p>Second</p>" in decompressor.decompress(second)
+    assert b"First" in decompressor.decompress(first)
+    assert b"Second" in decompressor.decompress(second)
     assert not decompressor.eof
 
 
-def test_late_join_replays_latest_part_only_to_new_subscriber():
+def test_late_join_replays_latest_world_only_to_new_subscriber():
     async def collect():
         stream = SharedStream()
         first_subscription = stream.subscribe(compressed=True)
         first_pending = asyncio.create_task(anext(first_subscription))
         await asyncio.sleep(0)
-        stream.publish("_bricks.html", b"<p>Current</p>")
+        stream.publish(b"<div id='world'>Current</div>")
         first_chunk = await first_pending
 
         second_subscription = stream.subscribe(compressed=True)
@@ -80,7 +72,7 @@ def test_late_join_replays_latest_part_only_to_new_subscriber():
         assert not first_next_pending.done()
         assert not second_next_pending.done()
 
-        stream.publish("_bricks.html", b"<p>Next</p>")
+        stream.publish(b"<div id='world'>Next</div>")
         first_next = await first_next_pending
         second_next = await second_next_pending
         await first_subscription.aclose()
@@ -90,17 +82,17 @@ def test_late_join_replays_latest_part_only_to_new_subscriber():
     first, frame_end, second_snapshot, first_next, second_next = run_async(collect())
 
     old_epoch = ZstdDecompressor()
-    assert b"<p>Current</p>" in old_epoch.decompress(first)
+    assert b"Current" in old_epoch.decompress(first)
     assert old_epoch.decompress(frame_end) == b""
     assert old_epoch.eof
 
     snapshot = ZstdDecompressor()
-    assert b"<p>Current</p>" in snapshot.decompress(second_snapshot)
+    assert b"Current" in snapshot.decompress(second_snapshot)
     assert snapshot.eof
 
     assert first_next == second_next
     new_epoch = ZstdDecompressor()
-    assert b"<p>Next</p>" in new_epoch.decompress(first_next)
+    assert b"Next" in new_epoch.decompress(first_next)
 
 
 def test_queue_overflow_disconnects_and_replay_catches_up():
@@ -109,11 +101,11 @@ def test_queue_overflow_disconnects_and_replay_catches_up():
         subscription = stream.subscribe(compressed=False)
         first_pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish("_bricks.html", b"<p>First</p>")
+        stream.publish(b"<div id='world'>First</div>")
         await first_pending
 
-        stream.publish("_bricks.html", b"<p>Second</p>")
-        stream.publish("_bricks.html", b"<p>Latest</p>")
+        stream.publish(b"<div id='world'>Second</div>")
+        stream.publish(b"<div id='world'>Latest</div>")
         with pytest.raises(StopAsyncIteration):
             await anext(subscription)
 
@@ -122,7 +114,7 @@ def test_queue_overflow_disconnects_and_replay_catches_up():
         await reconnected.aclose()
         return latest
 
-    assert b"<p>Latest</p>" in run_async(collect())
+    assert b"Latest" in run_async(collect())
 
 
 def test_stream_negotiates_zstd_from_injected_header():

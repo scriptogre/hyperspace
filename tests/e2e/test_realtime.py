@@ -23,8 +23,8 @@ def test_brick_update_reaches_both_players(browser: Browser, browser_errors):
         page_a, page_b = pages
         cell = page_a.locator(".grid-cell").evaluate_all(
             """cells => {
-                const capacity = Number(getComputedStyle(document.querySelector('#board'))
-                    .getPropertyValue('--grid-size'))
+                const capacity = Number(getComputedStyle(document.querySelector('#grid'))
+                    .getPropertyValue('--world-size'))
                 const cell = cells.find(cell =>
                     cell.querySelectorAll(':scope > .brick').length < capacity)
                 return {

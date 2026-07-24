@@ -7,6 +7,7 @@ from tortoise.fields import (
     CharEnumField,
     CharField,
     DatetimeField,
+    TextField,
     ForeignKeyField,
     IntField,
     OneToOneField,
@@ -15,7 +16,19 @@ from tortoise.fields.relational import ReverseRelation
 from tortoise.models import Model
 
 from app.colors import Oklch, calculate_player_color
-from app.enums import EventType
+from app.enums import EventType, Theme
+
+
+class World(Model):
+    """The singleton world configuration."""
+
+    id = IntField(pk=True, generated=False, default=1)
+    theme = CharEnumField(Theme, max_length=5, default=Theme.LIGHT)
+    size = IntField(default=12)
+    announcement = TextField(null=True)
+
+    class Meta:
+        table = "worlds"
 
 
 class Brick(Model):

@@ -36,32 +36,22 @@
     <main id="app"
           data-player-id="{{ player.id }}"
           style="--player-color: {{ player.color }}">
-        <div id="stats" aria-label="Game statistics">
-            <details id="players">
-                {% include "_players.html" %}
-            </details>
-            <span>
-                <output id="brick-count" :text="$('.brick').count"></output>
-                bricks
-            </span>
-        </div>
+        {% include "_world.html" %}
 
-        <aside id="latency" data-rtt="--" aria-label="Request latency">
+        <aside id="latency"
+               data-rtt="--"
+               aria-label="Request latency">
             <output :text="`${data.rtt}ms`"
                     :class="data.rtt === '--' ? '' : data.rtt < 100 ? 'text-green-600' : data.rtt < 250 ? 'text-yellow-600' : 'text-red-600'"
                     aria-label="Last request time">--ms</output>
-            <select id="simulated-latency" aria-label="Added request delay">
+            <select id="simulated-latency"
+                    aria-label="Added request delay">
                 <option value="0">+0ms</option>
                 <option value="100">+100ms</option>
                 <option value="250">+250ms</option>
                 <option value="500">+500ms</option>
             </select>
         </aside>
-
-        <div id="board" style="--grid-size: {{ grid_size }}">
-            {% include "_bricks.html" %}
-            {% include "_cursors.html" %}
-        </div>
 
         <button id="logout-button" hx-post="/logout">
             <span class="icon-[lucide--log-out]" aria-hidden="true"></span>

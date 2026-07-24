@@ -50,13 +50,14 @@ def test_cursor_update_ignores_offline_player(monkeypatch):
 
 
 def test_cursor_render_query_only_includes_online_players(monkeypatch):
-    brick_query = MagicMock()
-    brick_query.values = AsyncMock(return_value=[])
+    database = object()
     cursor_query = MagicMock()
-    cursor_query.order_by.return_value.values = AsyncMock(return_value=[])
-    cursor_filter = MagicMock(return_value=cursor_query)
-    monkeypatch.setattr(dependencies.Brick, "all", MagicMock(return_value=brick_query))
-    monkeypatch.setattr(dependencies.Cursor, "filter", cursor_filter)
+    cursor_query.filter.return_value.order_by.return_value.values = AsyncMock(
+        return_value=[]
+    )
+    cursor_all = MagicMock(return_value=cursor_query)
+    monkeypatch.setattr(dependencies.Cursor, "all", cursor_all)
 
-    assert run_async(dependencies.get_cursors()) == []
-    cursor_filter.assert_called_once_with(player__is_online=True)
+    assert run_async(dependencies.get_cursors(database, [])) == []
+    cursor_all.assert_called_once_with(using_db=database)
+    cursor_query.filter.assert_called_once_with(player__is_online=True)
