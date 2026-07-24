@@ -25,12 +25,11 @@
     </script>
 </head>
 
-<body data-shift-key="false"
-      data-delete-mode="false"
+<body data-delete-mode="false"
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
       {% if player %}hx-multipart:connect="/stream"{% endif %}
-      hx-on="keydown, keyup -> data.shiftKey = event.shiftKey">
+      hx-on="keydown, keyup -> data.deleteMode = event.shiftKey">
 
 {% if player %}
     <main id="app"
@@ -41,21 +40,44 @@
                 {% include "_players.html" %}
             </details>
             <span>
-                <output id="brick-count" :text="$('.brick').count"></output>
-                bricks
+                <span class="icon-[lucide--blocks]" aria-hidden="true"></span>
+                <output id="brick-count"
+                        :text="$('.brick').count"
+                        aria-label="Brick count"></output>
+                <span class="stat-label">Bricks</span>
             </span>
         </div>
 
-        <aside id="latency" data-rtt="--" aria-label="Request latency">
-            <output :text="`${data.rtt}ms`"
-                    :class="data.rtt === '--' ? '' : data.rtt < 100 ? 'text-green-600' : data.rtt < 250 ? 'text-yellow-600' : 'text-red-600'"
+        <aside id="controls"
+               aria-label="Game controls"
+               hx-on="htmx:request:latency:configuration from:document ->
+                      event.detail.delay = $('#simulate-latency-toggle').checked
+                          ? Number($('#simulate-latency-toggle').value)
+                          : 0">
+            <details id="settings">
+                <summary class="ui-control" aria-label="Settings">
+                    <span class="icon-[lucide--settings]" aria-hidden="true"></span>
+                    <span class="settings-label">Settings</span>
+                    <span class="settings-chevron icon-[lucide--chevron-down]" aria-hidden="true"></span>
+                </summary>
+                <div>
+                    <label class="setting">
+                        <span class="icon-[lucide--snail]" aria-hidden="true"></span>
+                        <span>Simulate Latency <small>(+250ms)</small></span>
+                        <input id="simulate-latency-toggle" type="checkbox" value="250">
+                    </label>
+                    <label class="setting">
+                        <span class="icon-[lucide--zap]" aria-hidden="true"></span>
+                        <span>Client Predictions</span>
+                        <input id="predictions-toggle" type="checkbox" checked>
+                    </label>
+                </div>
+            </details>
+            <output id="request-latency"
+                    hx-on="htmx:request:latency:measurement from:document ->
+                           style.setProperty('--request-latency-ms', event.detail.ms)"
+                    :value="`${style.getPropertyValue('--request-latency-ms') || '--'}ms`"
                     aria-label="Last request time">--ms</output>
-            <select id="simulated-latency" aria-label="Added request delay">
-                <option value="0">+0ms</option>
-                <option value="100">+100ms</option>
-                <option value="250">+250ms</option>
-                <option value="500">+500ms</option>
-            </select>
         </aside>
 
         <div id="board" style="--grid-size: {{ grid_size }}">
@@ -63,12 +85,12 @@
             {% include "_cursors.html" %}
         </div>
 
-        <button id="logout-button" hx-post="/logout">
+        <button id="logout-button" class="ui-control" hx-post="/logout">
             <span class="icon-[lucide--log-out]" aria-hidden="true"></span>
             Log out
         </button>
 
-        <button id="delete-mode-button"
+        <button id="delete-mode-button" class="ui-control"
                 type="button"
                 aria-pressed="false"
                 :aria-pressed="data.deleteMode"

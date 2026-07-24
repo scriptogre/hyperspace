@@ -1,17 +1,22 @@
 (() => {
     htmx.registerExtension('hx-latency', {
         htmx_config_request: (_, {ctx}) => {
-            const latency = document.querySelector('#latency')
-            const delay = document.querySelector('#simulated-latency')
-            if (!latency || !delay) return
+            const configuration = {delay: 0}
+            htmx.trigger(
+                document,
+                'htmx:request:latency:configuration',
+                configuration,
+            )
 
             const fetch = ctx.fetch ?? window.fetch.bind(window)
             ctx.fetch = async (...args) => {
-                if (delay.value !== '0') await htmx.timeout(delay.value)
+                if (configuration.delay > 0) await htmx.timeout(configuration.delay)
 
                 const started = performance.now()
                 const response = await fetch(...args)
-                latency.dataset.rtt = Math.round(performance.now() - started)
+                htmx.trigger(document, 'htmx:request:latency:measurement', {
+                    ms: Math.round(performance.now() - started),
+                })
                 return response
             }
         }

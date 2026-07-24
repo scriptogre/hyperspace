@@ -96,14 +96,14 @@
     body {
         @apply h-screen overflow-hidden touch-none bg-background font-mono text-foreground;
 
-        &:not([data-shift-key="true"]):not([data-delete-mode="true"]):not(:has(.brick:active)) #board {
+        &:not([data-delete-mode="true"]):not(:has(.brick:active)) #board {
             .grid-cell:not(:has(> .brick:nth-child(12))):hover > .brick:last-of-type {
                 border-color: color-mix(in oklch, var(--surface-color), var(--color-foreground) 65%);
                 box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--surface-color), var(--color-foreground) 35%);
             }
         }
 
-        &:not([data-shift-key="true"]):not([data-delete-mode="true"]):has(.brick:active) #board {
+        &:not([data-delete-mode="true"]):has(.brick:active) #board {
             .grid-cell:hover:not(:has(.brick:active)) > .brick-preview {
                 display: block;
             }
@@ -126,7 +126,7 @@
             }
         }
 
-        &:is([data-shift-key="true"], [data-delete-mode="true"]) #board {
+        &[data-delete-mode="true"] #board {
             .grid-cell > button,
             .brick > button:not([hx-delete]) {
                 display: none;
@@ -152,11 +152,21 @@
             .brick,
             .brick::before,
             .brick::after {
-                border-color: rgb(239 68 68 / 75%);
+                border-color: rgb(239 68 68 / 55%);
             }
 
             .brick {
-                box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 20%);
+                box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 12%);
+            }
+
+            .brick:hover,
+            .brick:hover::before,
+            .brick:hover::after {
+                border-color: rgb(239 68 68);
+            }
+
+            .brick:hover {
+                box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 45%);
             }
         }
     }
@@ -164,25 +174,100 @@
     #app {
         @apply relative h-full w-full select-none overflow-hidden bg-background;
 
-        #stats {
-            @apply absolute top-6 left-6 z-50 flex items-center gap-3 font-sans text-xs font-normal text-foreground/60 tabular-nums;
+        .ui-control {
+            @apply min-h-7 items-center gap-2;
+
+            > span[class*="icon-"] {
+                @apply size-4;
+            }
         }
 
-        #latency {
-            @apply absolute top-6 right-6 z-50 hidden items-center gap-1 font-sans text-xs font-normal text-foreground/60 tabular-nums sm:flex;
+        #stats {
+            @apply absolute top-6 left-6 z-50 flex items-center gap-4 font-sans text-xs font-normal text-foreground/60 tabular-nums;
 
-            #simulated-latency {
-                @apply cursor-pointer appearance-none bg-transparent transition-colors hover:text-foreground;
+            .stat-label {
+                @apply hidden sm:inline;
+            }
+
+            > span {
+                @apply flex items-center gap-2;
+
+
+                > span[class*="icon-"] {
+                    @apply size-3.5;
+                }
+            }
+        }
+
+        #controls {
+            @apply absolute top-6 right-6 z-50 flex items-center gap-4 font-sans text-xs font-normal text-foreground/60 tabular-nums;
+
+            #request-latency {
+                @apply w-10 border-l border-border pl-3 text-right;
+                --latency-level: calc(
+                    clamp(0, calc(var(--request-latency-ms) - 99), 1) +
+                    clamp(0, calc(var(--request-latency-ms) - 249), 1)
+                );
+                color: hsl(calc(120deg - var(--latency-level) * 60deg) 70% 45%);
+            }
+
+            #settings {
+                @apply relative;
+
+                > summary {
+                    @apply -m-2 flex cursor-pointer list-none p-2 transition-colors hover:text-foreground;
+
+                    .settings-label {
+                        @apply hidden sm:inline;
+                    }
+
+                    .settings-chevron {
+                        @apply size-3.5 transition-transform;
+                    }
+                }
+
+                &[open] > summary .settings-chevron {
+                    rotate: 180deg;
+                }
+
+                > div {
+                    @apply absolute top-full right-0 mt-2 grid w-max gap-2 rounded-xl border border-border bg-card/90 p-2 text-foreground shadow-iso-sm backdrop-blur-md;
+
+                    .setting {
+                        @apply grid min-h-7 grid-cols-[auto_1fr_auto] items-center gap-2 px-2;
+
+                        > span[class*="icon-"] {
+                            @apply size-4 text-muted-foreground;
+                        }
+
+                        > span:not([class*="icon-"]) {
+                            @apply whitespace-nowrap;
+
+                            small {
+                                @apply text-[10px] text-muted-foreground;
+                            }
+                        }
+                    }
+
+                    label.setting {
+                        @apply cursor-pointer;
+                    }
+
+                    input {
+                        @apply size-4 cursor-pointer accent-primary;
+                    }
+                }
+                @media (max-width: 40rem) {
+                    > div .setting {
+                        @apply min-h-6;
+                    }
+                }
             }
         }
 
         #logout-button,
         #delete-mode-button {
-            @apply absolute bottom-4 z-50 cursor-pointer items-center gap-2 px-1 py-2 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground;
-
-            > span[class*="icon-"] {
-                @apply size-3.5;
-            }
+            @apply absolute bottom-4 z-50 cursor-pointer px-1 py-2 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground;
         }
 
         #logout-button {
@@ -212,10 +297,10 @@
         @apply relative;
 
         > summary {
-            @apply flex cursor-pointer list-none items-center gap-1.5 text-xs font-normal text-foreground/60 transition-colors hover:text-foreground;
+            @apply -m-2 flex cursor-pointer list-none p-2 text-xs font-normal text-foreground/60 transition-colors hover:text-foreground;
         }
 
-        > summary > :last-child {
+        > summary > .players-chevron {
             @apply size-3 transition-transform;
         }
 

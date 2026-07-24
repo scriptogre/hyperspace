@@ -130,6 +130,37 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     context.close()
 
 
+def test_prediction_toggle_controls_delete(joined_page: Page):
+    page = joined_page
+    predicted_cell = place_brick(page)
+    unpredicted_cell = place_brick(page)
+    settings = page.locator("#settings")
+    toggle = page.locator("#predictions-toggle")
+
+    def fake_delete(route):
+        if route.request.method == "DELETE":
+            route.fulfill(status=204)
+        else:
+            route.continue_()
+
+    page.route("**/bricks/*", fake_delete)
+
+    expect(toggle).to_be_checked()
+    expect(settings).not_to_have_attribute("open", "")
+    settings.locator("summary").click()
+    expect(settings).to_have_attribute("open", "")
+    page.locator("#simulate-latency-toggle").check()
+
+    predicted_cell.locator("button[hx-delete]").dispatch_event("pointerdown")
+    expect(predicted_cell.locator(".brick")).to_have_count(0, timeout=100)
+
+    toggle.uncheck()
+    expect(toggle).not_to_be_checked()
+    unpredicted_cell.locator("button[hx-delete]").dispatch_event("pointerdown")
+    page.wait_for_timeout(600)
+    expect(unpredicted_cell.locator(".brick")).to_have_count(1)
+
+
 def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
     context = browser.new_context(
         base_url="http://fastapi:8000",
@@ -140,6 +171,7 @@ def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
     page = context.new_page()
     browser_errors(page)
     join(page, "Touch Delete")
+    expect(page.locator("#controls")).to_be_visible()
     cell = place_brick(page)
     brick = cell.locator(".brick")
     delete_button = brick.locator("button[hx-delete]")
@@ -170,12 +202,14 @@ def test_shift_drag_deletes_touched_bricks(joined_page: Page):
     cells = [place_brick(page) for _ in range(3)]
 
     page.keyboard.down("Shift")
+    expect(page.locator("body")).to_have_attribute("data-delete-mode", "true")
     page.mouse.move(*center(cells[0].locator(".brick > button[hx-delete]")))
     page.mouse.down()
     for cell in cells[1:]:
         page.mouse.move(*center(cell.locator(".brick > button[hx-delete]")), steps=8)
     page.mouse.up()
     page.keyboard.up("Shift")
+    expect(page.locator("body")).to_have_attribute("data-delete-mode", "false")
 
     for cell in cells:
         expect(cell.locator(".brick")).to_have_count(0)

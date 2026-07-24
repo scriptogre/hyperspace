@@ -20,7 +20,7 @@
                      data-z="{{ brick.z }}"
                      {% if brick.dragged_by_id %}data-dragging{% endif %}
                      style="--z: {{ brick.z }}; --color: {{ brick.color }}"
-                     :draggable="!data.shiftKey && !data.deleteMode"
+                     :draggable="!data.deleteMode"
                      hx-patch="/cursor"
                      hx-trigger="pointerenter"
                      hx-sync="#board:queue last"
@@ -43,7 +43,7 @@
                     <button aria-label="Delete brick"
                             hx-delete="/bricks/{{ brick.id }}"
                             hx-trigger="pointerdown, pointerenter[buttons] delay:100ms"
-                            hx-on::after:request="$('closest .brick').remove()"
+                            hx-on::before:request="$('#predictions-toggle').checked && $('closest .brick').remove()"
                     ></button>
 
                     <button hidden
