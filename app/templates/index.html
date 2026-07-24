@@ -15,6 +15,7 @@
     <script src="{{ url_for('static', path='js/htmx.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-multipart.js') }}"></script>
     <script src="{{ url_for('static', path='js/hx-live.js') }}"></script>
+    <script src="{{ url_for('static', path='js/hx-latency.js') }}"></script>
     <script src="{{ url_for('static', path='js/drag-and-drop-mobile-polyfill.js') }}"></script>
 
     <script>
@@ -35,13 +36,26 @@
     <main id="app"
           data-player-id="{{ player.id }}"
           style="--player-color: {{ player.color }}">
-        <details id="players">
-            {% include "_players.html" %}
-        </details>
+        <div id="stats" aria-label="Game statistics">
+            <details id="players">
+                {% include "_players.html" %}
+            </details>
+            <span>
+                <output id="brick-count" :text="$('.brick').count"></output>
+                bricks
+            </span>
+        </div>
 
-        <aside id="stats" aria-label="Game statistics">
-            <output id="brick-count" :text="$('.brick').count"></output>
-            bricks
+        <aside id="latency" data-rtt="--" aria-label="Request latency">
+            <output :text="`${data.rtt}ms`"
+                    :class="data.rtt === '--' ? '' : data.rtt < 100 ? 'text-green-600' : data.rtt < 250 ? 'text-yellow-600' : 'text-red-600'"
+                    aria-label="Last request time">--ms</output>
+            <select id="simulated-latency" aria-label="Added request delay">
+                <option value="0">+0ms</option>
+                <option value="100">+100ms</option>
+                <option value="250">+250ms</option>
+                <option value="500">+500ms</option>
+            </select>
         </aside>
 
         <div id="board" style="--grid-size: {{ grid_size }}">

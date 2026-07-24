@@ -165,7 +165,15 @@
         @apply relative h-full w-full select-none overflow-hidden bg-background;
 
         #stats {
-            @apply pointer-events-none absolute top-6 right-6 z-50 hidden font-sans text-xs font-normal text-foreground/60 tabular-nums sm:block;
+            @apply absolute top-6 left-6 z-50 flex items-center gap-3 font-sans text-xs font-normal text-foreground/60 tabular-nums;
+        }
+
+        #latency {
+            @apply absolute top-6 right-6 z-50 hidden items-center gap-1 font-sans text-xs font-normal text-foreground/60 tabular-nums sm:flex;
+
+            #simulated-latency {
+                @apply cursor-pointer appearance-none bg-transparent transition-colors hover:text-foreground;
+            }
         }
 
         #logout-button,
@@ -201,7 +209,7 @@
     }
 
     #players {
-        @apply absolute top-6 left-6 z-50 font-sans;
+        @apply relative;
 
         > summary {
             @apply flex cursor-pointer list-none items-center gap-1.5 text-xs font-normal text-foreground/60 transition-colors hover:text-foreground;

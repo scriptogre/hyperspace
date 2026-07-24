@@ -6,6 +6,9 @@
     --font-sans: 'Space Grotesk', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
     --color-red-500: oklch(63.7% 0.237 25.331);
+    --color-red-600: oklch(57.7% 0.245 27.325);
+    --color-yellow-600: oklch(68.1% 0.162 75.834);
+    --color-green-600: oklch(62.7% 0.194 149.214);
     --color-neutral-50: oklch(98.5% 0 0);
     --color-neutral-100: oklch(97.0% 0 0);
     --color-neutral-200: oklch(92.2% 0 0);
@@ -341,6 +344,15 @@
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
+  .text-green-600 {
+    color: var(--color-green-600);
+  }
+  .text-red-600 {
+    color: var(--color-red-600);
+  }
+  .text-yellow-600 {
+    color: var(--color-yellow-600);
+  }
   .blur {
     --tw-blur: blur(8px);
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
@@ -455,12 +467,33 @@
     -webkit-user-select: none;
     user-select: none;
     #stats {
-      pointer-events: none;
+      position: absolute;
+      top: calc(var(--spacing) * 6);
+      left: calc(var(--spacing) * 6);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: calc(var(--spacing) * 3);
+      font-family: var(--font-sans);
+      font-size: var(--text-xs);
+      line-height: var(--tw-leading, var(--text-xs--line-height));
+      --tw-font-weight: var(--font-weight-normal);
+      font-weight: var(--font-weight-normal);
+      color: color-mix(in srgb, oklch(20.5% 0 0) 60%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        color: color-mix(in oklab, var(--color-foreground) 60%, transparent);
+      }
+      --tw-numeric-spacing: tabular-nums;
+      font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
+    }
+    #latency {
       position: absolute;
       top: calc(var(--spacing) * 6);
       right: calc(var(--spacing) * 6);
       z-index: 50;
       display: none;
+      align-items: center;
+      gap: calc(var(--spacing) * 1);
       font-family: var(--font-sans);
       font-size: var(--text-xs);
       line-height: var(--tw-leading, var(--text-xs--line-height));
@@ -473,7 +506,20 @@
       --tw-numeric-spacing: tabular-nums;
       font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
       @media (width >= 40rem) {
-        display: block;
+        display: flex;
+      }
+      #simulated-latency {
+        cursor: pointer;
+        appearance: none;
+        background-color: transparent;
+        transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;
+        transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+        transition-duration: var(--tw-duration, var(--default-transition-duration));
+        &:hover {
+          @media (hover: hover) {
+            color: var(--color-foreground);
+          }
+        }
       }
     }
     #logout-button, #delete-mode-button {
@@ -529,11 +575,7 @@
     }
   }
   #players {
-    position: absolute;
-    top: calc(var(--spacing) * 6);
-    left: calc(var(--spacing) * 6);
-    z-index: 50;
-    font-family: var(--font-sans);
+    position: relative;
     > summary {
       display: flex;
       cursor: pointer;
