@@ -2,12 +2,13 @@
 
 import asyncio
 from collections.abc import AsyncIterator
-from compression.zstd import ZstdCompressor
 from dataclasses import dataclass
 
 from multipart_response import MultipartWriter
 from multipart_response.starlette import Part
 from starlette.responses import StreamingResponse
+
+from app.compression import ZstdStreamCompressor, compress_frame
 
 BOUNDARY = b"hyperspace-4b8f7c2d1e6a9035"
 QUEUE_SIZE = 16
@@ -40,8 +41,7 @@ class SharedStream:
         self.subscribers: set[Subscriber] = set()
         self.latest: dict[str, bytes] = {}
         self.snapshot_zstd = b""
-        self.compressor = ZstdCompressor(level=6)
-        self.compressor_started = False
+        self.compressor = ZstdStreamCompressor()
 
     def publish(self, template_name: str, html: bytes) -> None:
         part = Part(html, headers=_PART_HEADERS[template_name], media_type="text/html")
@@ -63,11 +63,7 @@ class SharedStream:
         if compressed:
             if self.latest:
                 if not self.snapshot_zstd:
-                    compressor = ZstdCompressor(level=6)
-                    self.snapshot_zstd = compressor.compress(
-                        b"".join(self.latest.values()),
-                        mode=ZstdCompressor.FLUSH_FRAME,
-                    )
+                    self.snapshot_zstd = compress_frame(b"".join(self.latest.values()))
                 subscriber.queue.put_nowait(StreamChunk(b"", self.snapshot_zstd))
         else:
             for identity in self.latest.values():
@@ -85,20 +81,14 @@ class SharedStream:
             self.subscribers.discard(subscriber)
 
     def _start_epoch(self) -> None:
-        if self.compressor_started:
-            frame_end = self.compressor.flush(ZstdCompressor.FLUSH_FRAME)
+        if self.compressor.has_open_frame:
+            frame_end = self.compressor.finish_frame()
             self._fan_out(StreamChunk(b"", frame_end), compressed_only=True)
-            self.compressor = ZstdCompressor(level=6)
-            self.compressor_started = False
 
     def _send(self, identity: bytes, compressed_only: bool = False) -> None:
         zstd = b""
         if any(subscriber.compressed for subscriber in self.subscribers):
-            zstd = self.compressor.compress(
-                identity,
-                mode=ZstdCompressor.FLUSH_BLOCK,
-            )
-            self.compressor_started = True
+            zstd = self.compressor.compress(identity)
         self._fan_out(StreamChunk(identity, zstd), compressed_only)
 
     def _fan_out(self, chunk: StreamChunk, compressed_only: bool = False) -> None:
