@@ -555,37 +555,17 @@
         top: 40%;
         left: 50%;
         display: grid;
+        width: calc(var(--world-size) * var(--cell-size));
+        height: calc(var(--world-size) * var(--cell-size));
         grid-template-columns: repeat(var(--world-size), var(--cell-size));
         grid-template-rows: repeat(var(--world-size), var(--cell-size));
         translate: -50% -50%;
         scale: 0.4;
         transform: perspective(calc(var(--world-size) * 5.208333rem)) rotateX(60deg) rotateZ(-45deg);
         transform-style: preserve-3d;
-        transition: scale 750ms ease-in-out 350ms;
-        background-color: light-dark(
-            color-mix(in oklab, var(--color-foreground) 2%, transparent),
-            color-mix(in oklab, var(--color-foreground) 1.5%, transparent)
-        );
-        background-image:
-            linear-gradient(
-                to right,
-                light-dark(
-                        color-mix(in oklab, var(--color-foreground) 8%, transparent),
-                        color-mix(in oklab, var(--color-foreground) 5%, transparent)
-                    )
-                    1px,
-                transparent 1px
-            ),
-            linear-gradient(
-                to bottom,
-                light-dark(
-                        color-mix(in oklab, var(--color-foreground) 8%, transparent),
-                        color-mix(in oklab, var(--color-foreground) 5%, transparent)
-                    )
-                    1px,
-                transparent 1px
-            );
-        background-size: var(--cell-size) var(--cell-size);
+        transition:
+            scale 750ms ease-in-out 150ms,
+            translate 750ms ease-in-out 150ms;
 
         @media (min-width: 40rem) {
             scale: 1;
@@ -597,7 +577,8 @@
                 calc((100dvw - 3rem) / (var(--world-size) * 6rem)),
                 calc((100dvh - 3rem) / (var(--world-size) * 4rem))
             );
-            top: calc(50% - var(--world-size) * 0.854167rem * var(--grid-scale));
+            top: 50%;
+            translate: -50% calc(-50% - var(--world-size) * 0.854167rem * var(--grid-scale));
             scale: var(--grid-scale);
         }
 
@@ -609,9 +590,33 @@
         .grid-cell {
             display: contents;
 
+            &::before,
             > * {
                 grid-column: calc(var(--x) + 1);
                 grid-row: calc(var(--y) + 1);
+            }
+
+            &::before {
+                content: "";
+                width: var(--cell-size);
+                height: var(--cell-size);
+                pointer-events: none;
+                opacity: 1;
+                transition: opacity 180ms ease-out;
+                transition-delay: calc((var(--x) + var(--y)) * 3ms);
+                @apply border;
+                border-color: light-dark(
+                    color-mix(in oklab, var(--color-foreground) 8%, transparent),
+                    color-mix(in oklab, var(--color-foreground) 5%, transparent)
+                );
+                background: light-dark(
+                    color-mix(in oklab, var(--color-foreground) 2%, transparent),
+                    color-mix(in oklab, var(--color-foreground) 1.5%, transparent)
+                );
+
+                @starting-style {
+                    opacity: 0;
+                }
             }
 
             > button {
@@ -631,6 +636,10 @@
 
         @media (prefers-reduced-motion: reduce) {
             transition: none;
+
+            .grid-cell::before {
+                transition: none;
+            }
         }
 
         .brick,
