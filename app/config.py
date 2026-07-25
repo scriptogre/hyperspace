@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["local", "production", "testing"] = "local"
     DEBUG: bool = False
     SECRET_KEY: str = "dev-insecure-change-me"  # signs the form-errors cookie
+    DOMAIN: str | None = None
 
     # Directories
     # --------------------
@@ -37,6 +38,16 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
+
+    def join_url(self, request_origin: str) -> str:
+        """Return the configured public URL or the current request origin."""
+        if not self.DOMAIN:
+            return request_origin.rstrip("/")
+        if "://" in self.DOMAIN:
+            return self.DOMAIN.rstrip("/")
+
+        scheme = "https" if self.ENVIRONMENT == "production" else "http"
+        return f"{scheme}://{self.DOMAIN.rstrip('/')}"
 
     @computed_field
     @property

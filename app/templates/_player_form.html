@@ -71,11 +71,11 @@
         <p id="join-qr-title">Join us live at BigSkyDevCon 2026</p>
         <div>
             <img src="{{ url_for('static', path='images/logo_transp.png') }}" alt="">
-            <a href="https://hyperspace.christiantanul.com"
+            <a href="{{ join_url }}"
                aria-label="Open Hyperspace on this device">
-                <qr-code content="https://hyperspace.christiantanul.com"
+                <qr-code content="{{ join_url }}"
                          ecclevel="M"
-                         margin="4"
+                         margin="2"
                          aria-hidden="true"></qr-code>
             </a>
         </div>

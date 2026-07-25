@@ -1,7 +1,6 @@
 from playwright.sync_api import Page, expect
 
 
-HYPERSPACE_URL = "https://hyperspace.christiantanul.com"
 EVENT_TEXT = "Join us live at BigSkyDevCon 2026"
 
 
@@ -17,6 +16,6 @@ def test_login_qr_code(page: Page, browser_errors):
         "src", "/static/images/logo_transp.png"
     )
     expect(card.locator("p")).to_have_text(EVENT_TEXT)
-    expect(link).to_have_attribute("href", HYPERSPACE_URL)
-    expect(qr_code).to_have_attribute("content", HYPERSPACE_URL)
+    expect(link).to_have_attribute("href", page.url.rstrip("/"))
+    expect(qr_code).to_have_attribute("content", page.url.rstrip("/"))
     expect(qr_code.locator("svg")).to_be_visible()

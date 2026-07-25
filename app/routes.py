@@ -7,6 +7,7 @@ from fastapi import (
     Depends,
     Form,
     Header,
+    Request,
     Response,
 )
 
@@ -27,6 +28,7 @@ from app.dependencies import (
     require_online_player,
 )
 from app.broadcast import create_streaming_response
+from app.config import settings
 from app.enums import Theme
 from app.jinja import render
 from app.models import Brick, Cursor, Player, World
@@ -48,8 +50,12 @@ router = APIRouter()
 
 
 @router.get("/")
-async def index_page(context: dict = Depends(get_game_context)):
-    return render("index.html", context)
+async def index_page(
+    request: Request,
+    context: dict = Depends(get_game_context),
+):
+    join_url = settings.join_url(str(request.base_url))
+    return render("index.html", context | {"join_url": join_url})
 
 
 @router.post(
