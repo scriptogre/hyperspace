@@ -12,6 +12,8 @@ from fastapi import (
 
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.status import HTTP_204_NO_CONTENT
+from tortoise.expressions import Q
+from tortoise.transactions import in_transaction
 
 from app.dependencies import (
     require_available_brick,
@@ -27,7 +29,7 @@ from app.dependencies import (
 from app.broadcast import create_streaming_response
 from app.enums import Theme
 from app.jinja import render
-from app.models import Brick, Player, World
+from app.models import Brick, Cursor, Player, World
 from app.schemas import PlayerJoinForm
 from app.services import (
     delete_brick,
@@ -115,11 +117,23 @@ async def world_update(
     announcement: Annotated[str, Form()] = "",
     _: Player = Depends(require_admin),
 ):
-    world = await World.get(id=1)
-    world.size = size
-    world.theme = None if theme == "system" else Theme(theme)
-    world.announcement = announcement.strip() or None
-    await world.save(update_fields=["size", "theme", "announcement"])
+    async with in_transaction() as database:
+        world = await World.select_for_update().using_db(database).get(id=1)
+        if size < world.size:
+            await Brick.filter(
+                Q(x__gte=size) | Q(y__gte=size) | Q(z__gte=size)
+            ).using_db(database).delete()
+            await Cursor.filter(Q(x__gte=size) | Q(y__gte=size)).using_db(
+                database
+            ).delete()
+
+        world.size = size
+        world.theme = None if theme == "system" else Theme(theme)
+        world.announcement = announcement.strip() or None
+        await world.save(
+            using_db=database,
+            update_fields=["size", "theme", "announcement"],
+        )
 
 
 @router.post(
