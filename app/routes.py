@@ -120,12 +120,16 @@ async def world_update(
     async with in_transaction() as database:
         world = await World.select_for_update().using_db(database).get(id=1)
         if size < world.size:
-            await Brick.filter(
-                Q(x__gte=size) | Q(y__gte=size) | Q(z__gte=size)
-            ).using_db(database).delete()
-            await Cursor.filter(Q(x__gte=size) | Q(y__gte=size)).using_db(
-                database
-            ).delete()
+            await (
+                Brick.filter(Q(x__gte=size) | Q(y__gte=size) | Q(z__gte=size))
+                .using_db(database)
+                .delete()
+            )
+            await (
+                Cursor.filter(Q(x__gte=size) | Q(y__gte=size))
+                .using_db(database)
+                .delete()
+            )
 
         world.size = size
         world.theme = None if theme == "system" else Theme(theme)
