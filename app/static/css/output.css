@@ -1,4 +1,4 @@
-/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
 @layer properties;
 @layer theme, base, components, utilities;
 @layer theme {
@@ -460,8 +460,6 @@
     --cell-size: 4rem;
     --brick-height: 0.75rem;
   }
-}
-@layer base {
   @media (hover: none) {
     input {
       font-size: 16px;
@@ -471,12 +469,12 @@
 @layer components {
   body {
     height: 100vh;
-    touch-action: none;
     overflow: hidden;
     background-color: var(--color-background);
     font-family: var(--font-mono);
     color: var(--color-foreground);
-    &:not([data-delete-mode="true"]):not(:has(.brick:active)) #grid {
+    touch-action: pinch-zoom;
+    &:not([data-delete-mode="true"]):not(:has(.brick[data-local-dragging])) #grid {
       .grid-cell:hover > .brick:last-of-type {
         border-color: var(--surface-color);
         @supports (color: color-mix(in lab, red, red)) {
@@ -488,8 +486,8 @@
         }
       }
     }
-    &:not([data-delete-mode="true"]):has(.brick:active) #grid {
-      .grid-cell:hover:not(:has(.brick:active)) > .brick-preview {
+    &:not([data-delete-mode="true"]):has(.brick[data-local-dragging]) #grid {
+      .grid-cell[data-drag-over]:not(:has(.brick[data-local-dragging])) > .brick-preview {
         display: block;
       }
       .grid-cell > button, .brick, .brick > button {
@@ -534,6 +532,8 @@
     }
   }
   #app {
+    --ui-top: max(2rem, calc(env(safe-area-inset-top) + 1rem));
+    --ui-bottom: max(2rem, calc(env(safe-area-inset-bottom) + 1rem));
     position: relative;
     height: 100%;
     width: 100%;
@@ -563,7 +563,7 @@
     }
     #world {
       position: absolute;
-      inset: calc(var(--spacing) * 0);
+      inset: 0px;
       background-color: var(--color-background);
       color: var(--color-foreground);
     }
@@ -597,7 +597,6 @@
     }
     #stats {
       position: absolute;
-      top: calc(var(--spacing) * 6);
       left: calc(var(--spacing) * 6);
       z-index: 50;
       display: flex;
@@ -614,6 +613,7 @@
       }
       --tw-numeric-spacing: tabular-nums;
       font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
+      top: var(--ui-top);
       .stat-label {
         display: none;
         @media (width >= 40rem) {
@@ -632,7 +632,6 @@
     }
     #controls {
       position: absolute;
-      top: calc(var(--spacing) * 6);
       right: calc(var(--spacing) * 6);
       z-index: 50;
       display: flex;
@@ -649,6 +648,7 @@
       }
       --tw-numeric-spacing: tabular-nums;
       font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
+      top: var(--ui-top);
       #request-latency {
         width: calc(var(--spacing) * 10);
         border-left-style: var(--tw-border-style);
@@ -698,7 +698,7 @@
         > div {
           position: absolute;
           top: 100%;
-          right: calc(var(--spacing) * 0);
+          right: 0px;
           margin-top: calc(var(--spacing) * 2);
           display: grid;
           width: max-content;
@@ -757,7 +757,7 @@
       #admin > form {
         position: absolute;
         top: 100%;
-        right: calc(var(--spacing) * 0);
+        right: 0px;
         margin-top: calc(var(--spacing) * 2);
         display: grid;
         width: calc(var(--spacing) * 56);
@@ -779,7 +779,7 @@
         backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
         label {
           display: grid;
-          gap: calc(var(--spacing) * 1);
+          gap: var(--spacing);
           > span {
             font-size: 10px;
             --tw-font-weight: var(--font-weight-medium);
@@ -833,10 +833,9 @@
     }
     #logout-button, #delete-mode-button {
       position: absolute;
-      bottom: calc(var(--spacing) * 4);
       z-index: 50;
       cursor: pointer;
-      padding-inline: calc(var(--spacing) * 1);
+      padding-inline: var(--spacing);
       padding-block: calc(var(--spacing) * 2);
       font-family: var(--font-sans);
       font-size: var(--text-xs);
@@ -852,6 +851,7 @@
           color: var(--color-foreground);
         }
       }
+      bottom: var(--ui-bottom);
     }
     #logout-button {
       left: calc(var(--spacing) * 4);
@@ -915,7 +915,7 @@
     #player-list {
       position: absolute;
       top: 100%;
-      left: calc(var(--spacing) * 0);
+      left: 0px;
       margin-top: calc(var(--spacing) * 3);
       max-height: calc(var(--spacing) * 60);
       width: calc(var(--spacing) * 48);
@@ -974,7 +974,7 @@
   }
   #join {
     position: absolute;
-    inset: calc(var(--spacing) * 0);
+    inset: 0px;
     z-index: 50;
     display: grid;
     gap: calc(var(--spacing) * 4);
@@ -1155,11 +1155,11 @@
           #color-menu {
             grid-template-columns: repeat(10, 1rem);
             position: absolute;
-            right: calc(var(--spacing) * 0);
+            right: 0px;
             z-index: 60;
             margin-top: calc(var(--spacing) * 2);
             display: grid;
-            gap: calc(var(--spacing) * 1);
+            gap: var(--spacing);
             border-radius: var(--radius-xl);
             border-style: var(--tw-border-style);
             border-width: 1px;
@@ -1268,7 +1268,7 @@
           color: var(--color-muted-foreground);
           &:has(> :nth-child(3)) {
             grid-template-columns: 3.25rem 0.875rem 1fr;
-            padding-left: calc(var(--spacing) * 0);
+            padding-left: 0px;
             > :first-child {
               text-align: right;
             }
@@ -1500,12 +1500,17 @@
       z-index: 10000;
       transform: translateZ(calc((var(--stack-height) + 1) * var(--brick-height)));
     }
+    .grid-cell[data-creating="true"] > .brick-preview {
+      --face-opacity: 100%;
+      display: block;
+    }
     .brick {
       cursor: grab;
+      touch-action: none;
       z-index: calc(var(--z) * 100 + 1);
       transform: translateZ(calc((var(--z) + 1) * var(--brick-height)));
       transition: transform var(--default-transition-duration);
-      &[data-dragging] {
+      &[data-dragged-by-id]:not([data-dragged-by-id=""]) {
         --face-opacity: 40%;
         cursor: grabbing;
         z-index: 1000;
@@ -1524,7 +1529,7 @@
       }
       > button {
         position: absolute;
-        inset: calc(var(--spacing) * 0);
+        inset: 0px;
         cursor: inherit;
         transform: translateZ(1px);
         transform-style: preserve-3d;
@@ -1550,11 +1555,11 @@
           transform: rotateY(90deg);
         }
       }
-      > button[hx-delete] {
+      > button[hx-trigger^="drag"], > button[hx-delete] {
         display: none;
       }
     }
-    .grid-cell > .brick:last-of-type > button:not([hx-delete]):not([hidden]) {
+    .grid-cell > .brick:last-of-type > button[hx-post="/bricks"] {
       cursor: pointer;
       &::before, &::after {
         cursor: grab;

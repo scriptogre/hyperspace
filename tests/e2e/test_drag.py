@@ -10,7 +10,7 @@ def join(page: Page, name: str) -> None:
 
 
 def place_brick(page: Page) -> Locator:
-    cell = page.locator(".grid-cell:not(:has(.brick))").first
+    cell = page.locator(".grid-cell:not(:has(.brick))").last
     cell_id = cell.get_attribute("id")
     cell.locator(":scope > button").click()
     cell = page.locator(f"#{cell_id}")
@@ -30,14 +30,23 @@ def test_desktop_drag_moves_brick(joined_page: Page):
     target = page.locator(f"#{target.get_attribute('id')}")
     brick_id = source.locator(".brick").get_attribute("id")
 
-    page.mouse.move(
-        *center(source.locator(".brick > button:not([hx-delete]):not([hidden])"))
-    )
+    page.mouse.move(*center(source.locator('.brick > button[hx-post="/bricks"]')))
     page.mouse.down()
     page.mouse.move(*center(target.locator(":scope > button")), steps=8)
     assert target.evaluate("element => element.matches(':hover')")
+    expect(page.locator(f"#{brick_id}")).to_have_attribute(
+        "data-dragged-by-id", page.locator("#app").get_attribute("data-player-id")
+    )
+    expect(page.locator(f"#{brick_id}")).to_have_attribute("data-local-dragging", "")
+    expect(target).to_have_attribute("data-drag-over", "")
+    expect(target.locator(":scope > .brick-preview")).to_be_visible()
     page.mouse.up()
 
+    expect(target.locator(":scope > .brick-preview")).not_to_be_visible()
+    expect(target.locator(f"#{brick_id}")).to_have_attribute("data-dragged-by-id", "")
+    expect(target.locator(f"#{brick_id}")).not_to_have_attribute(
+        "data-local-dragging", ""
+    )
     expect(target.locator(f"#{brick_id}")).to_have_count(1)
     expect(target.locator(".brick")).to_have_count(1)
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
@@ -52,7 +61,9 @@ def test_release_waits_for_final_cursor(joined_page: Page):
 
     with page.expect_response("**/grab"):
         page.locator(f"#{brick_id}").dispatch_event("dragstart")
-    expect(page.locator(f"#{brick_id}")).to_have_attribute("data-dragging", "")
+    expect(page.locator(f"#{brick_id}")).to_have_attribute(
+        "data-dragged-by-id", page.locator("#app").get_attribute("data-player-id")
+    )
 
     held_cursor = []
     requests = []
@@ -83,7 +94,7 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     browser_errors(page)
     join(page, "Touch Drag")
     source = place_brick(page)
-    target = page.locator(".grid-cell:not(:has(.brick))").first
+    target = page.locator(".grid-cell:not(:has(.brick))").last
     target = page.locator(f"#{target.get_attribute('id')}")
     brick_id = source.locator(".brick").get_attribute("id")
     page.evaluate(
@@ -93,9 +104,7 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
             document.addEventListener('dragend', () => dragEvents.push('dragend'))
         }"""
     )
-    source_x, source_y = center(
-        source.locator(".brick > button:not([hx-delete]):not([hidden])")
-    )
+    source_x, source_y = center(source.locator('.brick > button[hx-post="/bricks"]'))
     target_x, target_y = center(target.locator(":scope > button"))
     cdp = context.new_cdp_session(page)
 
@@ -122,9 +131,29 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
             },
         )
         page.wait_for_timeout(20)
+
+    expect(page.locator(f"#{brick_id}")).to_have_attribute(
+        "data-dragged-by-id", page.locator("#app").get_attribute("data-player-id")
+    )
+    expect(page.locator(f"#{brick_id}")).to_have_attribute("data-local-dragging", "")
+    expect(target).to_have_attribute("data-drag-over", "")
+    expect(target.locator(":scope > .brick-preview")).to_be_visible()
+
+    held_releases = []
+    page.route("**/release", lambda route: held_releases.append(route))
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
 
     assert page.evaluate("dragEvents") == ["dragstart", "dragend"]
+    expect(target.locator(":scope > .brick-preview")).to_be_visible()
+    page.wait_for_timeout(100)
+    assert len(held_releases) == 1
+
+    page.unroute("**/release")
+    expect(target.locator(":scope > .brick-preview")).not_to_be_visible()
+    expect(target.locator(f"#{brick_id}")).to_have_attribute("data-dragged-by-id", "")
+    expect(target.locator(f"#{brick_id}")).not_to_have_attribute(
+        "data-local-dragging", ""
+    )
     expect(target.locator(f"#{brick_id}")).to_have_count(1)
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
     context.close()
@@ -151,6 +180,51 @@ def test_control_menus_are_mutually_exclusive(page: Page, browser_errors):
     players.locator("summary").click()
     expect(players).to_have_attribute("open", "")
     expect(settings).not_to_have_attribute("open", "")
+
+
+def test_mobile_controls_stay_inside_screen(browser: Browser, browser_errors):
+    context = browser.new_context(
+        base_url="http://fastapi:8000",
+        has_touch=True,
+        is_mobile=True,
+        viewport={"width": 390, "height": 844},
+    )
+    page = context.new_page()
+    browser_errors(page)
+    join(page, "Touch Controls")
+
+    viewport = page.locator('meta[name="viewport"]').get_attribute("content")
+    assert "maximum-scale" not in viewport
+    assert "user-scalable" not in viewport
+    expect(page.locator("body")).to_have_css("touch-action", "pinch-zoom")
+
+    for selector in ("#stats", "#controls"):
+        assert page.locator(selector).bounding_box()["y"] >= 32
+
+    for selector in ("#logout-button", "#delete-mode-button"):
+        box = page.locator(selector).bounding_box()
+        assert box["y"] + box["height"] <= 844 - 32
+
+    context.close()
+
+
+def test_create_prediction_is_immediate(joined_page: Page):
+    page = joined_page
+    cell = page.locator(".grid-cell:not(:has(.brick))").last
+    cell = page.locator(f"#{cell.get_attribute('id')}")
+    held_requests = []
+    page.route("**/bricks", lambda route: held_requests.append(route))
+
+    cell.locator(":scope > button").dispatch_event("click")
+
+    expect(cell).to_have_attribute("data-creating", "true", timeout=100)
+    expect(cell.locator(":scope > .brick-preview")).to_be_visible(timeout=100)
+    expect(cell.locator(":scope > .brick")).to_have_count(0)
+    assert len(held_requests) == 1
+
+    page.unroute("**/bricks")
+    expect(cell.locator(":scope > .brick")).to_have_count(1)
+    expect(cell).to_have_attribute("data-creating", "false")
 
 
 def test_prediction_toggle_controls_delete(joined_page: Page):

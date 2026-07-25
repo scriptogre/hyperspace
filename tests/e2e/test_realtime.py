@@ -40,10 +40,10 @@ def test_brick_update_reaches_both_players(browser: Browser, browser_errors):
         expect(page_b.locator(".brick")).to_have_count(total)
         if cell["count"]:
             cell_a.locator(":scope > .brick").last.locator(
-                ":scope > button[aria-label='Stack brick']"
+                ':scope > button[hx-post="/bricks"]'
             ).click()
         else:
-            cell_a.locator(":scope > button[aria-label='Add brick']").click()
+            cell_a.locator(':scope > button[hx-post="/bricks"]').click()
 
         expect(cell_a.locator(":scope > .brick")).to_have_count(cell["count"] + 1)
         expect(cell_b.locator(":scope > .brick")).to_have_count(cell["count"] + 1)

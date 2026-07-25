@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="htmx-config" content='{"morphIgnore":["data-htmx-powered","data-drag-over"]}'>
     <title>Hyperspace</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
@@ -31,16 +33,16 @@
       hx-multipart:connect="/stream"
       hx-on="keydown, keyup -> data.deleteMode = event.shiftKey">
 
-    <main id="app"
-          {% if player %}
-              data-player-id="{{ player.id }}"
-              style="--player-color: {{ player.color }}"
-          {% else %}
-              inert
-          {% endif %}>
-        {% include "_world.html" %}
-
+<main id="app"
         {% if player %}
+      data-player-id="{{ player.id }}"
+      style="--player-color: {{ player.color }}"
+        {% else %}
+      inert
+        {% endif %}>
+    {% include "_world.html" %}
+
+    {% if player %}
         <aside id="controls"
                aria-label="Game controls"
                hx-on="htmx:request:latency:configuration from:document ->
@@ -73,7 +75,8 @@
                     hx-on="htmx:request:latency:measurement from:document ->
                            style.setProperty('--request-latency-ms', event.detail.ms)"
                     :value="`${style.getPropertyValue('--request-latency-ms') || '--'}ms`"
-                    aria-label="Last request time">--ms</output>
+                    aria-label="Last request time">--ms
+            </output>
         </aside>
 
         <button id="logout-button" class="ui-control" hx-post="/logout">
@@ -91,12 +94,12 @@
             <span class="icon-[lucide--check]" :hidden="!data.deleteMode" aria-hidden="true"></span>
             <span>Delete</span>
         </button>
-        {% endif %}
-    </main>
-
-    {% if not player %}
-        {% include "_player_form.html" %}
     {% endif %}
+</main>
+
+{% if not player %}
+    {% include "_player_form.html" %}
+{% endif %}
 
 </body>
 </html>

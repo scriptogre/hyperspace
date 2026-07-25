@@ -258,7 +258,7 @@
                     }
                     await Promise.all(pending);
                 } catch (error) {
-                    if (!connection.cancelled) {
+                    if (!connection.cancelled && !connection.reconnectRequested) {
                         api.triggerHtmxEvent(element, 'htmx:multipart:error', {
                             error,
                             url: ctx.request.action

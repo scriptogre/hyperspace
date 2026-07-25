@@ -546,10 +546,12 @@ var htmx = (() => {
             // Build request body
             let body = this.#collectFormData(elt, form, evt.submitter, ctx.request.validate, usesQueryParams)
             if (!body) return  // Validation failed
+            // HYPERSPACE EVENT TARGET START
             let valsResult = this.#getAttributeObject(elt, "hx-vals", obj => {
                 ctx.vals = obj; // make available for json extensions
                 for (let key in obj) body.set(key, obj[key]);
-            }, {ctx});
+            }, {ctx, event: ctx.sourceEvent});
+            // HYPERSPACE EVENT TARGET END
             if (valsResult) await valsResult; // Only await if it returned a promise
             if (ctx.values) {
                 for (let k in ctx.values) {
