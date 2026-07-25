@@ -6,7 +6,6 @@ from tortoise.fields import (
     BooleanField,
     CharEnumField,
     CharField,
-    DatetimeField,
     TextField,
     ForeignKeyField,
     IntField,
@@ -16,7 +15,7 @@ from tortoise.fields.relational import ReverseRelation
 from tortoise.models import Model
 
 from app.colors import Oklch, calculate_player_color
-from app.enums import EventType, Theme
+from app.enums import Theme
 
 
 class World(Model):
@@ -57,7 +56,6 @@ class Brick(Model):
         on_delete=SET_NULL,
         description="player currently dragging this brick",
     )
-    events: ReverseRelation["Event"]
 
     class Meta:
         table = "bricks"
@@ -84,7 +82,6 @@ class Player(Model):
     bricks: ReverseRelation[Brick]
     dragged_brick: ReverseRelation[Brick]
     cursor: ReverseRelation["Cursor"]
-    events: ReverseRelation["Event"]
 
     @property
     def color(self) -> Oklch:
@@ -113,30 +110,3 @@ class Cursor(Model):
 
     class Meta:
         table = "cursors"
-
-
-class Event(Model):
-    """
-    An entry in the activity feed.
-    """
-
-    id = IntField(pk=True)
-    type = CharEnumField(EventType, max_length=50)
-    created_at = DatetimeField(auto_now_add=True)
-
-    # Relations
-    player = ForeignKeyField(
-        "models.Player",
-        related_name="events",
-        on_delete=CASCADE,
-    )
-    brick = ForeignKeyField(
-        "models.Brick",
-        related_name="events",
-        null=True,
-        on_delete=SET_NULL,
-    )
-
-    class Meta:
-        table = "events"
-        ordering = ["-id"]

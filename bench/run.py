@@ -303,7 +303,7 @@ async def run_scenario(
 ) -> Result:
     result = Result(clients=count)
     await connection.execute(
-        "TRUNCATE events, cursors, bricks, players RESTART IDENTITY CASCADE"
+        "TRUNCATE cursors, bricks, players RESTART IDENTITY CASCADE"
     )
     clients, queues, tasks = await open_players(count, world_size)
     try:

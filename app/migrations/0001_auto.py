@@ -4,7 +4,15 @@ from tortoise import fields, migrations
 from tortoise.fields.base import OnDelete
 from tortoise.migrations import operations as ops
 
-from app.enums import EventType
+
+# Inlined: the app-level EventType enum was removed with the activity feed.
+class EventType(StrEnum):
+    PLAYER_JOINED = "player_joined"
+    PLAYER_LEFT = "player_left"
+    BRICK_CREATED = "brick_created"
+    BRICK_DELETED = "brick_deleted"
+    DRAG_STARTED = "drag_started"
+    DRAG_ENDED = "drag_ended"
 
 
 class Color(StrEnum):

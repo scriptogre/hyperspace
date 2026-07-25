@@ -20,7 +20,6 @@ from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
 from app.models import Brick, Cursor, Player, World
 from app.schemas import BrickRow, CursorRow, PlayerRow
 from app.services import mark_player_as_offline, mark_player_as_online
-from app.signals import current_player
 
 
 def player_initials(name: str) -> str:
@@ -65,7 +64,6 @@ async def require_current_player(
     if not player:
         raise PlayerRequired
 
-    current_player.set(player)
     return player
 
 
@@ -85,7 +83,6 @@ async def require_online_player(
     if not player:
         raise HTTPException(HTTP_401_UNAUTHORIZED)
 
-    current_player.set(player)
     await mark_player_as_online(player)
     try:
         yield player
