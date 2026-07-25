@@ -27,7 +27,7 @@ from app.dependencies import (
 from app.broadcast import create_streaming_response
 from app.enums import Theme
 from app.jinja import render
-from app.models import Brick, Player, World
+from app.models import Brick, Cursor, Player, World
 from app.schemas import PlayerJoinForm
 from app.services import (
     delete_brick,
@@ -78,14 +78,19 @@ async def player_logout(response: RedirectResponse):
 
 
 @router.post(
-    "/admin/delete-all-bricks",
+    "/admin/reset-world",
     status_code=HTTP_204_NO_CONTENT,
 )
 @atomic()
-async def admin_delete_all_bricks(
+async def admin_reset_world(
     _: Player = Depends(require_admin),
 ):
     await Brick.all().delete()
+    await Cursor.all().delete()
+
+    world = await World.select_for_update().get(id=1)
+    world.size = 16
+    await world.save(update_fields=["size"])
 
 
 @router.get("/health")

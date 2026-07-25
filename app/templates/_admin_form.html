@@ -31,8 +31,6 @@
             <p role="alert">{{ message }}</p>
         {% endfor %}
         <button type="submit">Save world</button>
-        <button hx-post="/admin/delete-all-bricks"
-                hx-confirm="Delete every brick on the board?"
-                class="danger">Delete all bricks</button>
+        <button hx-post="/admin/reset-world" class="danger">Reset world</button>
     </form>
 </details>
