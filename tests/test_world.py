@@ -162,17 +162,46 @@ def test_coordinate_constraints_use_world_size(database):
     )
 
 
-def test_resize_rejects_unsafe_shrink_and_allows_growth(database):
+def test_resize_shrink_deletes_out_of_bounds(database):
     async def check():
         connection = await asyncpg.connect(**database)
         try:
             await connection.execute("UPDATE worlds SET size = 13")
             await connection.execute("UPDATE worlds SET size = 12")
+            survived = await connection.fetchval(
+                "SELECT count(*) FROM bricks WHERE x = 11"
+            )
+
+            await connection.execute("UPDATE worlds SET size = 11")
+            bricks = await connection.fetchval(
+                "SELECT count(*) FROM bricks WHERE x >= 11 OR y >= 11 OR z >= 11"
+            )
+            cursors = await connection.fetchval(
+                "SELECT count(*) FROM cursors WHERE x >= 11 OR y >= 11"
+            )
+
+            # Restore the state later tests expect.
+            await connection.execute("UPDATE worlds SET size = 12")
+            player_id = await connection.fetchval("SELECT id FROM players LIMIT 1")
+            await connection.execute(
+                """
+                INSERT INTO bricks (x, y, z, color_seed, created_by_id)
+                VALUES (11, 11, 11, 1, $1)
+                """,
+                player_id,
+            )
+            await connection.execute(
+                "INSERT INTO cursors (player_id, x, y, z) VALUES ($1, 11, 11, -1)",
+                player_id,
+            )
+            return survived, bricks, cursors
         finally:
             await connection.close()
 
-    run_async(check())
-    run_async(rejected(database, "UPDATE worlds SET size = 11"))
+    survived, bricks, cursors = run_async(check())
+    assert survived == 1
+    assert bricks == 0
+    assert cursors == 0
 
 
 def test_world_notifications_use_one_payload(database):
