@@ -1,17 +1,19 @@
 services:
   caddy:
     image: caddy:2
-    restart: always
+    env_file: ${HYPERSPACE_ENV_FILE:-.env}
     ports:
       - "80:80"
       - "443:443"
-    env_file: .env
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - fastapi
+      fastapi:
+        condition: service_healthy
+    restart: always
 
 volumes:
   caddy_data:
