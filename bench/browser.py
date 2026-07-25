@@ -113,6 +113,10 @@ def make_snapshots(page: Page) -> dict[str, list[str]]:
             })
             const snapshots = {server: make(false), runtime: make(true)}
             snapshots.compact = snapshots.server.map(html => html.replace(/>\\s+</g, '><'))
+            snapshots.skipBricks = snapshots.server.map(html =>
+                html.replace('id="bricks"', 'id="bricks" hx-morph-skip'))
+            snapshots.skipBricksCompact = snapshots.skipBricks.map(html =>
+                html.replace(/>\\s+</g, '><'))
             snapshots.lean = snapshots.server.map(html => {
                 const template = document.createElement('template')
                 template.innerHTML = html
@@ -160,9 +164,11 @@ def run_updates(
                 if (mode.startsWith('morph')) {
                     const kind = mode === 'morph-runtime'
                         ? 'runtime'
-                        : mode.includes('compact')
-                            ? 'compact'
-                            : mode === 'morph-lean' ? 'lean' : 'server'
+                        : mode.includes('skip-bricks')
+                            ? mode.includes('compact') ? 'skipBricksCompact' : 'skipBricks'
+                            : mode.includes('compact')
+                                ? 'compact'
+                                : mode === 'morph-lean' ? 'lean' : 'server'
                     const process = htmx.process
                     if (mode.includes('no-process')) htmx.process = () => {}
                     try {
@@ -242,11 +248,18 @@ def benchmark(
         "morph-no-process",
         "morph-compact",
         "morph-compact-no-process",
+        "morph-skip-bricks",
+        "morph-skip-bricks-no-process",
+        "morph-skip-bricks-compact-no-process",
     ):
         if mode.startswith("morph"):
             kind = (
                 "runtime"
                 if mode == "morph-runtime"
+                else "skipBricksCompact"
+                if "skip-bricks" in mode and "compact" in mode
+                else "skipBricks"
+                if "skip-bricks" in mode
                 else "compact"
                 if "compact" in mode
                 else "server"

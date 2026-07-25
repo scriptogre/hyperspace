@@ -25,6 +25,17 @@
             htmx_scope: (element, detail) => detail.scope.$ = detail.scope.q
         })
     </script>
+    <script>
+        htmx.registerExtension('morph-skip-bricks', (() => {
+            let h = ''
+            return {htmx_before_swap: (_, {tasks}) => {
+                const c = htmx.find('#bricks'), n = tasks[0]?.fragment?.querySelector('#bricks')
+                if (!c || !n) return
+                const t = n.innerHTML
+                t === h ? c.setAttribute('hx-morph-skip', '') : (c.removeAttribute('hx-morph-skip'), h = t)
+            }}
+        })())
+    </script>
 </head>
 
 <body data-delete-mode="false"
