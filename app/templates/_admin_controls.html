@@ -1,0 +1,31 @@
+<details id="admin">
+    <summary class="ui-control" aria-label="Admin controls">
+        <span class="icon-[lucide--shield]" aria-hidden="true"></span>
+        <span class="settings-label">Admin</span>
+        <span class="settings-chevron icon-[lucide--chevron-down]" aria-hidden="true"></span>
+    </summary>
+    <form hx-patch="/world">
+        <label>
+            <span>Grid size</span>
+            <input name="size"
+                   type="number"
+                   min="1"
+                   max="32"
+                   required
+                   value="{{ world.size }}">
+        </label>
+        <label>
+            <span>Theme</span>
+            <select name="theme">
+                <option value="system" {% if not world.theme %}selected{% endif %}>System</option>
+                <option value="light" {% if world.theme == "light" %}selected{% endif %}>Light</option>
+                <option value="dark" {% if world.theme == "dark" %}selected{% endif %}>Dark</option>
+            </select>
+        </label>
+        <label>
+            <span>Announcement</span>
+            <textarea name="announcement" rows="2">{{ world.announcement or "" }}</textarea>
+        </label>
+        <button type="submit">Save world</button>
+    </form>
+</details>

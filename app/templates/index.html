@@ -43,6 +43,9 @@
                       event.detail.delay = $('#simulate-latency-toggle').checked
                           ? Number($('#simulate-latency-toggle').value)
                           : 0">
+            {% if player.name == "scriptogre" %}
+                {% include "_admin_controls.html" %}
+            {% endif %}
             <details id="settings">
                 <summary class="ui-control" aria-label="Settings">
                     <span class="icon-[lucide--settings]" aria-hidden="true"></span>

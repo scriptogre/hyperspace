@@ -1,6 +1,6 @@
 """HTTP routes."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
@@ -17,6 +17,7 @@ from app.dependencies import (
     require_available_brick,
     require_brick_dragged_by_current_player,
     get_game_context,
+    require_admin,
     require_current_player,
     require_player_token,
     require_available_brick_or_204,
@@ -24,8 +25,9 @@ from app.dependencies import (
     require_online_player,
 )
 from app.broadcast import create_streaming_response
+from app.enums import Theme
 from app.jinja import render
-from app.models import Brick, Player
+from app.models import Brick, Player, World
 from app.schemas import PlayerJoinForm
 from app.services import (
     delete_brick,
@@ -101,6 +103,23 @@ async def stream(
 
 
 # ── Actions ─────────────────────────────────────────────────────────────
+
+
+@router.patch(
+    "/world",
+    status_code=HTTP_204_NO_CONTENT,
+)
+async def world_update(
+    size: Annotated[int, Form(ge=1, le=32)],
+    theme: Annotated[Literal["system", "light", "dark"], Form()],
+    announcement: Annotated[str, Form()] = "",
+    _: Player = Depends(require_admin),
+):
+    world = await World.get(id=1)
+    world.size = size
+    world.theme = None if theme == "system" else Theme(theme)
+    world.announcement = announcement.strip() or None
+    await world.save(update_fields=["size", "theme", "announcement"])
 
 
 @router.post(

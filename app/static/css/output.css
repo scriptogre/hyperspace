@@ -319,6 +319,19 @@
     mask-size: 100% 100%;
     --svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cg fill='none' stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'%3E%3Cpath d='M9.671 4.136a2.34 2.34 0 0 1 4.659 0a2.34 2.34 0 0 0 3.319 1.915a2.34 2.34 0 0 1 2.33 4.033a2.34 2.34 0 0 0 0 3.831a2.34 2.34 0 0 1-2.33 4.033a2.34 2.34 0 0 0-3.319 1.915a2.34 2.34 0 0 1-4.659 0a2.34 2.34 0 0 0-3.32-1.915a2.34 2.34 0 0 1-2.33-4.033a2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/g%3E%3C/svg%3E");
   }
+  .icon-\[lucide--shield\] {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    background-color: currentColor;
+    -webkit-mask-image: var(--svg);
+    mask-image: var(--svg);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    --svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='none' stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'/%3E%3C/svg%3E");
+  }
   .icon-\[lucide--snail\] {
     display: inline-block;
     width: 1em;
@@ -643,7 +656,7 @@
                 );
         color: hsl(calc(120deg - var(--latency-level) * 60deg) 70% 45%);
       }
-      #settings {
+      #settings, #admin {
         position: relative;
         > summary {
           margin: calc(var(--spacing) * -2);
@@ -732,6 +745,82 @@
         @media (max-width: 40rem) {
           > div .setting {
             min-height: calc(var(--spacing) * 6);
+          }
+        }
+      }
+      #admin > form {
+        position: absolute;
+        top: 100%;
+        right: calc(var(--spacing) * 0);
+        margin-top: calc(var(--spacing) * 2);
+        display: grid;
+        width: calc(var(--spacing) * 56);
+        gap: calc(var(--spacing) * 3);
+        border-radius: var(--radius-xl);
+        border-style: var(--tw-border-style);
+        border-width: 1px;
+        border-color: var(--color-border);
+        background-color: color-mix(in srgb, light-dark(var(--color-neutral-10), var(--color-neutral-910)) 90%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-card) 90%, transparent);
+        }
+        padding: calc(var(--spacing) * 3);
+        color: var(--color-foreground);
+        --tw-shadow: 2px 2px 0 var(--tw-shadow-color, var(--color-shadow));
+        box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+        --tw-backdrop-blur: blur(var(--blur-md));
+        -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+        backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+        label {
+          display: grid;
+          gap: calc(var(--spacing) * 1);
+          > span {
+            font-size: 10px;
+            --tw-font-weight: var(--font-weight-medium);
+            font-weight: var(--font-weight-medium);
+            --tw-tracking: var(--tracking-wider);
+            letter-spacing: var(--tracking-wider);
+            color: var(--color-muted-foreground);
+            text-transform: uppercase;
+          }
+        }
+        :is(input, select, textarea) {
+          width: 100%;
+          border-radius: var(--radius-lg);
+          border-style: var(--tw-border-style);
+          border-width: 1px;
+          border-color: var(--color-border);
+          background-color: var(--color-background);
+          padding-inline: calc(var(--spacing) * 2);
+          padding-block: calc(var(--spacing) * 1.5);
+          font-size: var(--text-xs);
+          line-height: var(--tw-leading, var(--text-xs--line-height));
+          color: var(--color-foreground);
+          --tw-outline-style: none;
+          outline-style: none;
+          &:focus {
+            border-color: var(--color-primary);
+          }
+        }
+        textarea {
+          resize: vertical;
+        }
+        button {
+          cursor: pointer;
+          border-radius: var(--radius-lg);
+          background-color: var(--color-primary);
+          padding-inline: calc(var(--spacing) * 3);
+          padding-block: calc(var(--spacing) * 2);
+          --tw-font-weight: var(--font-weight-medium);
+          font-weight: var(--font-weight-medium);
+          color: var(--color-primary-foreground);
+          &:hover {
+            @media (hover: hover) {
+              background-color: color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-100)) 90%, transparent);
+              @supports (color: color-mix(in lab, red, red)) {
+                background-color: color-mix(in oklab, var(--color-primary) 90%, transparent);
+              }
+            }
           }
         }
       }

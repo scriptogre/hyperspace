@@ -224,7 +224,8 @@
                 color: hsl(calc(120deg - var(--latency-level) * 60deg) 70% 45%);
             }
 
-            #settings {
+            #settings,
+            #admin {
                 @apply relative;
 
                 > summary {
@@ -274,6 +275,30 @@
                     > div .setting {
                         @apply min-h-6;
                     }
+                }
+            }
+
+            #admin > form {
+                @apply absolute top-full right-0 mt-2 grid w-56 gap-3 rounded-xl border border-border bg-card/90 p-3 text-foreground shadow-iso-sm backdrop-blur-md;
+
+                label {
+                    @apply grid gap-1;
+
+                    > span {
+                        @apply text-[10px] font-medium tracking-wider text-muted-foreground uppercase;
+                    }
+                }
+
+                :is(input, select, textarea) {
+                    @apply w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary;
+                }
+
+                textarea {
+                    @apply resize-y;
+                }
+
+                button {
+                    @apply cursor-pointer rounded-lg bg-primary px-3 py-2 font-medium text-primary-foreground hover:bg-primary/90;
                 }
             }
         }

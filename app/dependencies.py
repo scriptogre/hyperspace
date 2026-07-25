@@ -68,6 +68,15 @@ async def require_current_player(
     return player
 
 
+async def require_admin(
+    player: Player = Depends(require_current_player),
+) -> Player:
+    """Require the special in-game admin name."""
+    if player.name != "scriptogre":
+        raise HTTPException(HTTP_404_NOT_FOUND)
+    return player
+
+
 async def require_online_player(
     player: Player | None = Depends(get_current_player),
 ) -> AsyncIterator[Player]:

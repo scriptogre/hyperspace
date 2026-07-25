@@ -63,6 +63,30 @@ class Migration(migrations.Migration):
               RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
+
+            CREATE OR REPLACE FUNCTION hyperspace_validate_world_resize()
+            RETURNS trigger AS $$
+            BEGIN
+              IF NEW.size < OLD.size THEN
+                IF EXISTS (
+                  SELECT 1
+                    FROM bricks
+                   WHERE x >= NEW.size
+                      OR y >= NEW.size
+                      OR z >= NEW.size
+                ) THEN
+                  RAISE EXCEPTION
+                    'cannot shrink world below existing bricks';
+                END IF;
+
+                DELETE FROM cursors
+                 WHERE x >= NEW.size
+                    OR y >= NEW.size;
+              END IF;
+
+              RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
             """,
             """
             CREATE OR REPLACE FUNCTION hyperspace_validate_brick()
@@ -109,6 +133,32 @@ class Migration(migrations.Migration):
                  OR NEW.y >= world_size THEN
                 RAISE EXCEPTION
                   'cursor coordinate is outside the world';
+              END IF;
+
+              RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE OR REPLACE FUNCTION hyperspace_validate_world_resize()
+            RETURNS trigger AS $$
+            BEGIN
+              IF NEW.size < OLD.size AND (
+                EXISTS (
+                  SELECT 1
+                    FROM bricks
+                   WHERE x >= NEW.size
+                      OR y >= NEW.size
+                      OR z >= NEW.size
+                )
+                OR EXISTS (
+                  SELECT 1
+                    FROM cursors
+                   WHERE x >= NEW.size
+                      OR y >= NEW.size
+                )
+              ) THEN
+                RAISE EXCEPTION
+                  'cannot shrink world below existing coordinates';
               END IF;
 
               RETURN NEW;
