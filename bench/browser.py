@@ -121,7 +121,7 @@ def make_snapshots(page: Page) -> dict[str, list[str]]:
                 const template = document.createElement('template')
                 template.innerHTML = html
                 for (const element of template.content.querySelectorAll(
-                    '.grid-cell, .grid-cell > button[aria-label="Add brick"]'
+                    '[id^=grid-cell-], [id^=grid-cell-] > button[aria-label="Add brick"]'
                 )) {
                     for (const name of element.getAttributeNames()) {
                         if (name.startsWith('hx-') || name === 'data-htmx-powered') {
@@ -227,7 +227,7 @@ def benchmark(
     except Exception as error:
         raise RuntimeError(
             f"World has {page.locator('.cursor').count()} cursors and "
-            f"{page.locator('.grid-cell').count()} cells"
+            f"{page.locator('[id^=grid-cell-]').count()} cells"
         ) from error
     if page.locator("#player-form").count():
         page.locator("#player-form").evaluate("element => element.remove()")

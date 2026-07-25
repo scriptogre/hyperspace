@@ -21,34 +21,34 @@ def test_brick_update_reaches_both_players(browser: Browser, browser_errors):
             expect(form).to_have_count(0)
 
         page_a, page_b = pages
-        cell = page_a.locator(".grid-cell").evaluate_all(
+        cell = page_a.locator("[id^=grid-cell-]").evaluate_all(
             """cells => {
                 const capacity = Number(getComputedStyle(document.querySelector('#grid'))
                     .getPropertyValue('--world-size'))
                 const cell = cells.find(cell =>
-                    cell.querySelectorAll(':scope > .brick').length < capacity)
+                    cell.querySelectorAll(':scope > [id^=brick-]').length < capacity)
                 return {
                     id: cell.id,
-                    count: cell.querySelectorAll(':scope > .brick').length,
+                    count: cell.querySelectorAll(':scope > [id^=brick-]').length,
                 }
             }"""
         )
         cell_a = page_a.locator(f"#{cell['id']}")
         cell_b = page_b.locator(f"#{cell['id']}")
-        total = page_a.locator(".brick").count()
+        total = page_a.locator("[id^=brick-]").count()
 
-        expect(page_b.locator(".brick")).to_have_count(total)
+        expect(page_b.locator("[id^=brick-]")).to_have_count(total)
         if cell["count"]:
-            cell_a.locator(":scope > .brick").last.locator(
+            cell_a.locator(":scope > [id^=brick-]").last.locator(
                 ':scope > button[hx-post="/bricks"]'
             ).click()
         else:
             cell_a.locator(':scope > button[hx-post="/bricks"]').click()
 
-        expect(cell_a.locator(":scope > .brick")).to_have_count(cell["count"] + 1)
-        expect(cell_b.locator(":scope > .brick")).to_have_count(cell["count"] + 1)
-        expect(page_a.locator("#brick-count")).to_have_text(str(total + 1))
-        expect(page_b.locator("#brick-count")).to_have_text(str(total + 1))
+        expect(cell_a.locator(":scope > [id^=brick-]")).to_have_count(cell["count"] + 1)
+        expect(cell_b.locator(":scope > [id^=brick-]")).to_have_count(cell["count"] + 1)
+        expect(page_a.locator("#bricks-count")).to_have_text(str(total + 1))
+        expect(page_b.locator("#bricks-count")).to_have_text(str(total + 1))
     finally:
         for context in contexts:
             context.close()

@@ -10,11 +10,11 @@ def join(page: Page, name: str) -> None:
 
 
 def place_brick(page: Page) -> Locator:
-    cell = page.locator(".grid-cell:not(:has(.brick))").last
+    cell = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").last
     cell_id = cell.get_attribute("id")
     cell.locator(":scope > button").click()
     cell = page.locator(f"#{cell_id}")
-    expect(cell.locator(".brick")).to_have_count(1)
+    expect(cell.locator("[id^=brick-]")).to_have_count(1)
     return cell
 
 
@@ -26,11 +26,11 @@ def center(locator: Locator) -> tuple[float, float]:
 def test_desktop_drag_moves_brick(joined_page: Page):
     page = joined_page
     source = place_brick(page)
-    target = page.locator(".grid-cell:not(:has(.brick))").first
+    target = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").first
     target = page.locator(f"#{target.get_attribute('id')}")
-    brick_id = source.locator(".brick").get_attribute("id")
+    brick_id = source.locator("[id^=brick-]").get_attribute("id")
 
-    page.mouse.move(*center(source.locator('.brick > button[hx-post="/bricks"]')))
+    page.mouse.move(*center(source.locator('[id^=brick-] > button[hx-post="/bricks"]')))
     page.mouse.down()
     page.mouse.move(*center(target.locator(":scope > button")), steps=8)
     assert target.evaluate("element => element.matches(':hover')")
@@ -43,21 +43,21 @@ def test_desktop_drag_moves_brick(joined_page: Page):
     page.mouse.up()
 
     expect(target.locator(":scope > .brick-preview")).not_to_be_visible()
-    expect(target.locator(f"#{brick_id}")).to_have_attribute("data-dragged-by-id", "")
+    expect(target.locator(f"#{brick_id}[data-dragged-by-id]")).to_have_count(0)
     expect(target.locator(f"#{brick_id}")).not_to_have_attribute(
         "data-local-dragging", ""
     )
     expect(target.locator(f"#{brick_id}")).to_have_count(1)
-    expect(target.locator(".brick")).to_have_count(1)
+    expect(target.locator("[id^=brick-]")).to_have_count(1)
     expect(source.locator(f"#{brick_id}")).to_have_count(0)
 
 
 def test_release_waits_for_final_cursor(joined_page: Page):
     page = joined_page
     source = place_brick(page)
-    target = page.locator(".grid-cell:not(:has(.brick))").first
+    target = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").first
     target = page.locator(f"#{target.get_attribute('id')}")
-    brick_id = source.locator(".brick").get_attribute("id")
+    brick_id = source.locator("[id^=brick-]").get_attribute("id")
 
     with page.expect_response("**/grab"):
         page.locator(f"#{brick_id}").dispatch_event("dragstart")
@@ -94,9 +94,9 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     browser_errors(page)
     join(page, "Touch Drag")
     source = place_brick(page)
-    target = page.locator(".grid-cell:not(:has(.brick))").last
+    target = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").last
     target = page.locator(f"#{target.get_attribute('id')}")
-    brick_id = source.locator(".brick").get_attribute("id")
+    brick_id = source.locator("[id^=brick-]").get_attribute("id")
     page.evaluate(
         """() => {
             window.dragEvents = []
@@ -104,7 +104,9 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
             document.addEventListener('dragend', () => dragEvents.push('dragend'))
         }"""
     )
-    source_x, source_y = center(source.locator('.brick > button[hx-post="/bricks"]'))
+    source_x, source_y = center(
+        source.locator('[id^=brick-] > button[hx-post="/bricks"]')
+    )
     target_x, target_y = center(target.locator(":scope > button"))
     cdp = context.new_cdp_session(page)
 
@@ -150,7 +152,7 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
 
     page.unroute("**/release")
     expect(target.locator(":scope > .brick-preview")).not_to_be_visible()
-    expect(target.locator(f"#{brick_id}")).to_have_attribute("data-dragged-by-id", "")
+    expect(target.locator(f"#{brick_id}[data-dragged-by-id]")).to_have_count(0)
     expect(target.locator(f"#{brick_id}")).not_to_have_attribute(
         "data-local-dragging", ""
     )
@@ -210,7 +212,7 @@ def test_mobile_controls_stay_inside_screen(browser: Browser, browser_errors):
 
 def test_create_prediction_is_immediate(joined_page: Page):
     page = joined_page
-    cell = page.locator(".grid-cell:not(:has(.brick))").last
+    cell = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").last
     cell = page.locator(f"#{cell.get_attribute('id')}")
     held_requests = []
     page.route("**/bricks", lambda route: held_requests.append(route))
@@ -219,11 +221,11 @@ def test_create_prediction_is_immediate(joined_page: Page):
 
     expect(cell).to_have_attribute("data-creating", "true", timeout=100)
     expect(cell.locator(":scope > .brick-preview")).to_be_visible(timeout=100)
-    expect(cell.locator(":scope > .brick")).to_have_count(0)
+    expect(cell.locator(":scope > [id^=brick-]")).to_have_count(0)
     assert len(held_requests) == 1
 
     page.unroute("**/bricks")
-    expect(cell.locator(":scope > .brick")).to_have_count(1)
+    expect(cell.locator(":scope > [id^=brick-]")).to_have_count(1)
     expect(cell).to_have_attribute("data-creating", "false")
 
 
@@ -249,13 +251,13 @@ def test_prediction_toggle_controls_delete(joined_page: Page):
     page.locator("#simulate-latency-toggle").check()
 
     predicted_cell.locator("button[hx-delete]").dispatch_event("pointerdown")
-    expect(predicted_cell.locator(".brick")).to_have_count(0, timeout=100)
+    expect(predicted_cell.locator("[id^=brick-]")).to_have_count(0, timeout=100)
 
     toggle.uncheck()
     expect(toggle).not_to_be_checked()
     unpredicted_cell.locator("button[hx-delete]").dispatch_event("pointerdown")
     page.wait_for_timeout(600)
-    expect(unpredicted_cell.locator(".brick")).to_have_count(1)
+    expect(unpredicted_cell.locator("[id^=brick-]")).to_have_count(1)
 
 
 def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
@@ -270,7 +272,7 @@ def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
     join(page, "Touch Delete")
     expect(page.locator("#controls")).to_be_visible()
     cell = place_brick(page)
-    brick = cell.locator(".brick")
+    brick = cell.locator("[id^=brick-]")
     delete_button = brick.locator("button[hx-delete]")
     mode_button = page.locator("#delete-mode-button")
 
@@ -290,7 +292,7 @@ def test_touch_delete_mode_deletes_brick(browser: Browser, browser_errors):
 
     delete_button.tap()
 
-    expect(cell.locator(".brick")).to_have_count(0)
+    expect(cell.locator("[id^=brick-]")).to_have_count(0)
     context.close()
 
 
@@ -300,13 +302,15 @@ def test_shift_drag_deletes_touched_bricks(joined_page: Page):
 
     page.keyboard.down("Shift")
     expect(page.locator("body")).to_have_attribute("data-delete-mode", "true")
-    page.mouse.move(*center(cells[0].locator(".brick > button[hx-delete]")))
+    page.mouse.move(*center(cells[0].locator("[id^=brick-] > button[hx-delete]")))
     page.mouse.down()
     for cell in cells[1:]:
-        page.mouse.move(*center(cell.locator(".brick > button[hx-delete]")), steps=8)
+        page.mouse.move(
+            *center(cell.locator("[id^=brick-] > button[hx-delete]")), steps=8
+        )
     page.mouse.up()
     page.keyboard.up("Shift")
     expect(page.locator("body")).to_have_attribute("data-delete-mode", "false")
 
     for cell in cells:
-        expect(cell.locator(".brick")).to_have_count(0)
+        expect(cell.locator("[id^=brick-]")).to_have_count(0)

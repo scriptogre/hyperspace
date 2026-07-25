@@ -95,7 +95,7 @@ def test_world_changes_reach_browser(joined_page: Page):
         expect(world).to_have_css("background-color", "oklch(0.985 0 0)")
         expect(world).to_have_css("color", "oklch(0.205 0 0)")
         expect(page.locator("#announcement")).to_have_text("World notice")
-        expect(page.locator(".grid-cell")).to_have_count(169)
+        expect(page.locator("[id^=grid-cell-]")).to_have_count(169)
         grid = page.locator("#grid")
         expect(grid).to_have_css("--world-size", "13")
         expect(grid).to_have_css("transition-property", "scale, translate")

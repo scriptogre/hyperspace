@@ -34,7 +34,7 @@ def test_latest_cursor_position_wins_when_requests_finish_out_of_order(
             responses.append(response) if response.url.endswith("/cursor") else None
         ),
     )
-    cells = page.locator(".grid-cell").evaluate_all(
+    cells = page.locator("[id^=grid-cell-]").evaluate_all(
         "cells => cells.slice(0, 2).map(cell => ({"
         "id: cell.id, x: cell.dataset.x, y: cell.dataset.y"
         "}))"

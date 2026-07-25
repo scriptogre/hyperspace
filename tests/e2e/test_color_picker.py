@@ -31,11 +31,11 @@ def test_color_picker(page: Page, browser_errors):
     form.locator("button[type=submit]").click()
     form.wait_for(state="detached")
 
-    empty_cell = page.locator(".grid-cell:not(:has(.brick))").first
+    empty_cell = page.locator("[id^=grid-cell-]:not(:has([id^=brick-]))").first
     cell = page.locator(f"#{empty_cell.get_attribute('id')}")
     cell.locator(":scope > button").click()
 
-    expect(cell.locator(".brick")).to_have_attribute(
+    expect(cell.locator("[id^=brick-]")).to_have_attribute(
         "style",
         re.compile(rf"--color:\s*{re.escape(selected_color)}"),
     )

@@ -476,8 +476,8 @@
     font-family: var(--font-mono);
     color: var(--color-foreground);
     touch-action: pinch-zoom;
-    &:not([data-delete-mode="true"]):not(:has(.brick[data-local-dragging])) #grid {
-      .grid-cell:hover > .brick:last-of-type {
+    &:not([data-delete-mode="true"]):not(:has([id^=brick-][data-local-dragging])) #grid {
+      [id^=grid-cell-]:hover > [id^=brick-]:last-of-type {
         border-color: var(--surface-color);
         @supports (color: color-mix(in lab, red, red)) {
           border-color: color-mix(in oklch, var(--surface-color), var(--color-foreground) 65%);
@@ -488,47 +488,47 @@
         }
       }
     }
-    &:not([data-delete-mode="true"]):has(.brick[data-local-dragging]) #grid {
-      .grid-cell[data-drag-over]:not(:has(.brick[data-local-dragging])) > .brick-preview {
+    &:not([data-delete-mode="true"]):has([id^=brick-][data-local-dragging]) #grid {
+      [id^=grid-cell-][data-drag-over]:not(:has([id^=brick-][data-local-dragging])) > .brick-preview {
         display: block;
       }
-      .grid-cell > button, .brick, .brick > button {
+      [id^=grid-cell-] > button, [id^=brick-], [id^=brick-] > button {
         cursor: grabbing;
       }
-      .brick:hover {
+      [id^=brick-]:hover {
         border-color: rgba(255, 255, 255, 0.25);
         box-shadow: none;
       }
-      .brick:hover::before, .brick:hover::after {
+      [id^=brick-]:hover::before, [id^=brick-]:hover::after {
         border-color: rgba(255, 255, 255, 0.15);
       }
     }
     &[data-delete-mode="true"] #grid {
-      .grid-cell > button, .brick > button:not([hx-delete]) {
+      [id^=grid-cell-] > button, [id^=brick-] > button:not([hx-delete]) {
         display: none;
       }
-      .brick {
+      [id^=brick-] {
         cursor: crosshair;
         &:hover, &:hover::before, &:hover::after {
           border-color: rgb(239, 68, 68);
           box-shadow: inset 0 0 0 9999px rgba(239, 68, 68, 0.45);
         }
       }
-      .brick > button[hx-delete] {
+      [id^=brick-] > button[hx-delete] {
         display: block;
       }
     }
     &[data-delete-mode="true"] #grid {
-      .brick, .brick::before, .brick::after {
+      [id^=brick-], [id^=brick-]::before, [id^=brick-]::after {
         border-color: rgb(239 68 68 / 55%);
       }
-      .brick {
+      [id^=brick-] {
         box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 12%);
       }
-      .brick:hover, .brick:hover::before, .brick:hover::after {
+      [id^=brick-]:hover, [id^=brick-]:hover::before, [id^=brick-]:hover::after {
         border-color: rgb(239 68 68);
       }
-      .brick:hover {
+      [id^=brick-]:hover {
         box-shadow: inset 0 0 0 9999px rgb(239 68 68 / 45%);
       }
     }
@@ -1375,7 +1375,7 @@
     #bricks, #cursors {
       display: contents;
     }
-    .grid-cell {
+    [id^=grid-cell-] {
       display: contents;
       &::before, > * {
         grid-column: calc(var(--x) + 1);
@@ -1430,11 +1430,11 @@
     }
     @media (prefers-reduced-motion: reduce) {
       transition: none;
-      .grid-cell::before {
+      [id^=grid-cell-]::before {
         transition: none;
       }
     }
-    .brick, .brick-preview {
+    [id^=brick-], .brick-preview {
       --surface-color: light-dark(
                 var(--color),
                 var(--color)
@@ -1502,17 +1502,17 @@
       z-index: 10000;
       transform: translateZ(calc((var(--stack-height) + 1) * var(--brick-height)));
     }
-    .grid-cell[data-creating="true"] > .brick-preview {
+    [id^=grid-cell-][data-creating="true"] > .brick-preview {
       --face-opacity: 100%;
       display: block;
     }
-    .brick {
+    [id^=brick-] {
       cursor: grab;
       touch-action: none;
       z-index: calc(var(--z) * 100 + 1);
       transform: translateZ(calc((var(--z) + 1) * var(--brick-height)));
       transition: transform var(--default-transition-duration);
-      &[data-dragged-by-id]:not([data-dragged-by-id=""]) {
+      &[data-dragged-by-id] {
         --face-opacity: 40%;
         cursor: grabbing;
         z-index: 1000;
@@ -1561,7 +1561,7 @@
         display: none;
       }
     }
-    .grid-cell > .brick:last-of-type > button[hx-post="/bricks"] {
+    [id^=grid-cell-] > [id^=brick-]:last-of-type > button[hx-post="/bricks"] {
       cursor: pointer;
       &::before, &::after {
         cursor: grab;

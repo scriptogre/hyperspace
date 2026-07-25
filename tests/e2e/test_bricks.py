@@ -3,8 +3,8 @@
 from playwright.sync_api import Page, expect
 
 EMPTY_CELL = """() => {
-  for (const cell of document.querySelectorAll('.grid-cell')) {
-    if (!cell.querySelector('.brick')) {
+  for (const cell of document.querySelectorAll('[id^=grid-cell-]')) {
+    if (!cell.querySelector('[id^=brick-]')) {
       return {x: +cell.dataset.x, y: +cell.dataset.y};
     }
   }
@@ -18,7 +18,7 @@ def test_single_click_places_one_brick(joined_page: Page):
     """
     page = joined_page
     cell = page.evaluate(EMPTY_CELL)
-    placed = f"#grid-cell-{cell['x']}-{cell['y']} > .brick"
+    placed = f"#grid-cell-{cell['x']}-{cell['y']} > [id^=brick-]"
     expect(page.locator(placed)).to_have_count(0)
 
     page.locator(f"#grid-cell-{cell['x']}-{cell['y']} > button").click()

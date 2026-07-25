@@ -21,10 +21,10 @@ def test_stream_uses_native_zstd(browser_type: BrowserType, browser_errors):
         form.locator("button[type=submit]").click()
         expect(form).to_have_count(0)
 
-        cell = page.locator(".grid-cell").evaluate_all(
-            """cells => cells.find(cell => !cell.querySelector(':scope > .brick')).id"""
+        cell = page.locator("[id^=grid-cell-]").evaluate_all(
+            """cells => cells.find(cell => !cell.querySelector(':scope > [id^=brick-]')).id"""
         )
-        placed = page.locator(f"#{cell} > .brick")
+        placed = page.locator(f"#{cell} > [id^=brick-]")
         page.locator(f"#{cell} > button").click()
         expect(placed).to_have_count(1)
     finally:
