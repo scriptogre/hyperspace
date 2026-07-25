@@ -34,14 +34,21 @@ async def update_world(theme: str, size: int, announcement: str | None) -> None:
 
 def test_world_changes_reach_browser(joined_page: Page):
     page = joined_page
+    world = page.locator("#world")
 
     try:
+        page.emulate_media(color_scheme="dark")
+        expect(world).to_have_css("background-color", "oklch(0.985 0 0)")
+        expect(world).to_have_css("color", "oklch(0.205 0 0)")
+
         run_async(update_world("dark", 13, "World notice"))
 
-        expect(page.locator("#world")).to_have_attribute(
+        expect(world).to_have_attribute(
             "style",
             re.compile(r"color-scheme: dark"),
         )
+        expect(world).to_have_css("background-color", "oklch(0.157 0 0)")
+        expect(world).to_have_css("color", "oklch(0.985 0 0)")
         expect(page.locator("#announcement")).to_have_text("World notice")
         expect(page.locator(".grid-cell")).to_have_count(169)
         expect(page.locator("#grid")).to_have_css("--world-size", "13")

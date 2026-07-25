@@ -51,7 +51,7 @@
     --color-neutral-940: oklch(15.7% 0 0);
     --color-neutral-950: oklch(14.5% 0 0);
 
-    --color-foreground: var(--color-neutral-900);
+    --color-foreground: light-dark(var(--color-neutral-900), var(--color-neutral-50));
     --color-background: light-dark(var(--color-neutral-50), var(--color-neutral-940));
     --color-card: light-dark(var(--color-neutral-10), var(--color-neutral-910));
     --color-muted: light-dark(var(--color-neutral-100), var(--color-neutral-875));
@@ -75,12 +75,6 @@
         color-scheme: light dark;
         --cell-size: 4rem;
         --brick-height: 0.75rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-        :root {
-            --color-foreground: var(--color-neutral-50);
-        }
     }
 }
 
