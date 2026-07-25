@@ -1,4 +1,4 @@
-/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
 @layer properties;
 @layer theme, base, components, utilities;
 @layer theme {
@@ -460,6 +460,8 @@
     --cell-size: 4rem;
     --brick-height: 0.75rem;
   }
+}
+@layer base {
   @media (hover: none) {
     input {
       font-size: 16px;
@@ -563,7 +565,7 @@
     }
     #world {
       position: absolute;
-      inset: 0px;
+      inset: calc(var(--spacing) * 0);
       background-color: var(--color-background);
       color: var(--color-foreground);
     }
@@ -698,7 +700,7 @@
         > div {
           position: absolute;
           top: 100%;
-          right: 0px;
+          right: calc(var(--spacing) * 0);
           margin-top: calc(var(--spacing) * 2);
           display: grid;
           width: max-content;
@@ -757,7 +759,7 @@
       #admin > form {
         position: absolute;
         top: 100%;
-        right: 0px;
+        right: calc(var(--spacing) * 0);
         margin-top: calc(var(--spacing) * 2);
         display: grid;
         width: calc(var(--spacing) * 56);
@@ -779,7 +781,7 @@
         backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
         label {
           display: grid;
-          gap: var(--spacing);
+          gap: calc(var(--spacing) * 1);
           > span {
             font-size: 10px;
             --tw-font-weight: var(--font-weight-medium);
@@ -835,7 +837,7 @@
       position: absolute;
       z-index: 50;
       cursor: pointer;
-      padding-inline: var(--spacing);
+      padding-inline: calc(var(--spacing) * 1);
       padding-block: calc(var(--spacing) * 2);
       font-family: var(--font-sans);
       font-size: var(--text-xs);
@@ -915,7 +917,7 @@
     #player-list {
       position: absolute;
       top: 100%;
-      left: 0px;
+      left: calc(var(--spacing) * 0);
       margin-top: calc(var(--spacing) * 3);
       max-height: calc(var(--spacing) * 60);
       width: calc(var(--spacing) * 48);
@@ -974,7 +976,7 @@
   }
   #join {
     position: absolute;
-    inset: 0px;
+    inset: calc(var(--spacing) * 0);
     z-index: 50;
     display: grid;
     gap: calc(var(--spacing) * 4);
@@ -1155,11 +1157,11 @@
           #color-menu {
             grid-template-columns: repeat(10, 1rem);
             position: absolute;
-            right: 0px;
+            right: calc(var(--spacing) * 0);
             z-index: 60;
             margin-top: calc(var(--spacing) * 2);
             display: grid;
-            gap: var(--spacing);
+            gap: calc(var(--spacing) * 1);
             border-radius: var(--radius-xl);
             border-style: var(--tw-border-style);
             border-width: 1px;
@@ -1268,7 +1270,7 @@
           color: var(--color-muted-foreground);
           &:has(> :nth-child(3)) {
             grid-template-columns: 3.25rem 0.875rem 1fr;
-            padding-left: 0px;
+            padding-left: calc(var(--spacing) * 0);
             > :first-child {
               text-align: right;
             }
@@ -1529,7 +1531,7 @@
       }
       > button {
         position: absolute;
-        inset: 0px;
+        inset: calc(var(--spacing) * 0);
         cursor: inherit;
         transform: translateZ(1px);
         transform-style: preserve-3d;
