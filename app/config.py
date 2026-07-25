@@ -39,15 +39,20 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
 
-    def join_url(self, request_origin: str) -> str:
-        """Return the configured public URL or the current request origin."""
-        if not self.DOMAIN:
-            return request_origin.rstrip("/")
-        if "://" in self.DOMAIN:
-            return self.DOMAIN.rstrip("/")
+    @computed_field
+    @property
+    def JOIN_URL(self) -> str:
+        """Return the URL shown in the join QR code."""
+        domain = self.DOMAIN or (
+            "hyperspace.christiantanul.com"
+            if self.ENVIRONMENT == "production"
+            else "localhost:8000"
+        )
+        if "://" in domain:
+            return domain.rstrip("/")
 
         scheme = "https" if self.ENVIRONMENT == "production" else "http"
-        return f"{scheme}://{self.DOMAIN.rstrip('/')}"
+        return f"{scheme}://{domain.rstrip('/')}"
 
     @computed_field
     @property
