@@ -1,4 +1,5 @@
-// hx-live extension: reactive live expressions + q() proxy + scope helpers.
+// hx-live extension: https://four.htmx.org/extensions/hx-live
+// Reactive live expressions + q() proxy + scope helpers.
 // Hooks:
 //   htmx:after:process  find new [hx-live] elements and register them
 //   htmx:before:swap    increment swap depth (defer recompute passes)

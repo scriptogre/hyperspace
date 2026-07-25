@@ -1,8 +1,44 @@
 # Hyperspace
 
-Hyperspace runs the same production FastAPI and PostgreSQL services locally for the live demo.
+Build bricks together in a shared isometric world.
 
-## Run the demo on this Mac
+Hyperspace is the demo app for **Real-Time Hypermedia (the htmx way)**. It uses FastAPI, PostgreSQL, htmx, and CSS.
+
+[Play Hyperspace](https://hyperspace.christiantanul.com/) · [View the source](https://github.com/scriptogre/hyperspace)
+
+<p>
+  <img src="docs/images/join.png" width="49%" alt="Hyperspace join screen at BigSkyDevCon 2026">
+  <img src="docs/images/world.png" width="49%" alt="The shared Hyperspace brick grid">
+</p>
+
+## How it works
+
+Browser actions send normal HTTP requests. FastAPI updates PostgreSQL, renders the shared world as HTML, and pushes it to every browser over a compressed multipart stream.
+
+Two htmx 4 extensions connect the server-rendered world to local interactions:
+
+- [`hx-multipart`](https://four.htmx.org/extensions/hx-multipart) consumes the stream and morphs each update into `#world`. It vendors the parser from [`fetch-multipart`](https://github.com/scriptogre/fetch-multipart).
+- [`hx-live`](https://four.htmx.org/extensions/hx-live) updates reactive attributes for local prediction, controls, and status text.
+
+[`multipart-response`](https://github.com/scriptogre/multipart-response) provides FastAPI multipart response support. It is installed while the current stream route moves from its custom response to `MultipartResponse`.
+
+Client-side prediction keeps brick actions responsive while the server remains the source of truth.
+
+## Run locally
+
+Start the app with Docker:
+
+```bash
+just up -d --build
+```
+
+Open [localhost:8000](http://localhost:8000), then run the tests:
+
+```bash
+just test
+```
+
+## Run the conference demo
 
 Start the production stack on port 8000 using this Mac's LAN address:
 
@@ -10,42 +46,19 @@ Start the production stack on port 8000 using this Mac's LAN address:
 just demo
 ```
 
-The command prints the URL to open on demo devices:
+The command prints the URL for demo devices and configures the join QR code:
 
 ```text
 Demo: http://192.168.1.23:8000
 ```
 
-`docker-compose.demo.yml` only publishes FastAPI and sets the QR-code URL. `docker-compose.production.yml` defines the production services.
-
-## Deploy committed code
+## Deploy
 
 Commit every change, then deploy `main`:
 
 ```bash
-git commit
 git push origin main
 just deploy
 ```
 
-`just deploy` pushes `main`, then connects directly to the Droplet's public SSH address.
-
-The Droplet fetches `origin/main`, force-checks it out in detached mode, rebuilds FastAPI, and waits for healthy containers.
-
-## Update code on the Droplet
-
-For a last-minute fix, edit the host checkout and restart FastAPI:
-
-```bash
-ssh digitalocean
-cd /opt/hyperspace/app
-# Edit files.
-docker restart hyperspace-fastapi-1
-curl -fsS https://hyperspace.christiantanul.com/health
-```
-
-The health check prints `ok`.
-
-Edit the writable host checkout. Docker reads it through the read-only `/code` bind.
-
-A normal deploy replaces direct Droplet edits with committed `origin/main`. Use a normal deploy for dependency changes so Docker rebuilds the FastAPI image.
+`just deploy` checks for a clean working tree, pushes `main`, deploys it to DigitalOcean, and waits for healthy containers.

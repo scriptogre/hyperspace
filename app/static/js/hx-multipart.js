@@ -1,8 +1,8 @@
 //==========================================================
-// hx-multipart.js
+// hx-multipart: https://four.htmx.org/extensions/hx-multipart
 //
 // Handles multipart htmx responses entirely from the extension.
-// Includes the fetch-multipart parser prollyfill so
+// Includes https://github.com/scriptogre/fetch-multipart so
 // Response.prototype.parts() is available when the extension loads.
 //==========================================================
 (() => {
