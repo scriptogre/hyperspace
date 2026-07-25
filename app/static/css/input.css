@@ -544,9 +544,9 @@
         transform: perspective(calc(var(--world-size) * 5.208333rem)) rotateX(60deg) rotateZ(-45deg);
         transform-style: preserve-3d;
         transition:
-            top 1s ease-in-out 500ms,
-            scale 1s ease-in-out 500ms,
-            transform 1s ease-in-out 500ms;
+            top 750ms ease-in-out 350ms,
+            scale 750ms ease-in-out 350ms,
+            transform 750ms ease-in-out 350ms;
 
         @media (min-width: 40rem) {
             scale: 1;
@@ -590,7 +590,7 @@
                     color-mix(in oklab, var(--color-foreground) 2%, transparent),
                     color-mix(in oklab, var(--color-foreground) 1.5%, transparent)
                 );
-                animation: grid-cell-enter 500ms ease-out both;
+                animation: grid-cell-enter 350ms ease-out both;
             }
 
             > button {

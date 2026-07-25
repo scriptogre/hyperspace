@@ -54,13 +54,13 @@ def test_world_changes_reach_browser(joined_page: Page):
         expect(page.locator(".grid-cell")).to_have_count(169)
         grid = page.locator("#grid")
         expect(grid).to_have_css("--world-size", "13")
-        expect(grid).to_have_css("transition-duration", "1s, 1s, 1s")
-        expect(grid).to_have_css("transition-delay", "0.5s, 0.5s, 0.5s")
+        expect(grid).to_have_css("transition-duration", "0.75s, 0.75s, 0.75s")
+        expect(grid).to_have_css("transition-delay", "0.35s, 0.35s, 0.35s")
         assert (
             page.locator("#grid-cell-12-12").evaluate(
                 "element => getComputedStyle(element, '::before').animationDuration"
             )
-            == "0.5s"
+            == "0.35s"
         )
 
         page.emulate_media(color_scheme="light")
