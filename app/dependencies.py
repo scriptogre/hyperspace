@@ -15,6 +15,7 @@ from tortoise.backends.base.client import BaseDBAsyncClient
 from tortoise.transactions import in_transaction
 
 from app.colors import calculate_player_color
+from app.config import settings
 from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
 from app.models import Brick, Cursor, Player, World
 from app.schemas import BrickRow, CursorRow, PlayerRow
@@ -297,6 +298,7 @@ async def get_game_context(
         **world_context,
         "player": player,
         "form_errors": form_errors,
+        "join_url": settings.JOIN_URL,
         "selected_color_seed": selected_color_seed,
         "suggested_colors": [
             {"seed": seed, "color": calculate_player_color(seed)}
