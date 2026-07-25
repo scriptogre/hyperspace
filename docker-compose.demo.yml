@@ -1,0 +1,6 @@
+services:
+  fastapi:
+    ports:
+      - "8000:8000"
+    environment:
+      DOMAIN: ${DOMAIN:?Run this stack with `just demo`}

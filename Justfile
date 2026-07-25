@@ -4,6 +4,19 @@ default: up
 up *args:
     docker compose up {{ args }}
 
+# Run the production stack on this Mac for the live demo
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    interface="$(route -n get default | awk '/interface:/{print $2}')"
+    lan_ip="$(ipconfig getifaddr "$interface")"
+    DOMAIN="http://${lan_ip}:8000" docker compose \
+        --env-file .env \
+        -f docker-compose.production.yml \
+        -f docker-compose.demo.yml \
+        up -d --build --wait
+    echo "Demo: http://${lan_ip}:8000"
+
 # Stop and remove containers
 down *args:
     docker compose down {{ args }}
