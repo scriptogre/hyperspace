@@ -9,7 +9,25 @@
 
     <div id="stats" aria-label="Game statistics">
         <details id="players" name="controls">
-            {% include "_players.html" %}
+            {% set online = players | selectattr("is_online") | list %}
+
+            <summary class="ui-control" aria-label="{{ online | length }} online players">
+                <span class="icon-[lucide--users]" aria-hidden="true"></span>
+                <span>{{ online | length }}</span>
+                <span class="stat-label">Players</span>
+                <span class="players-chevron icon-[lucide--chevron-down]" aria-hidden="true"></span>
+            </summary>
+
+            <ul id="player-list">
+                {% for player in online %}
+                    <li>
+                        <span style="--color: {{ player.color }}">
+                            {{ player.initials }}
+                        </span>
+                        <span>{{ player.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
         </details>
 
         <span>
@@ -22,7 +40,107 @@
     </div>
 
     <div id="grid">
-        {% include "_bricks.html" %}
-        {% include "_cursors.html" %}
+        <div id="bricks">
+            {% for x in range(world.size) %}
+                {% for y in range(world.size) %}
+                    {% set stack = brick_stacks[x][y] %}
+
+                    <div id="grid-cell-{{ x }}-{{ y }}"
+                         class="grid-cell"
+                         data-x="{{ x }}"
+                         data-y="{{ y }}"
+                         data-z="0"
+                         data-creating="false"
+                         hx-patch="/cursor"
+                         hx-trigger="pointerenter"
+                         hx-sync="#grid:queue last"
+                         hx-on:pointerenter="take('data-drag-over')"
+                         hx-vals="js:{
+                                      x: data.x,
+                                      y: data.y,
+                                      z: -1
+                                  }"
+                         style="--x: {{ x }};
+                                --y: {{ y }};
+                                --stack-height: {{ stack | length }}">
+                        {% for brick in stack %}
+                            <div id="brick-{{ brick.id }}"
+                                 class="brick"
+                                 data-z="{{ brick.z }}"
+                                 data-dragged-by-id="{{ brick.dragged_by_id or '' }}"
+                                 :data-local-dragging="data.draggedById == data.playerId"
+                                 style="--z: {{ brick.z }};
+                                        --color: {{ brick.color }}"
+                                 :draggable="!data.deleteMode"
+                                 hx-on:dragstart="data.draggedById = data.playerId"
+                                 hx-patch="/cursor"
+                                 hx-trigger="pointerenter"
+                                 hx-sync="#grid:queue last"
+                                 hx-vals="js:{
+                                              x: data.x,
+                                              y: data.y,
+                                              z: data.z
+                                          }">
+                                {% if stack | length < world.size %}
+                                    <button aria-label="Stack brick"
+                                            hx-post="/bricks"
+                                            hx-on::before:request="$('#predictions-toggle').checked && (data.creating = true)"
+                                            hx-vals="js:{
+                                                       x: data.x,
+                                                       y: data.y,
+                                                       z: data.z + 1
+                                                   }"></button>
+                                {% endif %}
+
+                                <button aria-label="Delete brick"
+                                        hx-delete="/bricks/{{ brick.id }}"
+                                        hx-trigger="pointerdown, pointerenter[buttons] delay:100ms"
+                                        hx-on::before:request="$('#predictions-toggle').checked && $('closest .brick').remove()"></button>
+
+                                <button hidden
+                                        aria-label="Grab brick"
+                                        hx-post="/bricks/{{ brick.id }}/grab"
+                                        hx-trigger="dragstart from:<closest .brick/>"></button>
+
+                                <button hidden
+                                        aria-label="Release brick"
+                                        hx-post="/bricks/{{ brick.id }}/release"
+                                        hx-trigger="dragend from:<closest .brick/>"
+                                        hx-sync="#grid:queue all">
+                                </button>
+                            </div>
+                        {% else %}
+                            <button aria-label="Add brick"
+                                    hx-post="/bricks"
+                                    hx-on::before:request="$('#predictions-toggle').checked && (data.creating = true)"
+                                    hx-vals="js:{...data}"></button>
+                        {% endfor %}
+
+                        <span class="brick-preview" aria-hidden="true"></span>
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+
+        <div id="cursors">
+            {% for cursor in cursors %}
+                <div id="cursor-{{ cursor.player_id }}"
+                     class="cursor"
+                     data-owner-id="{{ cursor.player_id }}"
+                     data-x="{{ cursor.grid_x }}"
+                     data-y="{{ cursor.grid_y }}"
+                     data-z="{{ cursor.grid_z }}"
+                     :data-local-cursor="data.ownerId === data.playerId"
+                     style="--x:{{ cursor.grid_x }};
+                            --y:{{ cursor.grid_y }};
+                            --z:{{ cursor.grid_z }};
+                            --cursor-offset:{{ cursor.offset }};
+                            --color:{{ cursor.color }}">
+                    <span aria-label="{{ cursor.name }}">
+                        {{ cursor.initials }}
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
     </div>
 </div>
