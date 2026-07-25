@@ -11,3 +11,5 @@ __pycache__/
 bench/results/
 .qr-*.png
 test.py
+DEMO.md
+PROMPT.md
