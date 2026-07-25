@@ -86,6 +86,13 @@
     }
 }
 
+@keyframes grid-cell-enter {
+    from {
+        opacity: 0;
+        scale: 0.75;
+    }
+}
+
 @layer components {
     body {
         @apply h-screen overflow-hidden touch-none bg-background font-mono text-foreground;
@@ -536,6 +543,10 @@
         scale: 0.4;
         transform: perspective(calc(var(--world-size) * 5.208333rem)) rotateX(60deg) rotateZ(-45deg);
         transform-style: preserve-3d;
+        transition:
+            top 1s ease-in-out 500ms,
+            scale 1s ease-in-out 500ms,
+            transform 1s ease-in-out 500ms;
 
         @media (min-width: 40rem) {
             scale: 1;
@@ -579,6 +590,7 @@
                     color-mix(in oklab, var(--color-foreground) 2%, transparent),
                     color-mix(in oklab, var(--color-foreground) 1.5%, transparent)
                 );
+                animation: grid-cell-enter 500ms ease-out both;
             }
 
             > button {
@@ -594,6 +606,14 @@
                 }
             }
 
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            transition: none;
+
+            .grid-cell::before {
+                animation: none;
+            }
         }
 
         .brick,

@@ -52,7 +52,16 @@ def test_world_changes_reach_browser(joined_page: Page):
         expect(world).to_have_css("color", "oklch(0.205 0 0)")
         expect(page.locator("#announcement")).to_have_text("World notice")
         expect(page.locator(".grid-cell")).to_have_count(169)
-        expect(page.locator("#grid")).to_have_css("--world-size", "13")
+        grid = page.locator("#grid")
+        expect(grid).to_have_css("--world-size", "13")
+        expect(grid).to_have_css("transition-duration", "1s, 1s, 1s")
+        expect(grid).to_have_css("transition-delay", "0.5s, 0.5s, 0.5s")
+        assert (
+            page.locator("#grid-cell-12-12").evaluate(
+                "element => getComputedStyle(element, '::before').animationDuration"
+            )
+            == "0.5s"
+        )
 
         page.emulate_media(color_scheme="light")
         run_async(update_world("dark", 13, "World notice"))
