@@ -11,15 +11,15 @@ def test_stream_uses_native_zstd(browser_type: BrowserType, browser_errors):
     try:
         page.set_default_timeout(10_000)
         browser_errors(page)
-        page.goto("/")
+        with page.expect_response("**/stream") as stream_response:
+            page.goto("/")
+
+        assert stream_response.value.headers["content-encoding"] == "zstd"
 
         form = page.locator("#player-form")
         form.locator("input[name=name]").fill(f"zstd_{uuid.uuid4().hex[:6]}")
-        with page.expect_response("**/stream") as stream_response:
-            form.locator("button[type=submit]").click()
-            expect(form).to_have_count(0)
-
-        assert stream_response.value.headers["content-encoding"] == "zstd"
+        form.locator("button[type=submit]").click()
+        expect(form).to_have_count(0)
 
         cell = page.locator(".grid-cell").evaluate_all(
             """cells => cells.find(cell => !cell.querySelector(':scope > .brick')).id"""

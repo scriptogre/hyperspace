@@ -34,6 +34,7 @@
     --radius-lg: 0.5rem;
     --radius-xl: 0.75rem;
     --radius-2xl: 1rem;
+    --blur-xs: 4px;
     --blur-md: 12px;
     --default-transition-duration: 50ms;
     --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -978,16 +979,16 @@
     display: grid;
     gap: calc(var(--spacing) * 4);
     overflow-y: auto;
-    background-color: color-mix(in srgb, light-dark(var(--color-neutral-50), var(--color-neutral-940)) 80%, transparent);
+    background-color: color-mix(in srgb, light-dark(var(--color-neutral-50), var(--color-neutral-940)) 50%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--color-background) 80%, transparent);
+      background-color: color-mix(in oklab, var(--color-background) 50%, transparent);
     }
     padding: calc(var(--spacing) * 4);
     font-family: var(--font-sans);
     font-size: var(--text-sm);
     line-height: var(--tw-leading, var(--text-sm--line-height));
     color: var(--color-foreground);
-    --tw-backdrop-blur: blur(var(--blur-md));
+    --tw-backdrop-blur: blur(var(--blur-xs));
     -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
     backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
     grid-template-columns: min(17.5rem, 100%);
@@ -1001,10 +1002,16 @@
       border-style: var(--tw-border-style);
       border-width: 1px;
       border-color: var(--color-border);
-      background-color: var(--color-card);
+      background-color: color-mix(in srgb, light-dark(var(--color-neutral-10), var(--color-neutral-910)) 85%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-card) 85%, transparent);
+      }
       padding: calc(var(--spacing) * 6);
       --tw-shadow: 5px 5px 0 var(--tw-shadow-color, var(--color-shadow));
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+      --tw-backdrop-blur: blur(var(--blur-md));
+      -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+      backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
     }
     #player-form {
       display: grid;
@@ -1310,11 +1317,12 @@
         }
       }
       img {
-        height: calc(var(--spacing) * 28);
+        height: calc(var(--spacing) * 36);
         width: auto;
         flex-shrink: 0;
+        padding: calc(var(--spacing) * 2);
         @media (width >= 40rem) {
-          height: calc(var(--spacing) * 32);
+          height: calc(var(--spacing) * 44);
         }
       }
       a {

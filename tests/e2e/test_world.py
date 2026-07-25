@@ -5,6 +5,24 @@ from playwright.sync_api import Page, expect
 from tests import run_async
 
 
+async def get_world() -> tuple[str | None, int, str | None]:
+    connection = await asyncpg.connect(
+        host=settings.POSTGRES_HOST,
+        port=settings.POSTGRES_PORT,
+        user=settings.POSTGRES_USER,
+        password=settings.POSTGRES_PASSWORD,
+        database=settings.POSTGRES_DB,
+    )
+    try:
+        row = await connection.fetchrow(
+            "SELECT theme, size, announcement FROM worlds WHERE id = 1"
+        )
+        assert row is not None
+        return row["theme"], row["size"], row["announcement"]
+    finally:
+        await connection.close()
+
+
 async def update_world(theme: str | None, size: int, announcement: str | None) -> None:
     connection = await asyncpg.connect(
         host=settings.POSTGRES_HOST,
@@ -28,6 +46,23 @@ async def update_world(theme: str | None, size: int, announcement: str | None) -
         )
     finally:
         await connection.close()
+
+
+def test_world_is_live_before_join(page: Page, browser_errors):
+    browser_errors(page)
+    original = run_async(get_world())
+
+    try:
+        page.goto("/")
+        expect(page.locator("#player-form")).to_be_visible()
+        expect(page.locator("#world")).to_be_visible()
+        expect(page.locator("#app")).to_have_attribute("inert", "")
+
+        run_async(update_world(original[0], original[1], "Live before joining"))
+
+        expect(page.locator("#announcement")).to_have_text("Live before joining")
+    finally:
+        run_async(update_world(*original))
 
 
 def test_world_rejects_coordinates_outside_its_bounds(joined_page: Page):

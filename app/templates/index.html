@@ -28,15 +28,19 @@
 <body data-delete-mode="false"
       hx-boost:inherited="true"
       hx-swap:inherited="innerMorph"
-      {% if player %}hx-multipart:connect="/stream"{% endif %}
+      hx-multipart:connect="/stream"
       hx-on="keydown, keyup -> data.deleteMode = event.shiftKey">
 
-{% if player %}
     <main id="app"
-          data-player-id="{{ player.id }}"
-          style="--player-color: {{ player.color }}">
+          {% if player %}
+              data-player-id="{{ player.id }}"
+              style="--player-color: {{ player.color }}"
+          {% else %}
+              inert
+          {% endif %}>
         {% include "_world.html" %}
 
+        {% if player %}
         <aside id="controls"
                aria-label="Game controls"
                hx-on="htmx:request:latency:configuration from:document ->
@@ -87,13 +91,12 @@
             <span class="icon-[lucide--check]" :hidden="!data.deleteMode" aria-hidden="true"></span>
             <span>Delete</span>
         </button>
+        {% endif %}
     </main>
 
-{% else %}
-
-    {% include "_player_form.html" %}
-
-{% endif %}
+    {% if not player %}
+        {% include "_player_form.html" %}
+    {% endif %}
 
 </body>
 </html>

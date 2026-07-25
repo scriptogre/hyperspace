@@ -373,7 +373,7 @@
     }
 
     #join {
-        @apply absolute inset-0 z-50 grid gap-4 overflow-y-auto bg-background/80 p-4 font-sans text-sm text-foreground backdrop-blur-md;
+        @apply absolute inset-0 z-50 grid gap-4 overflow-y-auto bg-background/50 p-4 font-sans text-sm text-foreground backdrop-blur-xs;
         grid-template-columns: min(17.5rem, 100%);
         align-content: safe center;
         justify-content: center;
@@ -385,7 +385,7 @@
         #player-form,
         #controls,
         #join-qr {
-            @apply rounded-2xl border border-border bg-card p-6 shadow-iso;
+            @apply rounded-2xl border border-border bg-card/85 p-6 shadow-iso backdrop-blur-md;
         }
 
         #player-form {
@@ -537,7 +537,7 @@
             }
 
             img {
-                @apply h-28 w-auto shrink-0 sm:h-32;
+                @apply h-36 w-auto shrink-0 p-2 sm:h-44;
             }
 
             a {

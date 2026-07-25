@@ -24,7 +24,6 @@ from app.dependencies import (
     require_player_token,
     require_available_brick_or_204,
     require_htmx_request,
-    require_online_player,
 )
 from app.broadcast import create_streaming_response
 from app.enums import Theme
@@ -90,7 +89,6 @@ async def health() -> str:
 @router.get(
     "/stream",
     response_class=StreamingResponse,
-    dependencies=[Depends(require_online_player, scope="request")],
 )
 async def stream(
     accept_encoding: Annotated[str, Header()] = "",
