@@ -1,10 +1,11 @@
-<details id="admin" name="controls">
+<details id="admin" name="controls" {% if form_errors.errors %}open{% endif %}>
     <summary class="ui-control" aria-label="Admin controls">
         <span class="icon-[lucide--shield]" aria-hidden="true"></span>
         <span class="settings-label">Admin</span>
         <span class="settings-chevron icon-[lucide--chevron-down]" aria-hidden="true"></span>
     </summary>
-    <form hx-patch="/world">
+    <form hx-patch="/world" hx-target="body">
+        {% set selected_theme = form_errors.data.theme or world.theme or "system" %}
         <label>
             <span>Grid size</span>
             <input name="size"
@@ -12,20 +13,23 @@
                    min="1"
                    max="32"
                    required
-                   value="{{ world.size }}">
+                   value="{{ form_errors.data.size or world.size }}">
         </label>
         <label>
             <span>Theme</span>
             <select name="theme">
-                <option value="system" {% if not world.theme %}selected{% endif %}>System</option>
-                <option value="light" {% if world.theme == "light" %}selected{% endif %}>Light</option>
-                <option value="dark" {% if world.theme == "dark" %}selected{% endif %}>Dark</option>
+                <option value="system" {% if selected_theme == "system" %}selected{% endif %}>System</option>
+                <option value="light" {% if selected_theme == "light" %}selected{% endif %}>Light</option>
+                <option value="dark" {% if selected_theme == "dark" %}selected{% endif %}>Dark</option>
             </select>
         </label>
         <label>
             <span>Announcement</span>
             <textarea name="announcement" rows="2">{{ world.announcement or "" }}</textarea>
         </label>
+        {% for _, message in form_errors.errors|items %}
+            <p role="alert">{{ message }}</p>
+        {% endfor %}
         <button type="submit">Save world</button>
     </form>
 </details>

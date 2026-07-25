@@ -184,6 +184,10 @@
             }
         }
 
+        :is(#player-form, #admin > form) > p[role="alert"] {
+            @apply text-sm text-red-500;
+        }
+
         #world {
             @apply absolute inset-0 bg-background text-foreground;
         }
@@ -469,10 +473,6 @@
                     outline-offset: 2px;
                     box-shadow: 0 0 12px color-mix(in oklch, var(--color-foreground), transparent 70%);
                 }
-            }
-
-            > p[role="alert"] {
-                @apply text-sm text-red-500;
             }
 
             #join-button {
