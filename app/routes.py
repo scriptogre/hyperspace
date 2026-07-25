@@ -7,14 +7,13 @@ from fastapi import (
     Depends,
     Form,
     Header,
-    Request,
     Response,
 )
 
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.status import HTTP_204_NO_CONTENT
 from tortoise.expressions import Q
-from tortoise.transactions import in_transaction
+from tortoise.transactions import atomic
 
 from app.dependencies import (
     require_available_brick,
@@ -28,7 +27,6 @@ from app.dependencies import (
     require_online_player,
 )
 from app.broadcast import create_streaming_response
-from app.config import settings
 from app.enums import Theme
 from app.jinja import render
 from app.models import Brick, Cursor, Player, World
@@ -50,12 +48,8 @@ router = APIRouter()
 
 
 @router.get("/")
-async def index_page(
-    request: Request,
-    context: dict = Depends(get_game_context),
-):
-    join_url = settings.join_url(str(request.base_url))
-    return render("index.html", context | {"join_url": join_url})
+async def index_page(context: dict = Depends(get_game_context)):
+    return render("index.html", context)
 
 
 @router.post(
@@ -117,33 +111,23 @@ async def stream(
     "/world",
     status_code=HTTP_204_NO_CONTENT,
 )
+@atomic()
 async def world_update(
     size: Annotated[int, Form(ge=1, le=32)],
     theme: Annotated[Literal["system", "light", "dark"], Form()],
     announcement: Annotated[str, Form()] = "",
     _: Player = Depends(require_admin),
 ):
-    async with in_transaction() as database:
-        world = await World.select_for_update().using_db(database).get(id=1)
-        if size < world.size:
-            await (
-                Brick.filter(Q(x__gte=size) | Q(y__gte=size) | Q(z__gte=size))
-                .using_db(database)
-                .delete()
-            )
-            await (
-                Cursor.filter(Q(x__gte=size) | Q(y__gte=size))
-                .using_db(database)
-                .delete()
-            )
+    # TODO: Clean up slop after the talk
+    world = await World.select_for_update().get(id=1)
+    if size < world.size:
+        await Brick.filter(Q(x__gte=size) | Q(y__gte=size) | Q(z__gte=size)).delete()
+        await Cursor.filter(Q(x__gte=size) | Q(y__gte=size)).delete()
 
-        world.size = size
-        world.theme = None if theme == "system" else Theme(theme)
-        world.announcement = announcement.strip() or None
-        await world.save(
-            using_db=database,
-            update_fields=["size", "theme", "announcement"],
-        )
+    world.size = size
+    world.theme = None if theme == "system" else Theme(theme)
+    world.announcement = announcement.strip() or None
+    await world.save(update_fields=["size", "theme", "announcement"])
 
 
 @router.post(
