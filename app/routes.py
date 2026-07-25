@@ -77,6 +77,17 @@ async def player_logout(response: RedirectResponse):
     response.delete_cookie("hyperspace")
 
 
+@router.post(
+    "/admin/delete-all-bricks",
+    status_code=HTTP_204_NO_CONTENT,
+)
+@atomic()
+async def admin_delete_all_bricks(
+    _: Player = Depends(require_admin),
+):
+    await Brick.all().delete()
+
+
 @router.get("/health")
 async def health() -> str:
     return "ok"
