@@ -30,6 +30,15 @@ async def update_world(theme: str | None, size: int, announcement: str | None) -
         await connection.close()
 
 
+def test_world_rejects_coordinates_outside_its_bounds(joined_page: Page):
+    response = joined_page.context.request.patch(
+        "/cursor",
+        form={"x": "99", "y": "99", "z": "-1"},
+    )
+
+    assert response.status == 422
+
+
 def test_world_changes_reach_browser(joined_page: Page):
     page = joined_page
     app = page.locator("#app")

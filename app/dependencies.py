@@ -4,13 +4,12 @@ from collections.abc import AsyncIterator
 from random import randrange
 from typing import Annotated, Any
 
-from fastapi import Depends, Form, Header, HTTPException, Request, Response
+from fastapi import Depends, Header, HTTPException, Request, Response
 from starlette.status import (
     HTTP_204_NO_CONTENT,
     HTTP_303_SEE_OTHER,
     HTTP_401_UNAUTHORIZED,
     HTTP_404_NOT_FOUND,
-    HTTP_422_UNPROCESSABLE_CONTENT,
 )
 from tortoise.backends.base.client import BaseDBAsyncClient
 from tortoise.transactions import in_transaction
@@ -40,24 +39,6 @@ def require_htmx_request(
         raise HTTPException(HTTP_303_SEE_OTHER, headers={"Location": "/"})
 
 
-async def get_world() -> World:
-    """Return the singleton world configuration."""
-    return await World.get(id=1)
-
-
-async def require_coordinates_on_grid(
-    x: int = Form(...),
-    y: int = Form(...),
-    world: World = Depends(get_world),
-) -> None:
-    """Require x and y coordinates to be inside the current world."""
-    if x not in range(world.size) or y not in range(world.size):
-        raise HTTPException(
-            HTTP_422_UNPROCESSABLE_CONTENT,
-            "Position is outside grid",
-        )
-
-
 def get_form_errors(request: Request, response: Response) -> FormErrors:
     """Get validation errors left in the signed cookie by a failed POST."""
     return FormErrors.pop(request, response)
@@ -67,6 +48,13 @@ async def get_current_player(request: Request) -> Player | None:
     """Get a player for this cookie, or None when not joined."""
     token = request.cookies.get("hyperspace")
     return await Player.filter(token=token).first() if token else None
+
+
+async def require_player_token(request: Request) -> str:
+    token = request.cookies.get("hyperspace")
+    if not token:
+        raise PlayerRequired
+    return token
 
 
 async def require_current_player(

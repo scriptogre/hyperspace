@@ -3,13 +3,14 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from tortoise.exceptions import DoesNotExist
+from tortoise.exceptions import DoesNotExist, IntegrityError
 
 from app.config import settings
 from app.exceptions import (
     BrickUnavailable,
     PlayerRequired,
     brick_unavailable_handler,
+    integrity_error_handler,
     not_found_handler,
     player_required_handler,
 )
@@ -29,4 +30,5 @@ app.include_router(router)
 app.add_exception_handler(PlayerRequired, player_required_handler)
 app.add_exception_handler(BrickUnavailable, brick_unavailable_handler)
 app.add_exception_handler(DoesNotExist, not_found_handler)
+app.add_exception_handler(IntegrityError, integrity_error_handler)
 # app.add_exception_handler(RequestValidationError, validation_error_handler)

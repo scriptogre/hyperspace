@@ -11,16 +11,14 @@ from fastapi import (
 )
 
 from fastapi.responses import RedirectResponse, StreamingResponse
-from starlette.status import (
-    HTTP_204_NO_CONTENT,
-)
+from starlette.status import HTTP_204_NO_CONTENT
 
 from app.dependencies import (
     require_available_brick,
     require_brick_dragged_by_current_player,
     get_game_context,
-    require_coordinates_on_grid,
     require_current_player,
+    require_player_token,
     require_available_brick_or_204,
     require_htmx_request,
     require_online_player,
@@ -108,7 +106,6 @@ async def stream(
 @router.post(
     "/bricks",
     status_code=HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_coordinates_on_grid)],
 )
 async def brick_create(
     x: int = Form(...),
@@ -132,15 +129,14 @@ async def brick_delete(
 @router.patch(
     "/cursor",
     status_code=HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_coordinates_on_grid)],
 )
 async def cursor_update(
     x: int = Form(...),
     y: int = Form(...),
     z: int = Form(0),
-    player: Player = Depends(require_current_player),
+    token: str = Depends(require_player_token),
 ):
-    await update_cursor(player, x, y, z)
+    await update_cursor(token, x, y, z)
 
 
 @router.post(

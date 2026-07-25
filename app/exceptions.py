@@ -15,6 +15,7 @@ from app.config import settings
 
 FORM_ERRORS_COOKIE = "form_errors"
 COOKIE_MAX_AGE = 10  # seconds, just long enough to survive the redirect
+WORLD_BOUNDS_CONSTRAINTS = {"bricks_world_bounds", "cursors_world_bounds"}
 
 _serializer = URLSafeSerializer(settings.SECRET_KEY)
 
@@ -82,6 +83,13 @@ async def brick_unavailable_handler(request: Request, exception: Exception) -> R
 
 async def not_found_handler(request: Request, exception: Exception) -> Response:
     return Response(status_code=404)
+
+
+async def integrity_error_handler(request: Request, exception: Exception) -> Response:
+    database_error = exception.args[0] if exception.args else None
+    if getattr(database_error, "constraint_name", None) in WORLD_BOUNDS_CONSTRAINTS:
+        return Response(status_code=422)
+    raise exception
 
 
 async def validation_error_handler(request: Request, exception: Exception) -> Response:

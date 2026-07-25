@@ -2,9 +2,31 @@
 
 import uuid
 
+from tortoise import connections
 from tortoise.transactions import atomic
 
+from app.exceptions import PlayerRequired
 from app.models import Brick, Cursor, Player, World
+
+CURSOR_UPDATE_SQL = """
+    WITH player AS MATERIALIZED (
+        SELECT id, is_online
+          FROM players
+         WHERE token = $1
+           FOR UPDATE
+    ), updated AS (
+        INSERT INTO cursors (player_id, x, y, z)
+        SELECT player.id, $2, $3, $4
+          FROM player
+         WHERE player.is_online
+        ON CONFLICT (player_id) DO UPDATE
+        SET x = EXCLUDED.x,
+            y = EXCLUDED.y,
+            z = EXCLUDED.z
+        RETURNING player_id
+    )
+    SELECT EXISTS (SELECT FROM player) AS player_exists
+"""
 
 
 @atomic()
@@ -100,15 +122,11 @@ async def release_brick(brick: Brick) -> None:
     await brick.save(update_fields=["dragged_by_id"])
 
 
-@atomic()
-async def update_cursor(player: Player, x: int, y: int, z: int) -> None:
-    """Store the latest cursor position while the player is online."""
-    locked_player = await Player.select_for_update().get(id=player.id)
-    if not locked_player.is_online:
-        return
-
-    await Cursor.bulk_create(
-        [Cursor(player_id=player.id, x=x, y=y, z=z)],
-        update_fields=("x", "y", "z"),
-        on_conflict=("player_id",),
+async def update_cursor(token: str, x: int, y: int, z: int) -> None:
+    """Authenticate, lock, and upsert a cursor in one statement."""
+    rows = await connections.get("default").execute_query_dict(
+        CURSOR_UPDATE_SQL,
+        [token, x, y, z],
     )
+    if not rows or not rows[0]["player_exists"]:
+        raise PlayerRequired
