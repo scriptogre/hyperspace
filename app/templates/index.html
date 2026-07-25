@@ -32,7 +32,7 @@
                 const c = htmx.find('#bricks'), n = tasks[0]?.fragment?.querySelector('#bricks')
                 if (!c || !n) return
                 const t = n.innerHTML
-                t === h ? c.setAttribute('hx-morph-skip', '') : (c.removeAttribute('hx-morph-skip'), h = t)
+                t === h ? (c.setAttribute('hx-morph-skip', ''), c.setAttribute('hx-ignore', '')) : (c.removeAttribute('hx-morph-skip'), c.removeAttribute('hx-ignore'), h = t)
             }}
         })())
     </script>
