@@ -48,8 +48,16 @@ async def lifespan(
 
 
 async def forward_world_changes(postgres: asyncpg.Connection) -> None:
-    """Render and publish one complete world for every coalesced change."""
+    """Render and publish the latest complete world at most 60 times per second."""
+    loop = asyncio.get_running_loop()
+    next_render = 0.0
+
     async for _ in listen_to_postgres(postgres):
+        wait = next_render - loop.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        next_render = loop.time() + (1 / 60)  # 60 Hz
+
         html = render("_world.html", await get_world_context()).encode()
         publish_world(html)
 
