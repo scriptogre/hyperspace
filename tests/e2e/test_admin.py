@@ -80,9 +80,13 @@ async def inspect_shrink(brick_id: int, player_id: int) -> tuple[int, bool, bool
         await connection.close()
 
 
-def test_admin_shrink_deletes_out_of_bounds_bricks_and_cursors(
+@pytest.mark.parametrize(
+    "through_route", [True, False], ids=["admin-route", "database"]
+)
+def test_world_shrink_deletes_out_of_bounds_bricks_and_cursors(
     page: Page,
     browser_errors,
+    through_route: bool,
 ):
     browser_errors(page)
     join_board(page, "scriptogre")
@@ -92,16 +96,19 @@ def test_admin_shrink_deletes_out_of_bounds_bricks_and_cursors(
     )
 
     try:
-        response = page.context.request.patch(
-            "/world",
-            form={
-                "size": str(target_size),
-                "theme": theme,
-                "announcement": announcement,
-            },
-        )
+        if through_route:
+            response = page.context.request.patch(
+                "/world",
+                form={
+                    "size": str(target_size),
+                    "theme": theme,
+                    "announcement": announcement,
+                },
+            )
+            assert response.status == 204
+        else:
+            run_async(shrink_world(target_size))
 
-        assert response.status == 204
         assert run_async(inspect_shrink(brick_id, player_id)) == (
             target_size,
             False,
@@ -109,6 +116,20 @@ def test_admin_shrink_deletes_out_of_bounds_bricks_and_cursors(
         )
     finally:
         run_async(restore_world(original_size, brick_id, player_id))
+
+
+async def shrink_world(size: int) -> None:
+    connection = await asyncpg.connect(
+        host=settings.POSTGRES_HOST,
+        port=settings.POSTGRES_PORT,
+        user=settings.POSTGRES_USER,
+        password=settings.POSTGRES_PASSWORD,
+        database=settings.POSTGRES_DB,
+    )
+    try:
+        await connection.execute("UPDATE worlds SET size = $1", size)
+    finally:
+        await connection.close()
 
 
 async def restore_world(size: int, brick_id: int, player_id: int) -> None:
