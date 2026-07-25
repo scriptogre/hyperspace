@@ -130,6 +130,29 @@ def test_touch_drag_moves_brick(browser: Browser, browser_errors):
     context.close()
 
 
+def test_control_menus_are_mutually_exclusive(page: Page, browser_errors):
+    browser_errors(page)
+    join(page, "scriptogre")
+    admin = page.locator("#admin")
+    players = page.locator("#players")
+    settings = page.locator("#settings")
+
+    players.locator("summary").click()
+    expect(players).to_have_attribute("open", "")
+
+    admin.locator("summary").click()
+    expect(admin).to_have_attribute("open", "")
+    expect(players).not_to_have_attribute("open", "")
+
+    settings.locator("summary").click()
+    expect(settings).to_have_attribute("open", "")
+    expect(admin).not_to_have_attribute("open", "")
+
+    players.locator("summary").click()
+    expect(players).to_have_attribute("open", "")
+    expect(settings).not_to_have_attribute("open", "")
+
+
 def test_prediction_toggle_controls_delete(joined_page: Page):
     page = joined_page
     predicted_cell = place_brick(page)
