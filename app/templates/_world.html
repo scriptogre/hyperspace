@@ -1,5 +1,6 @@
 <div id="world"
-     style="--world-size: {{ world.size }}; color-scheme: {{ world.theme }}">
+     {% if world.theme %}data-theme="{{ world.theme }}"{% endif %}
+     style="--world-size: {{ world.size }}">
     {% if world.announcement %}
         <p id="announcement" role="status">
             {{ world.announcement }}

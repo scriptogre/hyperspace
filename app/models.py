@@ -23,7 +23,7 @@ class World(Model):
     """The singleton world configuration."""
 
     id = IntField(pk=True, generated=False, default=1)
-    theme = CharEnumField(Theme, max_length=5, default=Theme.LIGHT)
+    theme = CharEnumField(Theme, max_length=5, null=True)
     size = IntField(default=12)
     announcement = TextField(null=True)
 

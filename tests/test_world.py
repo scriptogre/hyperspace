@@ -99,7 +99,7 @@ def test_world_is_seeded_as_a_singleton(database):
     row = run_async(check())
     assert dict(row) == {
         "id": 1,
-        "theme": "light",
+        "theme": None,
         "size": 12,
         "announcement": None,
     }

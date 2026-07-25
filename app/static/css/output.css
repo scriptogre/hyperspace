@@ -527,6 +527,12 @@
     background-color: var(--color-background);
     -webkit-user-select: none;
     user-select: none;
+    &:has(#world[data-theme="light"]) {
+      color-scheme: light;
+    }
+    &:has(#world[data-theme="dark"]) {
+      color-scheme: dark;
+    }
     .ui-control {
       min-height: calc(var(--spacing) * 7);
       align-items: center;
@@ -1279,25 +1285,13 @@
         pointer-events: none;
         border-style: var(--tw-border-style);
         border-width: 1px;
-        border-color: color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 8%, transparent);
+        border-color: light-dark( color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 8%, transparent), color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 5%, transparent) );
         @supports (color: color-mix(in lab, red, red)) {
-          border-color: color-mix(in oklab, var(--color-foreground) 8%, transparent);
+          border-color: light-dark( color-mix(in oklab, var(--color-foreground) 8%, transparent), color-mix(in oklab, var(--color-foreground) 5%, transparent) );
         }
-        background-color: color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 2%, transparent);
+        background: light-dark( color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 2%, transparent), color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 1.5%, transparent) );
         @supports (color: color-mix(in lab, red, red)) {
-          background-color: color-mix(in oklab, var(--color-foreground) 2%, transparent);
-        }
-        @media (prefers-color-scheme: dark) {
-          border-color: color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 5%, transparent);
-          @supports (color: color-mix(in lab, red, red)) {
-            border-color: color-mix(in oklab, var(--color-foreground) 5%, transparent);
-          }
-        }
-        @media (prefers-color-scheme: dark) {
-          background-color: color-mix(in srgb, light-dark(var(--color-neutral-900), var(--color-neutral-50)) 1.5%, transparent);
-          @supports (color: color-mix(in lab, red, red)) {
-            background-color: color-mix(in oklab, var(--color-foreground) 1.5%, transparent);
-          }
+          background: light-dark( color-mix(in oklab, var(--color-foreground) 2%, transparent), color-mix(in oklab, var(--color-foreground) 1.5%, transparent) );
         }
       }
       > button {

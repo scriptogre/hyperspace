@@ -168,6 +168,14 @@
     #app {
         @apply relative h-full w-full select-none overflow-hidden bg-background;
 
+        &:has(#world[data-theme="light"]) {
+            color-scheme: light;
+        }
+
+        &:has(#world[data-theme="dark"]) {
+            color-scheme: dark;
+        }
+
         .ui-control {
             @apply min-h-7 items-center gap-2;
 
@@ -562,7 +570,15 @@
                 width: var(--cell-size);
                 height: var(--cell-size);
                 pointer-events: none;
-                @apply border border-foreground/8 bg-foreground/2 dark:border-foreground/5 dark:bg-foreground/1.5;
+                @apply border;
+                border-color: light-dark(
+                    color-mix(in oklab, var(--color-foreground) 8%, transparent),
+                    color-mix(in oklab, var(--color-foreground) 5%, transparent)
+                );
+                background: light-dark(
+                    color-mix(in oklab, var(--color-foreground) 2%, transparent),
+                    color-mix(in oklab, var(--color-foreground) 1.5%, transparent)
+                );
             }
 
             > button {
