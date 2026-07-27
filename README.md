@@ -52,6 +52,18 @@ The command prints the URL for demo devices and configures the join QR code:
 Demo: http://192.168.1.23:8000
 ```
 
+## Stream compression
+
+[![193 KB of HTML compresses to 47 bytes per warm stream update](docs/images/compression-benchmark.svg)](BENCHMARK.md)
+
+Reproduce the result:
+
+```bash
+just bench-compression
+```
+
+See [`BENCHMARK.md`](BENCHMARK.md) for the workload, limits, and longer runs.
+
 ## Deploy
 
 Commit every change, then deploy `main`:
