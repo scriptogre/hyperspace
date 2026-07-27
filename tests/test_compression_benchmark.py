@@ -12,5 +12,5 @@ def test_compression_benchmark_uses_history_and_verifies_round_trip() -> None:
 
     card = render_card(measurements, size=2, players=2, moves=3)
     assert card.startswith("<svg")
-    assert "BYTES" in card
-    assert "CUMULATIVE COMPRESSION RATIO" in card
+    assert "bytes" in card
+    assert "CUMULATIVE RATIO" in card

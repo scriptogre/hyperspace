@@ -1,5 +1,6 @@
 """Render the compression benchmark as a shareable card."""
 
+import base64
 import math
 import statistics
 from pathlib import Path
@@ -7,6 +8,11 @@ from pathlib import Path
 WIDTH = 1200
 HEIGHT = 675
 CHECKPOINTS = (0, 1, 5, 10, 25, 100, 1000, 5000, 10000)
+FONT_DIR = Path(__file__).parents[1] / "app" / "static" / "fonts"
+
+
+def font_data(name: str) -> str:
+    return base64.b64encode((FONT_DIR / name).read_bytes()).decode()
 
 
 def render_card(measurements, size: int, players: int, moves: int) -> str:
@@ -30,10 +36,10 @@ def render_card(measurements, size: int, players: int, moves: int) -> str:
         )
     )
 
-    chart_left = 92
-    chart_right = 1110
-    chart_top = 352
-    chart_bottom = 566
+    chart_left = 84
+    chart_right = 1120
+    chart_top = 340
+    chart_bottom = 555
     chart_width = chart_right - chart_left
     chart_height = chart_bottom - chart_top
     ceiling = max(500, math.ceil(max(row[2] for row in rows) / 500) * 500)
@@ -56,8 +62,8 @@ def render_card(measurements, size: int, players: int, moves: int) -> str:
         position = y(tick)
         grid.append(
             f'<line x1="{chart_left}" y1="{position:.1f}" x2="{chart_right}" '
-            f'y2="{position:.1f}" stroke="#2b3342" stroke-width="1"/>'
-            f'<text x="{chart_left - 18}" y="{position + 6:.1f}" text-anchor="end" '
+            f'y2="{position:.1f}" stroke="#e7e7e5"/>'
+            f'<text x="{chart_left - 16}" y="{position + 5:.1f}" text-anchor="end" '
             f'class="axis">{tick:,}:1</text>'
         )
 
@@ -67,46 +73,59 @@ def render_card(measurements, size: int, players: int, moves: int) -> str:
         position_x = x(index)
         position_y = y(ratio)
         labels.append(
-            f'<text x="{position_x:.1f}" y="600" text-anchor="middle" '
+            f'<text x="{position_x:.1f}" y="585" text-anchor="middle" '
             f'class="axis">{checkpoint:,}</text>'
         )
         dots.append(
-            f'<circle cx="{position_x:.1f}" cy="{position_y:.1f}" r="6" '
-            f'fill="#67e8f9" stroke="#0f172a" stroke-width="3"/>'
+            f'<circle cx="{position_x:.1f}" cy="{position_y:.1f}" r="5" '
+            f'fill="#ffffff" stroke="#4f46e5" stroke-width="3"/>'
         )
 
     final_x = x(len(rows) - 1)
     final_y = y(rows[-1][2])
+    space_grotesk = font_data("space-grotesk.woff2")
+    jetbrains_mono = font_data("jetbrains-mono.woff2")
+
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-labelledby="title desc">
 <title id="title">Hyperspace stream compression benchmark</title>
 <desc id="desc">A median warm update compresses {warm_decoded:,} bytes of HTML to {warm_compressed} bytes. After {moves} updates the cumulative ratio is {rows[-1][2]:,.1f} to one.</desc>
 <style>
-  text {{ font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
-  .muted {{ fill: #94a3b8; }}
-  .axis {{ fill: #94a3b8; font-size: 16px; font-weight: 600; }}
+  @font-face {{ font-family: "Space Grotesk"; src: url(data:font/woff2;base64,{space_grotesk}); }}
+  @font-face {{ font-family: "JetBrains Mono"; src: url(data:font/woff2;base64,{jetbrains_mono}); }}
+  .sans {{ font-family: "Space Grotesk", sans-serif; }}
+  .mono, .axis {{ font-family: "JetBrains Mono", monospace; }}
+  .axis {{ fill: #8c8c89; font-size: 14px; font-weight: 500; }}
 </style>
-<rect width="1200" height="675" rx="28" fill="#0b1120"/>
-<circle cx="1090" cy="70" r="150" fill="#312e81" opacity="0.35"/>
-<circle cx="1160" cy="160" r="110" fill="#0e7490" opacity="0.25"/>
+<rect width="1200" height="675" rx="24" fill="#fafaf9"/>
+<rect x="1" y="1" width="1198" height="673" rx="23" fill="none" stroke="#e7e7e5" stroke-width="2"/>
 
-<text x="72" y="72" fill="#67e8f9" font-size="22" font-weight="800" letter-spacing="2">HYPERSPACE · ZSTD STREAM</text>
-<text x="72" y="158" fill="#f8fafc" font-size="66" font-weight="900">{warm_decoded / 1000:.0f} KB OF HTML</text>
-<text x="72" y="226" fill="#94a3b8" font-size="48" font-weight="700">compresses to</text>
-<text x="438" y="226" fill="#67e8f9" font-size="70" font-weight="900">{warm_compressed} BYTES</text>
-<text x="72" y="275" class="muted" font-size="22">median warm cursor update per stream · {warm_ratio:,.0f}:1</text>
+<text x="64" y="55" class="mono" fill="#777773" font-size="16" font-weight="600" letter-spacing="1.5">HYPERSPACE / STREAM COMPRESSION</text>
+<text x="64" y="145" class="sans" fill="#343432" font-size="76" font-weight="600">{warm_decoded / 1000:.0f} KB</text>
+<text x="300" y="145" class="sans" fill="#b1b1ad" font-size="68">→</text>
+<text x="378" y="145" class="sans" fill="#4f46e5" font-size="76" font-weight="600">{warm_compressed} bytes</text>
+<text x="66" y="185" class="sans" fill="#777773" font-size="23">median warm cursor update per stream</text>
 
-<text x="72" y="326" fill="#e2e8f0" font-size="18" font-weight="800" letter-spacing="1.5">CUMULATIVE COMPRESSION RATIO</text>
+<rect x="875" y="80" width="260" height="128" rx="14" fill="#e7e7e5"/>
+<rect x="869" y="74" width="260" height="128" rx="14" fill="#ffffff" stroke="#dededb"/>
+<text x="899" y="132" class="sans" fill="#343432" font-size="42" font-weight="600">{warm_ratio:,.0f}:1</text>
+<text x="900" y="168" class="mono" fill="#777773" font-size="14">warm update ratio</text>
+
+<text x="64" y="282" class="mono" fill="#555552" font-size="15" font-weight="600" letter-spacing="1">CUMULATIVE RATIO</text>
+<line x1="830" y1="277" x2="866" y2="277" stroke="#4f46e5" stroke-width="4"/>
+<text x="876" y="282" class="mono" fill="#777773" font-size="13">long-lived</text>
+<line x1="984" y1="277" x2="1020" y2="277" stroke="#a3a3a0" stroke-width="2" stroke-dasharray="7 7"/>
+<text x="1030" y="282" class="mono" fill="#777773" font-size="13">standalone</text>
+
 {"".join(grid)}
-<polyline points="{standalone_points}" fill="none" stroke="#64748b" stroke-width="3" stroke-dasharray="9 9"/>
-<polyline points="{long_points}" fill="none" stroke="#67e8f9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="{standalone_points}" fill="none" stroke="#a3a3a0" stroke-width="2" stroke-dasharray="7 7"/>
+<polyline points="{long_points}" fill="none" stroke="#4f46e5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
 {"".join(dots)}
 {"".join(labels)}
-<text x="{chart_right}" y="326" text-anchor="end" class="muted" font-size="17">updates</text>
-<text x="{final_x - 10:.1f}" y="{max(chart_top + 22, final_y - 18):.1f}" text-anchor="end" fill="#67e8f9" font-size="23" font-weight="900">{rows[-1][2]:,.0f}:1</text>
+<text x="{final_x - 8:.1f}" y="{max(chart_top + 20, final_y - 16):.1f}" text-anchor="end" class="sans" fill="#4f46e5" font-size="22" font-weight="600">{rows[-1][2]:,.0f}:1</text>
 
-<line x1="72" y1="630" x2="1128" y2="630" stroke="#273449"/>
-<text x="72" y="658" class="muted" font-size="17">{size}×{size} world · {players} cursors · 0 bricks · no joins · application body bytes</text>
-<text x="1128" y="658" text-anchor="end" fill="#cbd5e1" font-size="17" font-weight="700">github.com/scriptogre/hyperspace</text>
+<line x1="64" y1="620" x2="1136" y2="620" stroke="#dededb"/>
+<text x="64" y="651" class="mono" fill="#777773" font-size="14">{size}×{size} world · {players} cursors · 0 bricks · no joins · body bytes</text>
+<text x="1136" y="651" text-anchor="end" class="sans" fill="#555552" font-size="15" font-weight="600">github.com/scriptogre/hyperspace</text>
 </svg>'''
 
 
@@ -133,7 +152,7 @@ def write_card(
             browser = playwright.chromium.launch()
             page = browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
             page.set_content(
-                f"<style>html,body{{margin:0;background:#0b1120}}</style>{svg}"
+                f"<style>html,body{{margin:0;background:#fafaf9}}</style>{svg}"
             )
             page.screenshot(path=png_path)
             browser.close()

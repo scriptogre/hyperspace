@@ -59,7 +59,7 @@ Demo: http://192.168.1.23:8000
 Reproduce the result:
 
 ```bash
-just bench-compression
+uv run python -m bench.compression
 ```
 
 See [`BENCHMARK.md`](BENCHMARK.md) for the workload, limits, and longer runs.

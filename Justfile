@@ -56,13 +56,3 @@ bench:
     trap 'docker compose --profile benchmark down >/dev/null 2>&1' EXIT
     docker compose up -d --wait postgres
     uv run python -m bench.run
-
-# Measure cold and long-lived Zstd compression with a deterministic cursor workload.
-bench-compression *ARGS:
-    uv run python -m bench.compression {{ ARGS }}
-
-# Regenerate the GitHub SVG and shareable PNG.
-bench-compression-card:
-    uv run python -m bench.compression \
-        --svg docs/images/compression-benchmark.svg \
-        --png docs/images/compression-benchmark.png

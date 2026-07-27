@@ -5,7 +5,7 @@ Measure Zstd compression across repeated full-world HTML updates.
 ## Run it
 
 ```bash
-just bench-compression
+uv run python -m bench.compression
 ```
 
 Default result:
@@ -54,7 +54,7 @@ The benchmark counts application body bytes. It excludes HTTP, TLS, TCP, and IP 
 ## Push history reuse
 
 ```bash
-just bench-compression --size 32 --players 100 --moves 5000
+uv run python -m bench.compression --size 32 --players 100 --moves 5000
 ```
 
 ```text
@@ -76,7 +76,9 @@ The ratio approaches the average warm-update ratio:
 Regenerate the GitHub SVG and shareable PNG:
 
 ```bash
-just bench-compression-card
+uv run python -m bench.compression \
+  --svg docs/images/compression-benchmark.svg \
+  --png docs/images/compression-benchmark.png
 ```
 
 ## Reproduce it
@@ -88,15 +90,15 @@ git clone https://github.com/scriptogre/hyperspace.git
 cd hyperspace
 git checkout <revision-from-result>
 uv sync --locked
-just bench-compression
+uv run python -m bench.compression
 ```
 
 Change the workload:
 
 ```bash
-just bench-compression --size 32
-just bench-compression --players 10
-just bench-compression --moves 1000
+uv run python -m bench.compression --size 32
+uv run python -m bench.compression --players 10
+uv run python -m bench.compression --moves 1000
 ```
 
 ## Limits
