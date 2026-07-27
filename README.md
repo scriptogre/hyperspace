@@ -15,6 +15,8 @@ Hyperspace is the demo app for **Real-Time Hypermedia (the htmx way)**. It uses 
 
 Browser actions send normal HTTP requests. FastAPI updates PostgreSQL, renders the shared world as HTML, and pushes it to every browser over a compressed multipart stream.
 
+![A cursor moving across the shared Hyperspace grid](docs/images/cursor-demo.gif)
+
 Two htmx 4 extensions connect the server-rendered world to local interactions:
 
 - [`hx-multipart`](https://four.htmx.org/extensions/hx-multipart) consumes the stream and morphs each update into `#world`. It vendors the parser from [`fetch-multipart`](https://github.com/scriptogre/fetch-multipart).
