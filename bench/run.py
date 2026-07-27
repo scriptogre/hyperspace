@@ -183,7 +183,7 @@ async def stream_reader(
                     if len(buffer) < content_length:
                         break
                     buffer = buffer[content_length:]
-                    if target == "#cursors":
+                    if target == "#world":
                         cursor_parts.put_nowait((time.perf_counter(), content_length))
                     content_length = None
     except asyncio.CancelledError:
@@ -372,7 +372,7 @@ def write_report(results: list[Result], cpu: list[tuple[str, float]]) -> None:
         "",
         f"Commit: `{commit}`",
         "",
-        "One player moves at 5 Hz in an N-player world. Each move completes when every stream receives the cursor part.",
+        "One player moves at 5 Hz in an N-player world. Each move completes when every stream receives the world part.",
         "",
         "| Players | PATCH p95 | Fanout p50 | Fanout p95 | SQL calls/move | SQL ms/move | HTML/move |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",

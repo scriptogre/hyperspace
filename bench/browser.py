@@ -53,7 +53,6 @@ async def seed_world(size: int, players: int) -> None:
     )
     try:
         async with connection.transaction():
-            await connection.execute("DELETE FROM events")
             await connection.execute("DELETE FROM bricks")
             await connection.execute("DELETE FROM cursors")
             await connection.execute("DELETE FROM players")
