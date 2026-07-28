@@ -4,17 +4,17 @@ from compression.zstd import ZstdDecompressor
 import pytest
 
 from app import routes
-from app.broadcast import BOUNDARY, SharedStream
+from app.broadcast import BOUNDARY, QUEUE_SIZE, Broadcast
 from tests import run_async
 
 
 def test_identity_stream_serializes_world_part():
     async def collect():
-        stream = SharedStream()
-        subscription = stream.subscribe(compressed=False)
+        broadcast = Broadcast()
+        subscription = broadcast.stream("_world.html", compressed=False)
         pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish(b"<div id='world'>Ready</div>")
+        broadcast.publish("_world.html", b"<div id='world'>Ready</div>")
         chunk = await pending
         await subscription.aclose()
         return chunk
@@ -25,18 +25,40 @@ def test_identity_stream_serializes_world_part():
     assert chunk.endswith(b"\r\n\r\n<div id='world'>Ready</div>")
 
 
+def test_template_name_selects_an_independent_stream():
+    async def collect():
+        broadcast = Broadcast()
+        broadcast.publish("_world.html", b"World")
+        broadcast.publish("_bricks.html", b"Bricks")
+
+        world = broadcast.stream("_world.html", compressed=False)
+        bricks = broadcast.stream("_bricks.html", compressed=False)
+        world_part = await anext(world)
+        bricks_part = await anext(bricks)
+        await world.aclose()
+        await bricks.aclose()
+        return world_part, bricks_part
+
+    world, bricks = run_async(collect())
+
+    assert b"World" in world
+    assert b"Bricks" not in world
+    assert b"Bricks" in bricks
+    assert b"World" not in bricks
+
+
 def test_zstd_stream_keeps_history_between_updates():
     async def collect():
-        stream = SharedStream()
-        subscription = stream.subscribe(compressed=True)
+        broadcast = Broadcast()
+        subscription = broadcast.stream("_world.html", compressed=True)
         first = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish(b"<div id='world'>First</div>")
+        broadcast.publish("_world.html", b"<div id='world'>First</div>")
         first_chunk = await first
 
         second = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish(b"<div id='world'>Second</div>")
+        broadcast.publish("_world.html", b"<div id='world'>Second</div>")
         second_chunk = await second
         await subscription.aclose()
         return first_chunk, second_chunk
@@ -51,14 +73,14 @@ def test_zstd_stream_keeps_history_between_updates():
 
 def test_late_join_replays_latest_world_only_to_new_subscriber():
     async def collect():
-        stream = SharedStream()
-        first_subscription = stream.subscribe(compressed=True)
+        broadcast = Broadcast()
+        first_subscription = broadcast.stream("_world.html", compressed=True)
         first_pending = asyncio.create_task(anext(first_subscription))
         await asyncio.sleep(0)
-        stream.publish(b"<div id='world'>Current</div>")
+        broadcast.publish("_world.html", b"<div id='world'>Current</div>")
         first_chunk = await first_pending
 
-        second_subscription = stream.subscribe(compressed=True)
+        second_subscription = broadcast.stream("_world.html", compressed=True)
         second_pending = asyncio.create_task(anext(second_subscription))
         await asyncio.sleep(0)
         frame_end = await anext(first_subscription)
@@ -70,7 +92,7 @@ def test_late_join_replays_latest_world_only_to_new_subscriber():
         assert not first_next_pending.done()
         assert not second_next_pending.done()
 
-        stream.publish(b"<div id='world'>Next</div>")
+        broadcast.publish("_world.html", b"<div id='world'>Next</div>")
         first_next = await first_next_pending
         second_next = await second_next_pending
         await first_subscription.aclose()
@@ -95,19 +117,20 @@ def test_late_join_replays_latest_world_only_to_new_subscriber():
 
 def test_queue_overflow_disconnects_and_replay_catches_up():
     async def collect():
-        stream = SharedStream(queue_size=1)
-        subscription = stream.subscribe(compressed=False)
+        broadcast = Broadcast()
+        subscription = broadcast.stream("_world.html", compressed=False)
         first_pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        stream.publish(b"<div id='world'>First</div>")
+        broadcast.publish("_world.html", b"<div id='world'>First</div>")
         await first_pending
 
-        stream.publish(b"<div id='world'>Second</div>")
-        stream.publish(b"<div id='world'>Latest</div>")
+        for index in range(QUEUE_SIZE):
+            broadcast.publish("_world.html", f"<div>Pending {index}</div>".encode())
+        broadcast.publish("_world.html", b"<div id='world'>Latest</div>")
         with pytest.raises(StopAsyncIteration):
             await anext(subscription)
 
-        reconnected = stream.subscribe(compressed=False)
+        reconnected = broadcast.stream("_world.html", compressed=False)
         latest = await anext(reconnected)
         await reconnected.aclose()
         return latest

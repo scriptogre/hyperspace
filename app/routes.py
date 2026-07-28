@@ -24,7 +24,7 @@ from app.dependencies import (
     require_available_brick_or_204,
     require_htmx_request,
 )
-from app.broadcast import BOUNDARY, shared_stream
+from app.broadcast import BOUNDARY, broadcast
 from app.enums import Theme
 from app.jinja import render
 from app.models import Brick, Cursor, Player, World
@@ -109,15 +109,20 @@ async def stream(
     accept_encoding: Annotated[str, Header()] = "",
 ) -> StreamingResponse:
     """Stream rendered templates as they change."""
-    zstd = "zstd" in accept_encoding.lower()
-
     return StreamingResponse(
-        content=shared_stream.subscribe(zstd),
+        content=broadcast.stream(
+            "_world.html",
+            compressed=True if "zstd" in accept_encoding.lower() else False,
+        ),
         media_type=f"multipart/mixed; boundary={BOUNDARY.decode()}",
         headers={
             "Cache-Control": "no-cache",
             "Vary": "Accept-Encoding",
-            **({"Content-Encoding": "zstd"} if zstd else {}),
+            **(
+                {"Content-Encoding": "zstd"}
+                if "zstd" in accept_encoding.lower()
+                else {}
+            ),
             # Set swap defaults for every part.
             "HX-Swap": "outerMorph",
             "HX-Target": "#world",

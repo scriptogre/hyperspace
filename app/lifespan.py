@@ -8,7 +8,7 @@ import asyncpg
 from fastapi import FastAPI
 from tortoise.contrib.fastapi import RegisterTortoise
 
-from app.broadcast import publish_world
+from app.broadcast import broadcast
 from app.config import settings
 from app.dependencies import get_world_context
 from app.jinja import render
@@ -59,7 +59,7 @@ async def forward_world_changes(postgres: asyncpg.Connection) -> None:
         next_render = loop.time() + (1 / 60)  # 60 Hz
 
         html = render("_world.html", await get_world_context()).encode()
-        publish_world(html)
+        broadcast.publish("_world.html", html)
 
 
 async def listen_to_postgres(

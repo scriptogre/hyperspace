@@ -1,6 +1,7 @@
 """Broadcast rendered templates to connected subscribers."""
 
 import asyncio
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -19,39 +20,53 @@ class Subscriber:
     compressed: bool
 
 
-class SharedStream:
-    """Serialize and compress each update once for every subscriber."""
+class Broadcast:
+    """Serialize and broadcast rendered templates by name."""
 
-    def __init__(self, queue_size: int = QUEUE_SIZE) -> None:
-        self.queue_size = queue_size
-        self.subscribers: set[Subscriber] = set()
-        self.latest = b""
-        self.snapshot_zstd = b""
-        self.compressor = ZstdStreamCompressor()
-        self.writer = MultipartWriter(BOUNDARY)
-
-    def publish(self, html: bytes) -> None:
-        identity = b"".join(
-            self.writer.iterate_part(Part(html, media_type="text/html"))
+    def __init__(self) -> None:
+        self._subscribers: defaultdict[str, set[Subscriber]] = defaultdict(set)
+        self._latest: dict[str, bytes] = {}
+        self._snapshot_zstd: dict[str, bytes] = {}
+        self._compressors: defaultdict[str, ZstdStreamCompressor] = defaultdict(
+            ZstdStreamCompressor
         )
-        self.latest = identity
-        self.snapshot_zstd = b""
-        self._send(identity)
+        self._writers: defaultdict[str, MultipartWriter] = defaultdict(
+            lambda: MultipartWriter(BOUNDARY)
+        )
 
-    async def subscribe(self, compressed: bool) -> AsyncIterator[bytes]:
+    def publish(self, template_name: str, html: bytes) -> None:
+        """Publish a complete rendered template."""
+        identity = b"".join(
+            self._writers[template_name].iterate_part(
+                Part(html, media_type="text/html")
+            )
+        )
+        self._latest[template_name] = identity
+        self._snapshot_zstd.pop(template_name, None)
+        self._send(template_name, identity)
+
+    async def stream(
+        self,
+        template_name: str,
+        *,
+        compressed: bool,
+    ) -> AsyncIterator[bytes]:
+        """Replay the latest rendering, then stream new renderings."""
         if compressed:
-            self._start_epoch()
+            self._start_epoch(template_name)
 
-        subscriber = Subscriber(asyncio.Queue(self.queue_size), compressed)
-        self.subscribers.add(subscriber)
+        subscriber = Subscriber(asyncio.Queue(QUEUE_SIZE), compressed)
+        subscribers = self._subscribers[template_name]
+        subscribers.add(subscriber)
+        latest = self._latest.get(template_name, b"")
 
         if compressed:
-            if self.latest:
-                if not self.snapshot_zstd:
-                    self.snapshot_zstd = compress_frame(self.latest)
-                subscriber.queue.put_nowait(self.snapshot_zstd)
-        elif self.latest:
-            subscriber.queue.put_nowait(self.latest)
+            if latest:
+                if template_name not in self._snapshot_zstd:
+                    self._snapshot_zstd[template_name] = compress_frame(latest)
+                subscriber.queue.put_nowait(self._snapshot_zstd[template_name])
+        elif latest:
+            subscriber.queue.put_nowait(latest)
 
         try:
             while True:
@@ -60,32 +75,36 @@ class SharedStream:
                     return
                 yield data
         finally:
-            self.subscribers.discard(subscriber)
+            subscribers.discard(subscriber)
 
-    def _start_epoch(self) -> None:
-        if self.compressor.has_open_frame:
-            frame_end = self.compressor.finish_frame()
-            self._fan_out(b"", frame_end, compressed_only=True)
+    def _start_epoch(self, template_name: str) -> None:
+        compressor = self._compressors[template_name]
+        if compressor.has_open_frame:
+            frame_end = compressor.finish_frame()
+            self._fan_out(template_name, b"", frame_end, compressed_only=True)
 
-    def _send(self, identity: bytes) -> None:
+    def _send(self, template_name: str, identity: bytes) -> None:
+        subscribers = self._subscribers[template_name]
         zstd = (
-            self.compressor.compress(identity)
-            if any(subscriber.compressed for subscriber in self.subscribers)
+            self._compressors[template_name].compress(identity)
+            if any(subscriber.compressed for subscriber in subscribers)
             else b""
         )
-        self._fan_out(identity, zstd)
+        self._fan_out(template_name, identity, zstd)
 
     def _fan_out(
         self,
+        template_name: str,
         identity: bytes,
         zstd: bytes,
         compressed_only: bool = False,
     ) -> None:
-        for subscriber in tuple(self.subscribers):
+        subscribers = self._subscribers[template_name]
+        for subscriber in tuple(subscribers):
             if compressed_only and not subscriber.compressed:
                 continue
             if subscriber.queue.full():
-                self.subscribers.discard(subscriber)
+                subscribers.discard(subscriber)
                 while not subscriber.queue.empty():
                     subscriber.queue.get_nowait()
                 subscriber.queue.put_nowait(None)
@@ -93,8 +112,4 @@ class SharedStream:
                 subscriber.queue.put_nowait(zstd if subscriber.compressed else identity)
 
 
-shared_stream = SharedStream()
-
-
-def publish_world(html: bytes) -> None:
-    shared_stream.publish(html)
+broadcast = Broadcast()
