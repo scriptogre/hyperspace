@@ -111,7 +111,7 @@ async def stream(
     """Stream rendered templates as they change."""
     return StreamingResponse(
         content=broadcast.stream(
-            "_world.html",
+            {"_world.html": {"HX-Target": "#world"}},
             compressed=True if "zstd" in accept_encoding.lower() else False,
         ),
         media_type=f"multipart/mixed; boundary={BOUNDARY.decode()}",
@@ -123,9 +123,8 @@ async def stream(
                 if "zstd" in accept_encoding.lower()
                 else {}
             ),
-            # Set swap defaults for every part.
+            # Set the swap default for every part.
             "HX-Swap": "outerMorph",
-            "HX-Target": "#world",
         },
     )
 

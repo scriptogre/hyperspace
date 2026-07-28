@@ -1,8 +1,7 @@
 """Broadcast rendered templates to connected subscribers."""
 
 import asyncio
-from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 
 from multipart_response import MultipartWriter
@@ -21,52 +20,68 @@ class Subscriber:
 
 
 class Broadcast:
-    """Serialize and broadcast rendered templates by name."""
+    """Serialize and broadcast rendered templates."""
 
     def __init__(self) -> None:
-        self._subscribers: defaultdict[str, set[Subscriber]] = defaultdict(set)
+        self._subscribers: set[Subscriber] = set()
         self._latest: dict[str, bytes] = {}
-        self._snapshot_zstd: dict[str, bytes] = {}
-        self._compressors: defaultdict[str, ZstdStreamCompressor] = defaultdict(
-            ZstdStreamCompressor
-        )
-        self._writers: defaultdict[str, MultipartWriter] = defaultdict(
-            lambda: MultipartWriter(BOUNDARY)
-        )
+        self._snapshot = b""
+        self._snapshot_zstd = b""
+        self._compressor = ZstdStreamCompressor()
+        self._writer = MultipartWriter(BOUNDARY)
+        self._templates: dict[str, dict[str, str]] | None = None
 
     def publish(self, template_name: str, html: bytes) -> None:
         """Publish a complete rendered template."""
+        self._latest[template_name] = html
+        if self._templates is None or template_name not in self._templates:
+            return
+
         identity = b"".join(
-            self._writers[template_name].iterate_part(
-                Part(html, media_type="text/html")
+            self._writer.iterate_part(
+                Part(
+                    html,
+                    headers=self._templates[template_name],
+                    media_type="text/html",
+                )
             )
         )
-        self._latest[template_name] = identity
-        self._snapshot_zstd.pop(template_name, None)
-        self._send(template_name, identity)
+        self._snapshot = b""
+        self._snapshot_zstd = b""
+        self._send(identity)
 
     async def stream(
         self,
-        template_name: str,
+        templates: Mapping[str, Mapping[str, str]],
         *,
         compressed: bool,
     ) -> AsyncIterator[bytes]:
-        """Replay the latest rendering, then stream new renderings."""
+        """Replay the latest templates, then stream new renderings."""
+        configured_templates = {
+            template_name: dict(headers) for template_name, headers in templates.items()
+        }
+        if not configured_templates:
+            raise ValueError("At least one template is required")
+        if self._templates is None:
+            self._templates = configured_templates
+            self._snapshot = self._serialize_snapshot(self._writer)
+        elif self._templates != configured_templates:
+            raise ValueError("Broadcast is already configured for different templates")
+
         if compressed:
-            self._start_epoch(template_name)
+            self._start_epoch()
 
         subscriber = Subscriber(asyncio.Queue(QUEUE_SIZE), compressed)
-        subscribers = self._subscribers[template_name]
-        subscribers.add(subscriber)
-        latest = self._latest.get(template_name, b"")
-
-        if compressed:
-            if latest:
-                if template_name not in self._snapshot_zstd:
-                    self._snapshot_zstd[template_name] = compress_frame(latest)
-                subscriber.queue.put_nowait(self._snapshot_zstd[template_name])
-        elif latest:
-            subscriber.queue.put_nowait(latest)
+        self._subscribers.add(subscriber)
+        if not self._snapshot:
+            self._snapshot = self._serialize_snapshot(MultipartWriter(BOUNDARY))
+        if self._snapshot:
+            if compressed:
+                if not self._snapshot_zstd:
+                    self._snapshot_zstd = compress_frame(self._snapshot)
+                subscriber.queue.put_nowait(self._snapshot_zstd)
+            else:
+                subscriber.queue.put_nowait(self._snapshot)
 
         try:
             while True:
@@ -75,36 +90,47 @@ class Broadcast:
                     return
                 yield data
         finally:
-            subscribers.discard(subscriber)
+            self._subscribers.discard(subscriber)
 
-    def _start_epoch(self, template_name: str) -> None:
-        compressor = self._compressors[template_name]
-        if compressor.has_open_frame:
-            frame_end = compressor.finish_frame()
-            self._fan_out(template_name, b"", frame_end, compressed_only=True)
+    def _serialize_snapshot(self, writer: MultipartWriter) -> bytes:
+        assert self._templates is not None
+        snapshot = bytearray()
+        for template_name, headers in self._templates.items():
+            html = self._latest.get(template_name)
+            if html is not None:
+                snapshot.extend(
+                    b"".join(
+                        writer.iterate_part(
+                            Part(html, headers=headers, media_type="text/html")
+                        )
+                    )
+                )
+        return bytes(snapshot)
 
-    def _send(self, template_name: str, identity: bytes) -> None:
-        subscribers = self._subscribers[template_name]
+    def _start_epoch(self) -> None:
+        if self._compressor.has_open_frame:
+            frame_end = self._compressor.finish_frame()
+            self._fan_out(b"", frame_end, compressed_only=True)
+
+    def _send(self, identity: bytes) -> None:
         zstd = (
-            self._compressors[template_name].compress(identity)
-            if any(subscriber.compressed for subscriber in subscribers)
+            self._compressor.compress(identity)
+            if any(subscriber.compressed for subscriber in self._subscribers)
             else b""
         )
-        self._fan_out(template_name, identity, zstd)
+        self._fan_out(identity, zstd)
 
     def _fan_out(
         self,
-        template_name: str,
         identity: bytes,
         zstd: bytes,
         compressed_only: bool = False,
     ) -> None:
-        subscribers = self._subscribers[template_name]
-        for subscriber in tuple(subscribers):
+        for subscriber in tuple(self._subscribers):
             if compressed_only and not subscriber.compressed:
                 continue
             if subscriber.queue.full():
-                subscribers.discard(subscriber)
+                self._subscribers.discard(subscriber)
                 while not subscriber.queue.empty():
                     subscriber.queue.get_nowait()
                 subscriber.queue.put_nowait(None)

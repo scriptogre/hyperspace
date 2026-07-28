@@ -7,11 +7,13 @@ from app import routes
 from app.broadcast import BOUNDARY, QUEUE_SIZE, Broadcast
 from tests import run_async
 
+WORLD_STREAM = {"_world.html": {"HX-Target": "#world"}}
+
 
 def test_identity_stream_serializes_world_part():
     async def collect():
         broadcast = Broadcast()
-        subscription = broadcast.stream("_world.html", compressed=False)
+        subscription = broadcast.stream(WORLD_STREAM, compressed=False)
         pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
         broadcast.publish("_world.html", b"<div id='world'>Ready</div>")
@@ -25,32 +27,41 @@ def test_identity_stream_serializes_world_part():
     assert chunk.endswith(b"\r\n\r\n<div id='world'>Ready</div>")
 
 
-def test_template_name_selects_an_independent_stream():
+def test_stream_composes_templates_with_route_headers():
     async def collect():
         broadcast = Broadcast()
         broadcast.publish("_world.html", b"World")
-        broadcast.publish("_bricks.html", b"Bricks")
+        broadcast.publish("_cursors.html", b"Cursors")
+        subscription = broadcast.stream(
+            {
+                "_world.html": {"HX-Target": "#world"},
+                "_cursors.html": {"HX-Target": "#cursors"},
+            },
+            compressed=False,
+        )
+        snapshot = await anext(subscription)
+        await subscription.aclose()
+        return snapshot
 
-        world = broadcast.stream("_world.html", compressed=False)
-        bricks = broadcast.stream("_bricks.html", compressed=False)
-        world_part = await anext(world)
-        bricks_part = await anext(bricks)
-        await world.aclose()
-        await bricks.aclose()
-        return world_part, bricks_part
+    snapshot = run_async(collect())
 
-    world, bricks = run_async(collect())
-
-    assert b"World" in world
-    assert b"Bricks" not in world
-    assert b"Bricks" in bricks
-    assert b"World" not in bricks
+    assert snapshot.count(b"--" + BOUNDARY) == 2
+    assert b"hx-target: #world" in snapshot
+    assert b"hx-target: #cursors" in snapshot
+    assert b"World" in snapshot
+    assert b"Cursors" in snapshot
 
 
-def test_zstd_stream_keeps_history_between_updates():
+def test_zstd_stream_keeps_history_between_template_updates():
     async def collect():
         broadcast = Broadcast()
-        subscription = broadcast.stream("_world.html", compressed=True)
+        subscription = broadcast.stream(
+            {
+                "_world.html": {"HX-Target": "#world"},
+                "_cursors.html": {"HX-Target": "#cursors"},
+            },
+            compressed=True,
+        )
         first = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
         broadcast.publish("_world.html", b"<div id='world'>First</div>")
@@ -58,7 +69,7 @@ def test_zstd_stream_keeps_history_between_updates():
 
         second = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
-        broadcast.publish("_world.html", b"<div id='world'>Second</div>")
+        broadcast.publish("_cursors.html", b"<div id='cursors'>Second</div>")
         second_chunk = await second
         await subscription.aclose()
         return first_chunk, second_chunk
@@ -74,13 +85,13 @@ def test_zstd_stream_keeps_history_between_updates():
 def test_late_join_replays_latest_world_only_to_new_subscriber():
     async def collect():
         broadcast = Broadcast()
-        first_subscription = broadcast.stream("_world.html", compressed=True)
+        first_subscription = broadcast.stream(WORLD_STREAM, compressed=True)
         first_pending = asyncio.create_task(anext(first_subscription))
         await asyncio.sleep(0)
         broadcast.publish("_world.html", b"<div id='world'>Current</div>")
         first_chunk = await first_pending
 
-        second_subscription = broadcast.stream("_world.html", compressed=True)
+        second_subscription = broadcast.stream(WORLD_STREAM, compressed=True)
         second_pending = asyncio.create_task(anext(second_subscription))
         await asyncio.sleep(0)
         frame_end = await anext(first_subscription)
@@ -118,7 +129,7 @@ def test_late_join_replays_latest_world_only_to_new_subscriber():
 def test_queue_overflow_disconnects_and_replay_catches_up():
     async def collect():
         broadcast = Broadcast()
-        subscription = broadcast.stream("_world.html", compressed=False)
+        subscription = broadcast.stream(WORLD_STREAM, compressed=False)
         first_pending = asyncio.create_task(anext(subscription))
         await asyncio.sleep(0)
         broadcast.publish("_world.html", b"<div id='world'>First</div>")
@@ -130,7 +141,7 @@ def test_queue_overflow_disconnects_and_replay_catches_up():
         with pytest.raises(StopAsyncIteration):
             await anext(subscription)
 
-        reconnected = broadcast.stream("_world.html", compressed=False)
+        reconnected = broadcast.stream(WORLD_STREAM, compressed=False)
         latest = await anext(reconnected)
         await reconnected.aclose()
         return latest
@@ -144,7 +155,8 @@ def test_stream_negotiates_zstd_from_injected_header():
 
     assert compressed.headers["content-encoding"] == "zstd"
     assert "content-encoding" not in identity.headers
-    assert compressed.headers["hx-target"] == identity.headers["hx-target"] == "#world"
+    assert "hx-target" not in compressed.headers
+    assert "hx-target" not in identity.headers
     assert compressed.headers["hx-swap"] == identity.headers["hx-swap"] == "outerMorph"
     assert compressed.headers["content-type"] == (
         f"multipart/mixed; boundary={BOUNDARY.decode()}"
