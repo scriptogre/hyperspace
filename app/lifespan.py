@@ -1,7 +1,6 @@
 """Application lifespan: DB init and Postgres notification forwarding."""
 
 import asyncio
-import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -60,7 +59,6 @@ async def forward_world_changes(postgres: asyncpg.Connection) -> None:
         next_render = loop.time() + (1 / 60)  # 60 Hz
 
         html = render("_world.html", await get_world_context()).encode()
-        html = re.sub(rb">\s+<", b"><", html)
         publish_world(html)
 
 

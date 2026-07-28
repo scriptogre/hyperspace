@@ -28,17 +28,12 @@ class SharedStream:
         self.latest = b""
         self.snapshot_zstd = b""
         self.compressor = ZstdStreamCompressor()
+        self.writer = MultipartWriter(BOUNDARY)
 
     def publish(self, html: bytes) -> None:
-        part = Part(
-            html,
-            headers={"HX-Target": "#world", "HX-Swap": "outerMorph"},
-            media_type="text/html",
+        identity = b"".join(
+            self.writer.iterate_part(Part(html, media_type="text/html"))
         )
-        multipart_part = part.as_multipart_part()
-        writer = MultipartWriter(BOUNDARY)
-        identity = b"\r\n" + writer.start_part(multipart_part.headers)
-        identity += bytes(writer.write_body(html))
         self.latest = identity
         self.snapshot_zstd = b""
         self._send(identity)

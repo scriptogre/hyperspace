@@ -118,6 +118,9 @@ async def stream(
             "Cache-Control": "no-cache",
             "Vary": "Accept-Encoding",
             **({"Content-Encoding": "zstd"} if zstd else {}),
+            # Set swap defaults for every part.
+            "HX-Swap": "outerMorph",
+            "HX-Target": "#world",
         },
     )
 

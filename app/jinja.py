@@ -16,6 +16,8 @@ _env = minijinja.Environment(
     loader=lambda name: (settings.TEMPLATES_DIR / name).read_text(),
     auto_escape_callback=lambda name: True,
     globals={"url_for": url_for},
+    trim_blocks=True,
+    lstrip_blocks=True,
 )
 
 

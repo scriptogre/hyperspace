@@ -3,7 +3,6 @@
 import argparse
 import asyncio
 import platform
-import re
 import statistics
 import subprocess
 from collections import Counter
@@ -88,8 +87,7 @@ def render_updates(size: int, players: int, moves: int) -> Iterator[bytes]:
             item["offset"] = indexes[position] - (counts[position] - 1) / 2
             indexes[position] += 1
 
-        html = render("_world.html", context).encode()
-        yield re.sub(rb">\s+<", b"><", html)
+        yield render("_world.html", context).encode()
 
 
 async def measure(frames: Iterable[bytes]) -> Measurements:

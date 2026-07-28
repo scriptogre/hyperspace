@@ -21,9 +21,7 @@ def test_identity_stream_serializes_world_part():
 
     chunk = run_async(collect())
 
-    assert chunk.startswith(b"\r\n--" + BOUNDARY + b"\r\n")
-    assert b"hx-target: #world\r\n" in chunk
-    assert b"hx-swap: outerMorph\r\n" in chunk
+    assert chunk.startswith(b"--" + BOUNDARY + b"\r\n")
     assert chunk.endswith(b"\r\n\r\n<div id='world'>Ready</div>")
 
 
@@ -123,6 +121,8 @@ def test_stream_negotiates_zstd_from_injected_header():
 
     assert compressed.headers["content-encoding"] == "zstd"
     assert "content-encoding" not in identity.headers
+    assert compressed.headers["hx-target"] == identity.headers["hx-target"] == "#world"
+    assert compressed.headers["hx-swap"] == identity.headers["hx-swap"] == "outerMorph"
     assert compressed.headers["content-type"] == (
         f"multipart/mixed; boundary={BOUNDARY.decode()}"
     )
