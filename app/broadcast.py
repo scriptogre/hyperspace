@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from multipart_response import MultipartWriter
 from multipart_response.starlette import Part
-from starlette.responses import StreamingResponse
 
 from app.compression import ZstdStreamCompressor, compress_frame
 
@@ -20,7 +19,6 @@ class Subscriber:
     compressed: bool
 
 
-# TODO: Replace this with MultipartResponse
 class SharedStream:
     """Serialize and compress each update once for every subscriber."""
 
@@ -105,15 +103,3 @@ shared_stream = SharedStream()
 
 def publish_world(html: bytes) -> None:
     shared_stream.publish(html)
-
-
-def create_streaming_response(compressed: bool) -> StreamingResponse:
-    headers = {"Cache-Control": "no-cache", "Vary": "Accept-Encoding"}
-    if compressed:
-        headers["Content-Encoding"] = "zstd"
-
-    return StreamingResponse(
-        shared_stream.subscribe(compressed),
-        media_type=f"multipart/mixed; boundary={BOUNDARY.decode()}",
-        headers=headers,
-    )

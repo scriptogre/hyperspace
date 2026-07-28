@@ -24,7 +24,7 @@ from app.dependencies import (
     require_available_brick_or_204,
     require_htmx_request,
 )
-from app.broadcast import create_streaming_response
+from app.broadcast import BOUNDARY, shared_stream
 from app.enums import Theme
 from app.jinja import render
 from app.models import Brick, Cursor, Player, World
@@ -109,12 +109,17 @@ async def stream(
     accept_encoding: Annotated[str, Header()] = "",
 ) -> StreamingResponse:
     """Stream rendered templates as they change."""
-    encodings = {
-        value.partition(";")[0].strip() for value in accept_encoding.lower().split(",")
-    }
+    zstd = "zstd" in accept_encoding.lower()
 
-    # TODO: Replace this with MultipartResponse
-    return create_streaming_response("zstd" in encodings)
+    return StreamingResponse(
+        content=shared_stream.subscribe(zstd),
+        media_type=f"multipart/mixed; boundary={BOUNDARY.decode()}",
+        headers={
+            "Cache-Control": "no-cache",
+            "Vary": "Accept-Encoding",
+            **({"Content-Encoding": "zstd"} if zstd else {}),
+        },
+    )
 
 
 # ── Actions ─────────────────────────────────────────────────────────────
