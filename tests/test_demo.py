@@ -18,7 +18,8 @@ def test_source_links_are_available_before_and_after_joining():
     index_template = Path("app/templates/index.html").read_text()
 
     assert "Presented live at Big Sky Dev Con 2026" in join_template
-    assert "View source on GitHub" in join_template
+    assert '>Join</button>' in join_template
+    assert "View source" in join_template
     assert 'aria-label="View source code on GitHub"' in index_template
     assert join_template.count("https://github.com/scriptogre/hyperspace") == 1
     assert index_template.count("https://github.com/scriptogre/hyperspace") == 1

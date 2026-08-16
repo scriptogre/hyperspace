@@ -4,6 +4,7 @@
     "@dragdroptouch/drag-drop-touch": "^2.0.3",
     "@iconify-json/bxs": "^1.2.3",
     "@iconify-json/lucide": "^1.2.111",
+    "@iconify-json/simple-icons": "^1.2.93",
     "@iconify-json/streamline-ultimate": "^1.2.2",
     "@iconify/tailwind4": "^1.2.3",
     "@tailwindcss/cli": "^4.3.0"

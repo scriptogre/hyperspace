@@ -1,7 +1,7 @@
 """FastAPI dependencies for players, actions, and the world snapshot."""
 
 from collections.abc import AsyncIterator
-from random import randrange
+from random import choice, randrange
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, Request, Response
@@ -20,6 +20,29 @@ from app.exceptions import BrickUnavailable, FormErrors, PlayerRequired
 from app.models import Brick, Cursor, Player, World
 from app.schemas import BrickRow, CursorRow, PlayerRow
 from app.services import mark_player_as_offline, mark_player_as_online
+
+
+PLAYER_NAMES = (
+    "Alex",
+    "Avery",
+    "Cameron",
+    "Casey",
+    "Charlie",
+    "Drew",
+    "Jamie",
+    "Jordan",
+    "Jules",
+    "Morgan",
+    "Quinn",
+    "Riley",
+    "Robin",
+    "Sam",
+    "Taylor",
+)
+
+
+def suggest_player_name() -> str:
+    return choice(PLAYER_NAMES)
 
 
 def player_initials(name: str) -> str:
@@ -297,6 +320,7 @@ async def get_game_context(
         "cursors": cursors,
         "player": player,
         "form_errors": form_errors,
+        "suggested_name": form_errors.data.get("name") or suggest_player_name(),
         "join_url": settings.JOIN_URL,
         "selected_color_seed": selected_color_seed,
         "suggested_colors": [
