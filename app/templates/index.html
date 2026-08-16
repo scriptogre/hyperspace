@@ -86,6 +86,12 @@
                       event.detail.delay = $('#simulate-latency-toggle').checked
                           ? Number($('#simulate-latency-toggle').value)
                           : 0">
+            <a id="github-button" class="ui-control"
+               href="https://github.com/scriptogre/hyperspace"
+               target="_blank" rel="noopener noreferrer"
+               aria-label="View source code on GitHub">
+                <span class="icon-[lucide--github]" aria-hidden="true"></span>
+            </a>
             {% if player.name == "scriptogre" %}
                 {% include "_admin_form.html" %}
             {% endif %}
@@ -132,12 +138,6 @@
             <span>Delete</span>
         </button>
 
-        <a id="github-button"
-           href="https://github.com/scriptogre/hyperspace"
-           target="_blank" rel="noopener noreferrer"
-           aria-label="View source code on GitHub">
-            <span class="icon-[lucide--github]" aria-hidden="true"></span>
-        </a>
     {% endif %}
 </main>
 

@@ -216,6 +216,10 @@
             @apply absolute right-6 z-50 flex items-center gap-4 font-sans text-xs font-normal text-foreground/60 tabular-nums;
             top: var(--ui-top);
 
+            #github-button {
+                @apply -m-2 inline-flex cursor-pointer p-2 transition-colors hover:text-foreground;
+            }
+
             #request-latency {
                 @apply w-10 border-l border-border pl-3 text-right;
                 --latency-level: calc(
@@ -553,15 +557,6 @@
             qr-code {
                 @apply block size-36 sm:size-44;
             }
-        }
-    }
-
-    #github-button {
-        @apply absolute left-1/2 z-50 inline-flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
-        bottom: var(--ui-bottom);
-
-        > span {
-            @apply size-4;
         }
     }
 
