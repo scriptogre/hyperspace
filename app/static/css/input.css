@@ -216,10 +216,6 @@
             @apply absolute right-6 z-50 flex items-center gap-4 font-sans text-xs font-normal text-foreground/60 tabular-nums;
             top: var(--ui-top);
 
-            #github-button {
-                @apply -m-2 inline-flex cursor-pointer p-2 transition-colors hover:text-foreground;
-            }
-
             #request-latency {
                 @apply w-10 border-l border-border pl-3 text-right;
                 --latency-level: calc(
@@ -309,7 +305,8 @@
         }
 
         #logout-button,
-        #delete-mode-button {
+        #delete-mode-button,
+        #github-button {
             @apply absolute z-50 cursor-pointer px-1 py-2 font-sans text-xs font-medium text-muted-foreground transition-colors hover:text-foreground;
             bottom: var(--ui-bottom);
         }
@@ -318,8 +315,12 @@
             @apply left-4 inline-flex;
         }
 
+        #github-button {
+            @apply right-4 inline-flex;
+        }
+
         #delete-mode-button {
-            @apply right-4 hidden;
+            @apply right-24 hidden;
 
             &::before {
                 content: "";
