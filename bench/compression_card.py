@@ -27,7 +27,7 @@ def render_card(measurements, size: int, players: int, moves: int) -> str:
 
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-labelledby="title desc">
 <title id="title">Hyperspace stream compression benchmark</title>
-<desc id="desc">A median warm full-world update compresses {warm_decoded:,} bytes to {warm_compressed} bytes, a {warm_ratio:,.0f} to one ratio.</desc>
+<desc id="desc">A median warm cursor template update compresses {warm_decoded:,} bytes to {warm_compressed} bytes, a {warm_ratio:,.0f} to one ratio.</desc>
 <style>
   @font-face {{ font-family: "Space Grotesk"; src: url(data:font/woff2;base64,{space_grotesk}); }}
   @font-face {{ font-family: "JetBrains Mono"; src: url(data:font/woff2;base64,{jetbrains_mono}); }}
@@ -44,7 +44,7 @@ def render_card(measurements, size: int, players: int, moves: int) -> str:
 <text x="884" y="310" text-anchor="middle" class="sans" fill="#4f46e5" font-size="116" font-weight="600">{warm_compressed} bytes</text>
 
 <text x="600" y="415" text-anchor="middle" class="sans" fill="#343432" font-size="46" font-weight="600">{warm_ratio:,.0f}:1 compression</text>
-<text x="600" y="460" text-anchor="middle" class="sans" fill="#777773" font-size="23">median warm full-world cursor update</text>
+<text x="600" y="460" text-anchor="middle" class="sans" fill="#777773" font-size="23">median warm cursor template update</text>
 
 <line x1="64" y1="602" x2="1136" y2="602" stroke="#dededb"/>
 <text x="64" y="638" class="mono" fill="#777773" font-size="14">{size}×{size} world · {players} cursors · 0 bricks · no joins · body bytes</text>

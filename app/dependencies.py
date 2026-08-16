@@ -204,28 +204,30 @@ async def get_players(
     ]
 
 
-async def get_cursors(
-    database: BaseDBAsyncClient,
-    bricks: list[BrickRow],
-) -> list[CursorRow]:
+async def get_cursors() -> list[CursorRow]:
+    """Read current cursor positions against their brick stacks."""
+    async with in_transaction() as database:
+        await database.execute_script("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        bricks = await get_current_bricks(database)
+        rows = (
+            await Cursor.all(using_db=database)
+            .filter(player__is_online=True)
+            .order_by("player_id")
+            .values(
+                "player_id",
+                "player__color_seed",
+                "player__name",
+                "x",
+                "y",
+                "z",
+            )
+        )
+
     stack_tops: dict[tuple[int, int], int] = {}
     for brick in bricks:
         position = (brick["x"], brick["y"])
         stack_tops[position] = max(stack_tops.get(position, -1), brick["z"])
 
-    rows = (
-        await Cursor.all(using_db=database)
-        .filter(player__is_online=True)
-        .order_by("player_id")
-        .values(
-            "player_id",
-            "player__color_seed",
-            "player__name",
-            "x",
-            "y",
-            "z",
-        )
-    )
     position_counts: dict[tuple[int, int, int], int] = {}
     for row in rows:
         position = (row["x"], row["y"], row["z"])
@@ -253,24 +255,23 @@ async def get_cursors(
 
 
 async def get_world_context() -> dict[str, Any]:
-    """Read one consistent snapshot of the complete world."""
+    """Read the world, bricks, and players in one consistent snapshot."""
     async with in_transaction() as database:
         await database.execute_script("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         world = await World.get(id=1, using_db=database)
         bricks = await get_current_bricks(database)
         players = await get_players(database)
-        cursors = await get_cursors(database, bricks)
 
     return {
         "world": world,
         "brick_stacks": get_brick_stacks(world, bricks),
         "players": players,
-        "cursors": cursors,
     }
 
 
 async def get_game_context(
     world_context: dict[str, Any] = Depends(get_world_context),
+    cursors: list[CursorRow] = Depends(get_cursors),
     player: Player | None = Depends(get_current_player),
     form_errors: FormErrors = Depends(get_form_errors),
 ) -> dict[str, Any]:
@@ -293,6 +294,7 @@ async def get_game_context(
 
     return {
         **world_context,
+        "cursors": cursors,
         "player": player,
         "form_errors": form_errors,
         "join_url": settings.JOIN_URL,

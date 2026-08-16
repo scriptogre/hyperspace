@@ -86,11 +86,8 @@ def test_world_changes_reach_browser(joined_page: Page):
         expect(app).to_have_css("color-scheme", "light dark")
         expect(world).to_have_css("background-color", "oklch(0.157 0 0)")
         expect(world).to_have_css("color", "oklch(0.985 0 0)")
-        assert world.get_attribute("data-theme") is None
-
         run_async(update_world("light", 13, "World notice"))
 
-        expect(world).to_have_attribute("data-theme", "light")
         expect(app).to_have_css("color-scheme", "light")
         expect(world).to_have_css("background-color", "oklch(0.985 0 0)")
         expect(world).to_have_css("color", "oklch(0.205 0 0)")
@@ -115,7 +112,6 @@ def test_world_changes_reach_browser(joined_page: Page):
         page.emulate_media(color_scheme="light")
         run_async(update_world("dark", 13, "World notice"))
 
-        expect(world).to_have_attribute("data-theme", "dark")
         expect(app).to_have_css("color-scheme", "dark")
         expect(world).to_have_css("background-color", "oklch(0.157 0 0)")
         expect(world).to_have_css("color", "oklch(0.985 0 0)")

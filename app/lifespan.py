@@ -10,7 +10,7 @@ from tortoise.contrib.fastapi import RegisterTortoise
 
 from app.broadcast import broadcast
 from app.config import settings
-from app.dependencies import get_world_context
+from app.dependencies import get_cursors, get_world_context
 from app.jinja import render
 from app.models import Brick, Cursor, Player
 
@@ -34,6 +34,7 @@ async def lifespan(
             password=settings.POSTGRES_PASSWORD,
             database=settings.POSTGRES_DB,
         )
+
         forwarder = asyncio.create_task(forward_world_changes(postgres))
 
         try:
@@ -48,27 +49,54 @@ async def lifespan(
 
 
 async def forward_world_changes(postgres: asyncpg.Connection) -> None:
-    """Render and publish the latest complete world at most 60 times per second."""
+    """Render and publish changed templates at most 60 times per second."""
     loop = asyncio.get_running_loop()
     next_render = 0.0
 
-    async for _ in listen_to_postgres(postgres):
+    async for changes in listen_for_postgres_notifications(postgres):
         wait = next_render - loop.time()
         if wait > 0:
             await asyncio.sleep(wait)
         next_render = loop.time() + (1 / 60)  # 60 Hz
 
-        html = render("_world.html", await get_world_context()).encode()
-        broadcast.publish("_world.html", html)
+        if changes == {"cursors_changed"}:
+            broadcast.publish(
+                "_cursors.html",
+                render("_cursors.html", {"cursors": await get_cursors()}),
+            )
+            continue
+
+        context = await get_world_context()
+        if "worlds_changed" in changes:
+            broadcast.publish(
+                "_world_settings.html", render("_world_settings.html", context)
+            )
+            broadcast.publish(
+                "_announcement.html", render("_announcement.html", context)
+            )
+        if "players_changed" in changes:
+            broadcast.publish("_players.html", render("_players.html", context))
+        if changes & {"worlds_changed", "bricks_changed"}:
+            broadcast.publish("_bricks.html", render("_bricks.html", context))
+
+        broadcast.publish(
+            "_cursors.html",
+            render("_cursors.html", {"cursors": await get_cursors()}),
+        )
 
 
-async def listen_to_postgres(
+async def listen_for_postgres_notifications(
     postgres: asyncpg.Connection,
-) -> AsyncIterator[None]:
-    """Yield coalesced world changes from PostgreSQL."""
-    notified = asyncio.Event()
+) -> AsyncIterator[set[str]]:
+    """
+    Yield coalesced change names from PostgreSQL.
+    """
 
-    def notify(_, __, ___, ____) -> None:
+    notified = asyncio.Event()
+    changes: set[str] = set()
+
+    def notify(_, __, ___, payload: str) -> None:
+        changes.add(payload)
         notified.set()
 
     await postgres.add_listener("hyperspace", notify)
@@ -76,6 +104,8 @@ async def listen_to_postgres(
         while True:
             await notified.wait()
             notified.clear()
-            yield
+            pending = changes.copy()
+            changes.clear()
+            yield pending
     finally:
         await postgres.remove_listener("hyperspace", notify)

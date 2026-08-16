@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from compression.zstd import ZstdDecompressor, decompress, zstd_version
 
-from app.broadcast import SharedStream
+from app.broadcast import Broadcast
 from app.colors import calculate_player_color
 from app.compression import compress_frame
 from app.dependencies import player_initials
@@ -70,7 +70,7 @@ def make_context(size: int, player_count: int) -> dict:
     }
 
 
-def render_updates(size: int, players: int, moves: int) -> Iterator[bytes]:
+def render_updates(size: int, players: int, moves: int) -> Iterator[str]:
     context = make_context(size, players)
     for move in range(moves + 1):
         cursor = context["cursors"][0]
@@ -87,16 +87,17 @@ def render_updates(size: int, players: int, moves: int) -> Iterator[bytes]:
             item["offset"] = indexes[position] - (counts[position] - 1) / 2
             indexes[position] += 1
 
-        yield render("_world.html", context).encode()
+        yield render("_cursors.html", context)
 
 
-async def measure(frames: Iterable[bytes]) -> Measurements:
+async def measure(frames: Iterable[str]) -> Measurements:
     frames = iter(frames)
-    stream = SharedStream()
-    stream.publish(next(frames))
+    broadcast = Broadcast()
+    broadcast.publish("_cursors.html", next(frames))
 
-    identity_subscription = stream.subscribe(compressed=False)
-    compressed_subscription = stream.subscribe(compressed=True)
+    templates = {"_cursors.html": {"HX-Target": "#cursors"}}
+    identity_subscription = broadcast.stream(templates, compressed=False)
+    compressed_subscription = broadcast.stream(templates, compressed=True)
     identity = await anext(identity_subscription)
     compressed = await anext(compressed_subscription)
 
@@ -107,7 +108,7 @@ async def measure(frames: Iterable[bytes]) -> Measurements:
     decompressor = ZstdDecompressor()
 
     for frame in frames:
-        stream.publish(frame)
+        broadcast.publish("_cursors.html", frame)
         identity = await anext(identity_subscription)
         compressed = await anext(compressed_subscription)
         assert decompressor.decompress(compressed) == identity
@@ -117,7 +118,7 @@ async def measure(frames: Iterable[bytes]) -> Measurements:
 
     # Starting another epoch closes the measured update frame. Use its terminator
     # only to prove that the compressed stream decodes byte-for-byte.
-    next_subscription = stream.subscribe(compressed=True)
+    next_subscription = broadcast.stream(templates, compressed=True)
     next_snapshot_pending = asyncio.create_task(anext(next_subscription))
     frame_end = await anext(compressed_subscription)
     await next_snapshot_pending
@@ -201,7 +202,7 @@ def print_report(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Measure Zstd history reuse across full-world cursor updates."
+        description="Measure Zstd history reuse across cursor template updates."
     )
     parser.add_argument("--size", type=int, default=16)
     parser.add_argument("--players", type=int, default=100)

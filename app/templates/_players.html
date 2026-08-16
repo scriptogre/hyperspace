@@ -1,0 +1,21 @@
+<details id="players" name="controls">
+    {% set online = players | selectattr("is_online") | list %}
+
+    <summary class="ui-control" aria-label="{{ online | length }} online players">
+        <span class="icon-[lucide--users]" aria-hidden="true"></span>
+        <span>{{ online | length }}</span>
+        <span class="stat-label">Players</span>
+        <span class="players-chevron icon-[lucide--chevron-down]" aria-hidden="true"></span>
+    </summary>
+
+    <ul id="player-list">
+        {% for player in online %}
+            <li>
+                <span style="--color: {{ player.color }}">
+                    {{ player.initials }}
+                </span>
+                <span>{{ player.name }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+</details>

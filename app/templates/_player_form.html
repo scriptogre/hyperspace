@@ -41,6 +41,13 @@
         {% endfor %}
 
         <button id="join-button" type="submit">Continue</button>
+
+        <a id="source-button"
+           href="https://github.com/scriptogre/hyperspace"
+           target="_blank" rel="noopener noreferrer">
+            <span class="icon-[lucide--github]" aria-hidden="true"></span>
+            View source on GitHub
+        </a>
     </form>
 
     <aside id="controls" aria-labelledby="controls-title">
@@ -68,7 +75,7 @@
     </aside>
 
     <aside id="join-qr" aria-labelledby="join-qr-title">
-        <p id="join-qr-title">Join us live at BigSkyDevCon 2026</p>
+        <p id="join-qr-title">Presented live at Big Sky Dev Con 2026</p>
         <div>
             <img src="{{ url_for('static', path='images/logo_transp.png') }}" alt="">
             <a href="{{ join_url }}"

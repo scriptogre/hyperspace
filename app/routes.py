@@ -111,7 +111,13 @@ async def stream(
     """Stream rendered templates as they change."""
     return StreamingResponse(
         content=broadcast.stream(
-            {"_world.html": {"HX-Target": "#world"}},
+            {
+                "_world_settings.html": {"HX-Target": "#world-settings"},
+                "_announcement.html": {"HX-Target": "#announcement"},
+                "_players.html": {"HX-Target": "#players"},
+                "_bricks.html": {"HX-Target": "#bricks"},
+                "_cursors.html": {"HX-Target": "#cursors"},
+            },
             compressed=True if "zstd" in accept_encoding.lower() else False,
         ),
         media_type=f"multipart/mixed; boundary={BOUNDARY.decode()}",

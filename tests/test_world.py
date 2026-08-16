@@ -11,7 +11,7 @@ import asyncpg
 import pytest
 from tortoise import Tortoise
 
-from app.dependencies import get_world_context
+from app.dependencies import get_cursors, get_world_context
 from tests import run_async
 
 
@@ -204,7 +204,7 @@ def test_resize_shrink_deletes_out_of_bounds(database):
     assert cursors == 0
 
 
-def test_world_notifications_use_one_payload(database):
+def test_world_notifications_name_each_changed_table(database):
     async def check():
         connection = await asyncpg.connect(**database)
         payloads: asyncio.Queue[str] = asyncio.Queue()
@@ -214,16 +214,31 @@ def test_world_notifications_use_one_payload(database):
 
         await connection.add_listener("hyperspace", notify)
         try:
-            await connection.execute("UPDATE worlds SET announcement = 'Notice'")
-            return await asyncio.wait_for(payloads.get(), timeout=2)
+            statements = [
+                ("UPDATE worlds SET announcement = 'Notice'", "worlds_changed"),
+                ("UPDATE bricks SET color_seed = color_seed", "bricks_changed"),
+                ("UPDATE players SET is_online = is_online", "players_changed"),
+                ("UPDATE cursors SET z = z", "cursors_changed"),
+            ]
+            received = []
+            for statement, expected in statements:
+                await connection.execute(statement)
+                received.append(await asyncio.wait_for(payloads.get(), timeout=2))
+                assert received[-1] == expected
+            return received
         finally:
             await connection.remove_listener("hyperspace", notify)
             await connection.close()
 
-    assert run_async(check()) == "world_changed"
+    assert run_async(check()) == [
+        "worlds_changed",
+        "bricks_changed",
+        "players_changed",
+        "cursors_changed",
+    ]
 
 
-def test_orm_snapshot_returns_complete_world(database):
+def test_orm_queries_return_world_sections(database):
     async def check():
         await Tortoise.init(
             config={
@@ -242,13 +257,13 @@ def test_orm_snapshot_returns_complete_world(database):
             }
         )
         try:
-            return await get_world_context()
+            return await get_world_context(), await get_cursors()
         finally:
             await Tortoise.close_connections()
 
-    context = run_async(check())
+    context, cursors = run_async(check())
     assert context["world"].size == 12
     assert context["world"].announcement == "Notice"
     assert context["players"]
-    assert context["cursors"]
+    assert cursors
     assert context["brick_stacks"][11][11]

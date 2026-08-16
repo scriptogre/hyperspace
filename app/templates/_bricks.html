@@ -1,0 +1,58 @@
+<div id="bricks">
+    {% for x in range(world.size) %}
+        {% for y in range(world.size) %}
+            {% set stack = brick_stacks[x][y] %}
+
+            <div id="grid-cell-{{ x }}-{{ y }}"
+                 data-x="{{ x }}"
+                 data-y="{{ y }}"
+                 data-z="-1"
+                 data-creating="false"
+                 style="--x:{{ x }};--y:{{ y }};--stack-height:{{ stack | length }}">
+
+                {% for brick in stack %}
+                    <div id="brick-{{ brick.id }}"
+                         data-z="{{ brick.z }}"
+                         {% if brick.dragged_by_id %}data-dragged-by-id="{{ brick.dragged_by_id }}"{% endif %}
+                         :data-local-dragging="data.draggedById == data.playerId"
+                         style="--z:{{ brick.z }};--color:{{ brick.color }}"
+                         :draggable="!data.deleteMode"
+                         hx-on:dragstart="data.draggedById = data.playerId">
+
+                        {# Delete brick #}
+                        <button hx-delete="/bricks/{{ brick.id }}"
+                                hx-trigger="pointerdown, pointerenter[buttons] delay:100ms"
+                                hx-on::before:request="$('#predictions-toggle').checked && $('closest [id^=brick-]').remove()"></button>
+
+                        {# Grab brick #}
+                        <button hx-post="/bricks/{{ brick.id }}/grab"
+                                hx-trigger="dragstart from:<closest [id^=brick-]/>"></button>
+
+                        {# Release brick #}
+                        <button hx-post="/bricks/{{ brick.id }}/release"
+                                hx-trigger="dragend from:<closest [id^=brick-]/>"
+                                hx-sync="#grid:queue all">
+                        </button>
+
+                        {% if not loop.last %}
+                            </div>
+                        {% endif %}
+                {% endfor %}
+
+                {% if stack | length < world.size %}
+                    {# Add or stack brick #}
+                    <button hx-post="/bricks"
+                            hx-vals="js:{...data}"
+                            hx-on::before:request="$('#predictions-toggle').checked && (data.creating = true)">
+                    </button>
+                {% endif %}
+
+                {% if stack %}
+                    </div>
+                {% endif %}
+
+                <span class="brick-preview"></span>
+            </div>
+        {% endfor %}
+    {% endfor %}
+</div>

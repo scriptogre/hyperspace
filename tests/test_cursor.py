@@ -35,7 +35,15 @@ def test_cursor_update_rejects_unknown_player(monkeypatch):
 
 
 def test_cursor_render_query_only_includes_online_players(monkeypatch):
-    database = object()
+    database = SimpleNamespace(execute_script=AsyncMock())
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=database)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        dependencies, "in_transaction", MagicMock(return_value=transaction)
+    )
+    monkeypatch.setattr(dependencies, "get_current_bricks", AsyncMock(return_value=[]))
+
     cursor_query = MagicMock()
     cursor_query.filter.return_value.order_by.return_value.values = AsyncMock(
         return_value=[]
@@ -43,6 +51,6 @@ def test_cursor_render_query_only_includes_online_players(monkeypatch):
     cursor_all = MagicMock(return_value=cursor_query)
     monkeypatch.setattr(dependencies.Cursor, "all", cursor_all)
 
-    assert run_async(dependencies.get_cursors(database, [])) == []
+    assert run_async(dependencies.get_cursors()) == []
     cursor_all.assert_called_once_with(using_db=database)
     cursor_query.filter.assert_called_once_with(player__is_online=True)

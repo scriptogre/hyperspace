@@ -171,14 +171,6 @@
         --ui-bottom: max(2rem, calc(env(safe-area-inset-bottom) + 1rem));
         @apply relative h-full w-full select-none overflow-hidden bg-background;
 
-        &:has(#world[data-theme="light"]) {
-            color-scheme: light;
-        }
-
-        &:has(#world[data-theme="dark"]) {
-            color-scheme: dark;
-        }
-
         .ui-control {
             @apply min-h-7 items-center gap-2;
 
@@ -484,6 +476,14 @@
             #join-button {
                 @apply w-full cursor-pointer rounded-xl bg-primary py-2 font-semibold text-primary-foreground transition-colors hover:bg-primary/90;
             }
+
+            #source-button {
+                @apply mt-3 flex items-center justify-center gap-2 rounded-xl border border-border py-2 font-medium text-foreground transition-colors hover:bg-muted;
+
+                > span {
+                    @apply size-4;
+                }
+            }
         }
 
         #controls {
@@ -553,6 +553,15 @@
             qr-code {
                 @apply block size-36 sm:size-44;
             }
+        }
+    }
+
+    #github-button {
+        @apply absolute left-1/2 z-50 inline-flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+        bottom: var(--ui-bottom);
+
+        > span {
+            @apply size-4;
         }
     }
 

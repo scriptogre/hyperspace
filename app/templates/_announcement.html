@@ -1,0 +1,5 @@
+<p id="announcement"
+   role="status"
+   {% if not world.announcement %}hidden{% endif %}>
+    {{ world.announcement or "" }}
+</p>

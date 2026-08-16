@@ -36,6 +36,7 @@
             }}
         })())
     </script>
+    {% include "_world_settings.html" %}
 </head>
 
 <body data-delete-mode="false"
@@ -51,7 +52,32 @@
         {% else %}
       inert
         {% endif %}>
-    {% include "_world.html" %}
+    <div id="world">
+        {% include "_announcement.html" %}
+
+        <div id="stats" aria-label="Game statistics">
+            {% include "_players.html" %}
+
+            <span>
+                <span class="icon-[lucide--blocks]" aria-hidden="true"></span>
+                <output id="bricks-count"
+                        :text="$('[id^=brick-]').count"
+                        aria-label="Brick count"></output>
+                <span class="stat-label">Bricks</span>
+            </span>
+        </div>
+
+        <div id="grid"
+             hx-patch="/cursor"
+             hx-trigger="pointerenter target:<[id^=brick-], [id^=grid-cell-]/> capture:true"
+             hx-sync="#grid:queue last"
+             hx-vals="js:{...$(event.target).data}"
+             hx-on="pointerenter target:[id^=grid-cell-] capture:true ->
+                    $(event.target).take('data-drag-over')">
+            {% include "_bricks.html" %}
+            {% include "_cursors.html" %}
+        </div>
+    </div>
 
     {% if player %}
         <aside id="controls"
@@ -105,6 +131,13 @@
             <span class="icon-[lucide--check]" :hidden="!data.deleteMode" aria-hidden="true"></span>
             <span>Delete</span>
         </button>
+
+        <a id="github-button"
+           href="https://github.com/scriptogre/hyperspace"
+           target="_blank" rel="noopener noreferrer"
+           aria-label="View source code on GitHub">
+            <span class="icon-[lucide--github]" aria-hidden="true"></span>
+        </a>
     {% endif %}
 </main>
 

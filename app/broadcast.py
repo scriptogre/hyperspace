@@ -31,16 +31,19 @@ class Broadcast:
         self._writer = MultipartWriter(BOUNDARY)
         self._templates: dict[str, dict[str, str]] | None = None
 
-    def publish(self, template_name: str, html: bytes) -> None:
-        """Publish a complete rendered template."""
-        self._latest[template_name] = html
+    def publish(self, template_name: str, html: str) -> None:
+        """
+        Publish a complete rendered template.
+        """
+        encoded = html.encode()
+        self._latest[template_name] = encoded
         if self._templates is None or template_name not in self._templates:
             return
 
         identity = b"".join(
             self._writer.iterate_part(
                 Part(
-                    html,
+                    encoded,
                     headers=self._templates[template_name],
                     media_type="text/html",
                 )

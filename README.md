@@ -56,7 +56,7 @@ Demo: http://192.168.1.23:8000
 
 ## Stream compression
 
-[![193 KB of HTML compresses to 47 bytes per warm stream update](docs/images/compression-benchmark.svg)](BENCHMARK.md)
+[![42 KB of cursor HTML compresses to 21 bytes per warm stream update](docs/images/compression-benchmark.svg)](BENCHMARK.md)
 
 Reproduce the result:
 
