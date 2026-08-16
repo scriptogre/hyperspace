@@ -41,10 +41,6 @@ PLAYER_NAMES = (
 )
 
 
-def suggest_player_name() -> str:
-    return choice(PLAYER_NAMES)
-
-
 def player_initials(name: str) -> str:
     words = name.split()
     return (
@@ -320,7 +316,7 @@ async def get_game_context(
         "cursors": cursors,
         "player": player,
         "form_errors": form_errors,
-        "suggested_name": form_errors.data.get("name") or suggest_player_name(),
+        "suggested_name": form_errors.data.get("name") or choice(PLAYER_NAMES),
         "join_url": settings.JOIN_URL,
         "selected_color_seed": selected_color_seed,
         "suggested_colors": [
