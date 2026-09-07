@@ -75,4 +75,4 @@ git push origin main
 just deploy
 ```
 
-`just deploy` checks for a clean working tree, pushes `main`, deploys it to DigitalOcean, and waits for healthy containers.
+`just deploy` checks for a clean working tree, pushes `main`, deploys it to the ThinkCentre, and waits for the public health check.

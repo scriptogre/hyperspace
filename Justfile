@@ -38,7 +38,7 @@ makemigrations name="auto":
 migrate:
     docker compose run --rm fastapi tortoise migrate
 
-# Push and deploy the committed main branch to DigitalOcean.
+# Push and deploy the committed main branch to the ThinkCentre.
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -47,7 +47,13 @@ deploy:
         exit 1
     fi
     git push origin main
-    ssh digitalocean /opt/hyperspace/deploy/deploy
+    ssh thinkcentre '
+      set -eu
+      git -C /home/chris/Projects/hyperspace pull --ff-only origin main
+      sudo systemctl restart compose-hyperspace.service
+    '
+    curl --fail --retry 12 --retry-all-errors --retry-delay 5 \
+      https://hyperspace.christiantanul.com/health
 
 # Benchmark one worker with external players, PostgreSQL stats, and a CPU profile.
 bench:
